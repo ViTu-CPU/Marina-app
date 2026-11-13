@@ -11,6 +11,7 @@ import { DEFAULT_BOAT_CLASSES, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engi
 import { DEMO_PROJECTS, type DemoEntry } from '../engine/demos';
 import { movePier, setBerthRemoved, setPierLocked, type EditContext } from '../engine/edit';
 import { generateLayouts, type Diagnostic } from '../engine/generate';
+import { boundingBox, distance, ensureCounterClockwise, type Box } from '../engine/geometry';
 import { evaluateLayout } from '../engine/layout';
 import {
   PROJECT_SCHEMA_VERSION,
@@ -18,15 +19,30 @@ import {
   type BoatClass,
   type Layout,
   type ObjectiveSettings,
+  type ObstacleKind,
   type Params,
   type Project,
   type Site,
   type Vec2,
+  type ZoneKind,
 } from '../engine/model';
 import { rankLayouts, scoreLayouts } from '../engine/score';
 import { prepareSite, type PreparedSite } from '../engine/site';
 import type { Language } from '../i18n';
 import { parseProject } from './projectFile';
+import { DEFAULT_VIEW, fitBounds, type Size, type View } from './view';
+
+/** Everything drawn on the site, as a box; a default area when the site is empty. */
+export function projectBounds(project: Project): Box {
+  const { site } = project;
+  const points = [
+    ...site.water,
+    ...site.shoreline,
+    ...site.obstacles.flatMap((o) => o.shape),
+    ...site.zones.flatMap((z) => z.shape),
+  ];
+  return points.length > 0 ? boundingBox(points) : { minX: 0, minY: 0, maxX: 200, maxY: 120 };
+}
 
 /** Number of undo steps kept. */
 export const HISTORY_LIMIT = 100;
@@ -49,6 +65,7 @@ export type LayerId = (typeof LAYER_IDS)[number];
 
 export type ToolId =
   | 'select'
+  | 'edit'
   | 'water'
   | 'shoreline'
   | 'entrance'
@@ -122,6 +139,15 @@ export interface AppState {
   diagnostics: Diagnostic[];
   /** Message for the user from the last file or storage operation, if it failed. */
   notice: string | null;
+  view: View;
+  /** Size of the canvas in pixels. */
+  viewport: Size;
+  /** Points of the shape being drawn, or the points of the measure / calibrate tool. */
+  draft: Vec2[];
+  /** Snapped cursor position in world coordinates while a drawing tool is active. */
+  cursor: Vec2 | null;
+  obstacleKind: ObstacleKind;
+  zoneKind: ZoneKind;
 
   // --- actions ------------------------------------------------------------
   commit: (recipe: (project: Project) => Project, options?: CommitOptions) => void;
@@ -149,6 +175,24 @@ export interface AppState {
   setBerthRemoved: (layoutId: string, berthId: string, removed: boolean) => void;
   setPierLocked: (layoutId: string, pierId: string, locked: boolean) => void;
   movePier: (layoutId: string, pierId: string, delta: Vec2, options?: CommitOptions) => void;
+
+  setView: (view: View) => void;
+  setViewport: (size: Size) => void;
+  /** Show the whole site. */
+  fitView: () => void;
+  zoomToBox: (box: Box) => void;
+  setCursor: (cursor: Vec2 | null) => void;
+  /**
+   * A click with a drawing tool. `closeTolerance` (world metres) is how near the first
+   * point a click must be to close a polygon.
+   */
+  addDraftPoint: (point: Vec2, closeTolerance: number) => void;
+  removeLastDraftPoint: () => void;
+  cancelDraft: () => void;
+  /** Turn the draft into the site object of the active tool. */
+  finishDraft: () => void;
+  setObstacleKind: (kind: ObstacleKind) => void;
+  setZoneKind: (kind: ZoneKind) => void;
 
   setLanguage: (language: Language) => void;
   setTool: (tool: ToolId) => void;
@@ -197,7 +241,14 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       diagnostics: [],
       notice: null,
       tool: 'select' as ToolId,
+      draft: [] as Vec2[],
+      cursor: null,
     });
+
+    /** A free id of the form `${prefix}-${n}`. */
+    const nextId = (prefix: string, taken: string[]): string => {
+      for (let n = 1; ; n++) if (!taken.includes(`${prefix}-${n}`)) return `${prefix}-${n}`;
+    };
 
     const editLayout = (layoutId: string, edit: (layout: Layout, ctx: EditContext) => Layout, options?: CommitOptions) => {
       const { project } = get();
@@ -217,6 +268,10 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
     return {
       ...resetSession(initial),
       language: 'en',
+      view: DEFAULT_VIEW,
+      viewport: { width: 800, height: 600 },
+      obstacleKind: 'rock',
+      zoneKind: 'noNavigation',
       layers: Object.fromEntries(LAYER_IDS.map((id) => [id, true])) as Record<LayerId, boolean>,
 
       commit: (recipe, options) => {
@@ -304,8 +359,67 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       movePier: (layoutId, pierId, delta, options) =>
         editLayout(layoutId, (layout, ctx) => movePier(layout, pierId, delta, ctx), options),
 
+      setView: (view) => set({ view }),
+      setViewport: (viewport) => set({ viewport }),
+      fitView: () => set((s) => ({ view: fitBounds(projectBounds(s.project), s.viewport) })),
+      zoomToBox: (box) => set((s) => ({ view: fitBounds(box, s.viewport, Math.min(s.viewport.width, s.viewport.height) / 3) })),
+      setCursor: (cursor) => set({ cursor }),
+
+      addDraftPoint: (point, closeTolerance) => {
+        const { tool, draft } = get();
+        if (tool === 'measure' || tool === 'calibrate') {
+          // The third click starts a new measurement.
+          set({ draft: draft.length >= 2 ? [point] : [...draft, point] });
+          return;
+        }
+        const isPolygon = tool === 'water' || tool === 'obstacle' || tool === 'zone';
+        if (isPolygon && draft.length >= 3 && distance(draft[0]!, point) <= closeTolerance) {
+          get().finishDraft();
+          return;
+        }
+        set({ draft: [...draft, point] });
+        if (tool === 'entrance' && draft.length === 1) get().finishDraft();
+      },
+      removeLastDraftPoint: () => set((s) => ({ draft: s.draft.slice(0, -1) })),
+      cancelDraft: () => set({ draft: [] }),
+      finishDraft: () => {
+        const { tool, obstacleKind, zoneKind } = get();
+        // A double-click adds the same point twice; drop repeated points.
+        const points = get().draft.filter((p, i, all) => i === 0 || distance(p, all[i - 1]!) > 1e-6);
+        const closed = points.length > 1 && distance(points[0]!, points[points.length - 1]!) <= 1e-6 ? points.slice(0, -1) : points;
+        set({ draft: [] });
+        if (tool === 'water' && closed.length >= 3) {
+          get().updateSite((site) => ({ ...site, water: ensureCounterClockwise(closed) }));
+          set({ tool: 'select' });
+        } else if (tool === 'shoreline' && points.length >= 2) {
+          get().updateSite((site) => ({ ...site, shoreline: points }));
+          set({ tool: 'select' });
+        } else if (tool === 'entrance' && points.length >= 2) {
+          get().updateSite((site) => ({ ...site, entrance: { a: points[0]!, b: points[1]! } }));
+          set({ tool: 'select' });
+        } else if (tool === 'obstacle' && closed.length >= 3) {
+          get().updateSite((site) => ({
+            ...site,
+            obstacles: [
+              ...site.obstacles,
+              { id: nextId('obstacle', site.obstacles.map((o) => o.id)), kind: obstacleKind, shape: ensureCounterClockwise(closed) },
+            ],
+          }));
+        } else if (tool === 'zone' && closed.length >= 3) {
+          get().updateSite((site) => ({
+            ...site,
+            zones: [
+              ...site.zones,
+              { id: nextId('zone', site.zones.map((z) => z.id)), kind: zoneKind, shape: ensureCounterClockwise(closed) },
+            ],
+          }));
+        }
+      },
+      setObstacleKind: (obstacleKind) => set({ obstacleKind }),
+      setZoneKind: (zoneKind) => set({ zoneKind }),
+
       setLanguage: (language) => set({ language }),
-      setTool: (tool) => set({ tool, coalesceKey: null }),
+      setTool: (tool) => set({ tool, coalesceKey: null, draft: [], cursor: null }),
       toggleLayer: (layer) => set((s) => ({ layers: { ...s.layers, [layer]: !s.layers[layer] } })),
       select: (selection) => set({ selection }),
       setNotice: (notice) => set({ notice }),
