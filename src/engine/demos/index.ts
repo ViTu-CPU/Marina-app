@@ -89,6 +89,7 @@ function demoProject(name: string, site: Site): Project {
     layouts: [],
     preferredLayoutId: null,
     background: null,
+    map: null,
     generatedFrom: null,
   };
 }

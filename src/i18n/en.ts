@@ -23,7 +23,7 @@ export const en = {
 
   'section.project': 'Project',
   'section.site': 'Site',
-  'section.background': 'Background image',
+  'section.background': 'Background',
   'section.boats': 'Boat classes',
   'section.dock': 'Dock parameters',
   'section.fairway': 'Fairway parameters',
@@ -64,6 +64,14 @@ export const en = {
   'zone.noNavigation': 'No navigation',
   'zone.protected': 'Protected',
 
+  'map.title': 'Map (OpenStreetMap)',
+  'map.place': 'Place: "lat, lon" or a map link',
+  'map.show': 'Show map',
+  'map.remove': 'Remove map',
+  'map.invalid': 'Enter coordinates such as 60.1549, 24.9560, or paste a link from openstreetmap.org or Google Maps.',
+  'map.hint': 'The place is shown in the middle of the view. Drawings stay where they are. A drawn map, not an aerial photo; needs an internet connection.',
+  'map.position': 'Map origin',
+  'background.image': 'Image',
   'background.load': 'Load image',
   'background.remove': 'Remove image',
   'background.opacity': 'Opacity',

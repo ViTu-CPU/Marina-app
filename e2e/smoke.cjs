@@ -237,7 +237,7 @@ async function waitForServer() {
       const png = path.join(outDir, 'bg.png');
       // 1 × 1 pixel PNG.
       fs.writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
-      await page.getByText('Background image').click();
+      await page.locator('summary', { hasText: 'Background' }).click();
       await page.getByTestId('background-file').setInputFiles(png);
       await page.getByRole('button', { name: 'Calibrate scale' }).waitFor();
       const before = (await state()).project.background.metresPerPixel;

@@ -237,6 +237,18 @@ export interface BackgroundImage {
   opacity: number;
 }
 
+/**
+ * Extension: an online map shown under the drawing. `lat`/`lon` (degrees, WGS 84) is the
+ * position of the local origin (0, 0). It is used only to place map tiles; all geometry
+ * and every calculation stay in local metres.
+ */
+export interface MapBackground {
+  provider: 'osm';
+  lat: number;
+  lon: number;
+  opacity: number;
+}
+
 export const PROJECT_SCHEMA_VERSION = 1;
 
 /** The complete saved state of one study: what goes into the JSON project file. */
@@ -250,6 +262,8 @@ export interface Project {
   layouts: Layout[];
   preferredLayoutId: string | null;
   background: BackgroundImage | null;
+  /** Extension: online map under the drawing, or null. */
+  map: MapBackground | null;
   /**
    * Fingerprint of the inputs (site, boat classes, parameters) the layouts were generated
    * from, or null when there are no generated layouts. Used for the "Regenerate" hint.

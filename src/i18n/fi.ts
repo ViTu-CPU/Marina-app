@@ -25,7 +25,7 @@ export const fi: Partial<Record<StringKey, string>> = {
 
   'section.project': 'Projekti',
   'section.site': 'Alue',
-  'section.background': 'Taustakuva',
+  'section.background': 'Tausta',
   'section.boats': 'Veneluokat',
   'section.dock': 'Laituriparametrit',
   'section.fairway': 'Väyläparametrit',
@@ -66,6 +66,14 @@ export const fi: Partial<Record<StringKey, string>> = {
   'zone.noNavigation': 'Ei vesiliikennettä',
   'zone.protected': 'Suojeltu',
 
+  'map.title': 'Kartta (OpenStreetMap)',
+  'map.place': 'Paikka: "lat, lon" tai karttalinkki',
+  'map.show': 'Näytä kartta',
+  'map.remove': 'Poista kartta',
+  'map.invalid': 'Anna koordinaatit muodossa 60.1549, 24.9560 tai liitä linkki openstreetmap.orgista tai Google Mapsista.',
+  'map.hint': 'Paikka näytetään näkymän keskellä. Piirrokset pysyvät paikoillaan. Piirretty kartta, ei ilmakuva; vaatii verkkoyhteyden.',
+  'map.position': 'Kartan origo',
+  'background.image': 'Kuva',
   'background.load': 'Lataa kuva',
   'background.remove': 'Poista kuva',
   'background.opacity': 'Peittävyys',

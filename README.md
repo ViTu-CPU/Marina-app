@@ -68,6 +68,8 @@ npx playwright install chromium
 - Draw the water area, shoreline, entrance, obstacles and restricted zones on a metric
   grid; snapping to vertices and to the water boundary.
 - Edit points: move, insert, delete. Measure tool.
+- Map background from OpenStreetMap: type coordinates or paste a map link, no file and no
+  calibration needed.
 - Background image (aerial photo or map screenshot) with two-point scale calibration,
   rotation and opacity.
 - Two built-in examples: a rectangular basin and an irregular bay.
@@ -147,8 +149,11 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
 - **No depth data**, wind, waves, currents, ice, mooring loads, costs or environmental
   constraints.
 - The water area is one simple polygon. Islands are entered as obstacles.
-- Coordinates are local metres. There is no map, no geographic coordinate system and no
-  GeoJSON import.
+- Coordinates are local metres. The OpenStreetMap background is a drawn map, not an aerial
+  photo, needs an internet connection, and has no place-name search. Its tiles come from
+  the OpenStreetMap Foundation's servers, whose
+  [usage policy](https://operations.osmfoundation.org/policies/tiles/) allows light use
+  only; a widely used deployment would need another tile source. There is no GeoJSON import.
 - Issue messages and a few notices are in English also in the Finnish UI.
 - Layout generation runs on the main thread; the page is unresponsive while it runs
   (about one second for the examples in the test environment).

@@ -14,12 +14,14 @@ import type { BackgroundImage, BoatClass, Layout, Polygon, Site, Vec2 } from '..
 import { pierAxis } from '../../engine/rows';
 import { pierPolygon } from '../../engine/site';
 import { appStore, useAppStore, type LayerId, type Selection, type ToolId } from '../../state/store';
+import { OSM_ATTRIBUTION } from '../../state/geo';
 import { gridStep, panBy, scaleBar, screenToWorld, visibleBounds, worldToScreen, zoomAt, type Size, type View } from '../../state/view';
 import { loadImage, registerStage } from '../export/download';
 import { formatLength } from '../format';
 import { deleteVertex, hasEntrance, insertVertex, moveVertex, normalizeSite, sitePaths } from '../tools/sitePaths';
 import { siteSnapTargets, snapPoint } from '../tools/snap';
 import { useT } from '../useT';
+import { MapTiles } from './MapTiles';
 import { hatchPatterns } from './patterns';
 
 const COLORS = {
@@ -528,6 +530,7 @@ export function MarinaCanvas() {
             scaleX={view.zoom}
             scaleY={-view.zoom}
           >
+            {layers.background && project.map && <MapTiles map={project.map} view={view} viewport={viewport} />}
             {layers.background && project.background && backgroundImage && (
               <KonvaImage
                 image={backgroundImage}
@@ -546,7 +549,7 @@ export function MarinaCanvas() {
               site={project.site}
               layers={layers}
               patternScale={patternScale}
-              translucent={layers.background && project.background !== null}
+              translucent={layers.background && (project.background !== null || project.map !== null)}
             />
             {layout && (
               <LayoutShapes layout={layout} classes={project.boatClasses} layers={layers} selection={selection} patternScale={patternScale} />
@@ -641,6 +644,13 @@ export function MarinaCanvas() {
             <Line points={[-5, 8, 0, 0, 5, 8]} stroke="#0f172a" strokeWidth={1.5} />
             <Text x={-5} y={28} text="N" fontSize={12} fontStyle="bold" fill="#0f172a" />
           </Group>
+          {layers.background && project.map && (
+            // The map licence requires visible attribution, also in exported images.
+            <Group x={viewport.width - 196} y={viewport.height - 34} listening={false}>
+              <Rect x={0} y={0} width={190} height={16} fill="rgba(255,255,255,0.85)" cornerRadius={3} />
+              <Text x={6} y={3} text={OSM_ATTRIBUTION} fontSize={11} fill="#0f172a" />
+            </Group>
+          )}
           <Group x={0} y={viewport.height - 16} listening={false}>
             <Rect x={0} y={-2} width={viewport.width} height={18} fill="rgba(255,251,235,0.92)" />
             <Text x={8} y={1} width={viewport.width - 16} text={t('app.disclaimer')} fontSize={11} fill="#78350f" wrap="none" ellipsis />

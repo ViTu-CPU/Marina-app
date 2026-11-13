@@ -18,6 +18,7 @@ import {
   type BackgroundImage,
   type BoatClass,
   type Layout,
+  type MapBackground,
   type ObjectiveSettings,
   type ObstacleKind,
   type Params,
@@ -87,6 +88,7 @@ export function emptyProject(): Project {
     layouts: [],
     preferredLayoutId: null,
     background: null,
+    map: null,
     generatedFrom: null,
   };
 }
@@ -168,6 +170,7 @@ export interface AppState {
   setParams: (patch: Partial<Params>, options?: CommitOptions) => void;
   setObjective: (patch: Partial<ObjectiveSettings>, options?: CommitOptions) => void;
   setBackground: (background: BackgroundImage | null, options?: CommitOptions) => void;
+  setMap: (map: MapBackground | null, options?: CommitOptions) => void;
 
   generate: () => void;
   selectLayout: (id: string | null) => void;
@@ -334,6 +337,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
           return { ...p, objective, layouts: rankLayouts(p.layouts, objective) };
         }, options),
       setBackground: (background, options) => get().commit((p) => ({ ...p, background }), options),
+      setMap: (map, options) => get().commit((p) => ({ ...p, map }), options),
 
       generate: () => {
         const { project } = get();

@@ -10,6 +10,7 @@ import {
   type Finger,
   type Layout,
   type MainPier,
+  type MapBackground,
   type ObjectiveSettings,
   type Obstacle,
   type Params,
@@ -241,6 +242,16 @@ function background(v: unknown): BackgroundImage | null {
   };
 }
 
+function mapBackground(v: unknown): MapBackground | null {
+  if (v === null || v === undefined) return null;
+  const o = obj(v, 'map');
+  const lat = num(o.lat, 'map.lat');
+  const lon = num(o.lon, 'map.lon');
+  if (Math.abs(lat) > 85 || Math.abs(lon) > 180) fail('map.lat / map.lon are not a valid position');
+  const opacity = o.opacity === undefined ? 0.8 : num(o.opacity, 'map.opacity');
+  return { provider: oneOf(o.provider, ['osm'] as const, 'map.provider'), lat, lon, opacity: Math.min(1, Math.max(0, opacity)) };
+}
+
 /** Read a project from the text of a project file. Never throws. */
 export function parseProject(text: string): ParseResult {
   let raw: unknown;
@@ -268,6 +279,7 @@ export function parseProject(text: string): ParseResult {
       layouts,
       preferredLayoutId: preferred !== null && layouts.some((l) => l.id === preferred) ? preferred : null,
       background: background(p.background),
+      map: mapBackground(p.map),
       generatedFrom: typeof p.generatedFrom === 'string' ? p.generatedFrom : null,
     };
     return { ok: true, project };

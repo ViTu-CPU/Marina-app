@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { distance } from '../../engine/geometry';
 import type { BoatClass, ObjectiveId, ObstacleKind, Params, ZoneKind } from '../../engine/model';
 import type { StringKey } from '../../i18n';
+import { originPlacing, parseLatLon } from '../../state/geo';
 import { appStore, LAYER_IDS, useAppStore, type ToolId } from '../../state/store';
 import { loadImage, readFileAsDataUrl } from '../export/download';
 import { formatLength, formatPercent } from '../format';
@@ -129,6 +130,72 @@ function SiteSection() {
   );
 }
 
+/** Online map under the drawing: no file to load, no calibration. */
+function MapControls() {
+  const t = useT();
+  const map = useAppStore((s) => s.project.map);
+  const [place, setPlace] = useState('');
+  const [invalid, setInvalid] = useState(false);
+
+  const show = () => {
+    const position = parseLatLon(place);
+    setInvalid(position === null);
+    if (!position) return;
+    const s = state();
+    const empty = s.project.site.water.length === 0 && s.project.background === null;
+    // On an empty project start at a scale that suits a harbour (2 px per metre).
+    if (empty) s.setView({ cx: 0, cy: 0, zoom: 2 });
+    const view = empty ? { cx: 0, cy: 0 } : s.view;
+    const origin = originPlacing(position.lat, position.lon, { x: view.cx, y: view.cy });
+    s.setMap({ provider: 'osm', lat: origin.lat, lon: origin.lon, opacity: map?.opacity ?? 0.8 });
+  };
+
+  return (
+    <div className="space-y-1">
+      <div className="text-xs font-medium text-slate-500">{t('map.title')}</div>
+      <div className="flex gap-1">
+        <input
+          aria-label={t('map.place')}
+          placeholder="60.1549, 24.9560"
+          className={`min-w-0 flex-1 rounded border px-1.5 py-0.5 text-sm ${invalid ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
+          value={place}
+          onChange={(e) => {
+            setPlace(e.target.value);
+            setInvalid(false);
+          }}
+          onKeyDown={(e) => e.key === 'Enter' && show()}
+        />
+        <Button onClick={show}>{t('map.show')}</Button>
+      </div>
+      {invalid && <p className="text-xs text-red-700">{t('map.invalid')}</p>}
+      <p className="text-xs text-slate-500">{t('map.hint')}</p>
+      {map && (
+        <>
+          <p className="text-xs text-slate-600">
+            {t('map.position')}: {map.lat.toFixed(5)}, {map.lon.toFixed(5)}
+          </p>
+          <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+            {t('background.opacity')}
+            <input
+              type="range"
+              aria-label={`${t('map.title')}: ${t('background.opacity')}`}
+              min={0.1}
+              max={1}
+              step={0.05}
+              value={map.opacity}
+              onChange={(e) => state().setMap({ ...map, opacity: Number(e.target.value) }, { coalesce: 'map-opacity' })}
+              onPointerUp={() => state().endCoalescing()}
+            />
+          </label>
+          <Button variant="danger" onClick={() => state().setMap(null)}>
+            {t('map.remove')}
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function BackgroundSection() {
   const t = useT();
   const background = useAppStore((s) => s.project.background);
@@ -152,6 +219,8 @@ function BackgroundSection() {
 
   return (
     <Section title={t('section.background')} defaultOpen={false}>
+      <MapControls />
+      <div className="text-xs font-medium text-slate-500">{t('background.image')}</div>
       <div className="flex flex-wrap gap-1">
         <Button onClick={() => fileInput.current?.click()}>{t('background.load')}</Button>
         <input
