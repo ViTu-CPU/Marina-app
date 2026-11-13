@@ -410,3 +410,18 @@ export function clipSegmentToRegion(a: Vec2, b: Vec2, region: Region): [number, 
   }
   return intervals;
 }
+
+/** Intersection of two sorted lists of disjoint intervals. */
+export function intersectIntervals(a: [number, number][], b: [number, number][]): [number, number][] {
+  const out: [number, number][] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    const lo = Math.max(a[i]![0], b[j]![0]);
+    const hi = Math.min(a[i]![1], b[j]![1]);
+    if (hi > lo) out.push([lo, hi]);
+    if (a[i]![1] < b[j]![1]) i++;
+    else j++;
+  }
+  return out;
+}
