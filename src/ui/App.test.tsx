@@ -49,7 +49,8 @@ describe('app shell (SPEC §8)', () => {
 
     const alternatives = screen.getAllByTestId('alternative');
     expect(alternatives.length).toBeGreaterThanOrEqual(3);
-    expect(alternatives[0]!.textContent).toContain('A – Piers perpendicular to shore');
+    expect(alternatives[0]!.textContent).toContain('E – Piers sized by boat class');
+    expect(alternatives[1]!.textContent).toContain('A – Piers perpendicular to shore');
     expect(alternatives[0]!.textContent).toContain('berths');
     expect(alternatives[0]!.textContent).toContain('Constraints met');
     expect(alternatives[0]!.getAttribute('aria-pressed')).toBe('true');

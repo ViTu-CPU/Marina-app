@@ -11,13 +11,13 @@ const ctx: EditContext = {
   classes: DEFAULT_BOAT_CLASSES,
   params: DEFAULT_PARAMS,
 };
-const [layout] = generateLayouts({
+// Strategy A: every pier on the uniform 46 m pitch, with 18 m fairways.
+const base = generateLayouts({
   site: RECT_BASIN_SITE,
   boatClasses: DEFAULT_BOAT_CLASSES,
   params: DEFAULT_PARAMS,
   objective: DEFAULT_OBJECTIVE,
-}).layouts;
-const base = layout!;
+}).layouts.find((l) => l.strategy === 'A')!;
 const codes = (issues: { code: string }[]) => [...new Set(issues.map((i) => i.code))].sort();
 
 describe('manual edits (SPEC §8)', () => {

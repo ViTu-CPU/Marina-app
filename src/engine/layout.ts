@@ -21,16 +21,28 @@ export interface LayoutDraft {
   unreachableRemoved?: number;
 }
 
+export interface EvaluateOptions {
+  /**
+   * Skip the connection-to-entrance check. Only for the generator, which has just run
+   * that same check on exactly these elements and found every berth reachable.
+   */
+  assumeConnected?: boolean;
+}
+
 /** The score is left at 0; it is set when layouts are ranked against each other. */
 export function evaluateLayout(
   draft: LayoutDraft,
   prepared: PreparedSite,
   classes: BoatClass[],
   params: Params,
+  options: EvaluateOptions = {},
 ): Layout {
   const rows = layoutRows(draft.piers, draft.fingers, draft.berths, classes, params);
   const fairways = buildFairways(draft.piers, rows, prepared);
-  const issues = [...geometricIssues(draft, prepared, params), ...operationalIssues(draft, rows, prepared)];
+  const issues = [
+    ...geometricIssues(draft, prepared, params),
+    ...operationalIssues(draft, rows, prepared, { skipConnectivity: options.assumeConnected === true }),
+  ];
   const berths = withBerthIssues(draft.berths, issues);
   return {
     id: draft.id,

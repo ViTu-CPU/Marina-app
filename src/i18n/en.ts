@@ -172,6 +172,7 @@ export const en = {
   'stat.freeWaterArea': 'Free water',
   'stat.berthsPer1000m2': 'Berths per 1,000 m² water',
   'stat.pontoonPerBerth': 'Pontoon per berth',
+  'stat.mixDeviation': 'Deviation from target mix',
   'stat.unreachableRemoved': 'Unreachable berths left out',
   'stat.errors': 'Errors',
   'stat.warnings': 'Warnings',

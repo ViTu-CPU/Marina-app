@@ -70,8 +70,11 @@ npx playwright install chromium
   or balanced (with weights).
 
 **Layouts**
-- Deterministic generator with four strategies: piers square to the shore (A), every
-  other pier (B), other pier directions from a 5° sweep (C), one pier along the shore (D).
+- Deterministic generator with five strategies: piers square to the shore (A), every
+  other pier (B), other pier directions from a 5° sweep (C), one pier along the shore (D),
+  and piers sized by boat class (E), where every row and fairway is as deep and wide as
+  its own boats need.
+- Berths that cannot be reached from the entrance are left out; the number is shown.
 - Up to five alternatives, ranked by the objective, near-duplicates removed.
 - If nothing fits, a message says why.
 
@@ -117,9 +120,9 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
 
 ## Known limitations
 
-- **One pier module for the whole layout**, sized by the longest boat class with a share
-  above zero. A few large boats in the mix widen every fairway and row. Set the share of
-  a class to 0 to study the site without it.
+- Strategies A–D use **one pier module for the whole layout**, sized by the longest boat
+  class. Strategy E sizes each row for its own boats, but only for piers square to the
+  shore, and its search over start positions is coarser (2 m) than that of A–C (1 m).
 - Only **finger-pier berths**. Side-to, Y-boom and stern-buoy berths are not implemented
   (the engine has an interface for them).
 - Piers are straight, start at the shoreline and keep one fairway width clear at the head.
@@ -135,7 +138,7 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   GeoJSON import.
 - Issue messages and a few notices are in English also in the Finnish UI.
 - Layout generation runs on the main thread; the page is unresponsive while it runs
-  (under one second for the examples in the test environment).
+  (about one second for the examples in the test environment).
 - Browser storage is small. A large background image is not autosaved; it is kept in
   saved project files.
 - Made for desktop browsers with a mouse. Touch input is not supported.
@@ -172,8 +175,6 @@ The engine takes plain JSON and returns plain JSON, and is deterministic.
 
 Not started; listed in the specification as later phases.
 
-- Per-pier size zoning (variable pier pitch), so small boats do not pay for the fairway of
-  the largest class.
 - More berth patterns: side-to, Y-boom, bow-to with stern buoy.
 - Manual editing: rotate and resize piers, add and remove fingers, T- and L-heads.
 - Turning-basin check; better optimisation; local refinement of angle and offset.

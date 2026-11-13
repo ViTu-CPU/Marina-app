@@ -8,7 +8,7 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | # | Decision | Notes |
 |---|---|---|
 | D1 | Display: lengths in m with 1 decimal; areas (m²) and counts as integers. | Follows SPEC §3. `CLAUDE.md` updated to match. |
-| D2 | **Uniform pier pitch per layout**, derived from the longest boat class with `share > 0`. | SPEC §5.3 makes the pitch depend on the longest boat in the adjacent rows, which is only known after filling. Per-pier size zoning (variable pitch) is postponed to a later strategy. Known cost: wastes water when the mix contains few large boats. |
+| D2 | **Uniform pier pitch per layout** (strategies A–D), derived from the longest boat class with `share > 0`. | SPEC §5.3 makes the pitch depend on the longest boat in the adjacent rows, which is only known after filling. Per-pier size zoning (variable pitch) is postponed to a later strategy. Known cost: wastes water when the mix contains few large boats. |
 | D3 | `BoatClass.share` is the target fraction of the **berth count**. It is a target, not a hard constraint; the deviation from the target mix is reported in the stats. | An objective such as "Max capacity" must not fill everything with the smallest class. |
 | D4 | Strategy D (shore-parallel pier): the main pier runs **along the shoreline, touching it**, with fingers and berths on the water side only. | Satisfies the "every main pier connects to the shoreline" check (SPEC §6) without modelling a gangway. |
 | D5 | New parameter `Params.shoreOffset` (m, default 0): distance from the shore end of a pier to the first finger/berth. | Extension of the SPEC §4 data model. |
@@ -16,6 +16,8 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | D7 | `CLAUDE.md` lives in the repository root. | |
 | D8 | Static build uses relative asset paths (`base: './'`). | Hosting target not yet chosen. |
 | D9 | Work is committed task by task directly to `main`. | |
+| D10 | **Size zoning (2026-11-13):** in addition to the uniform module of D2, the generator produces a layout in which every row is sized for its own boats — strategy **E**. D2 still applies to strategies A–D. | The uniform module wastes water when the mix has a few large boats. Details in I23–I27. |
+| D11 | **Unreachable berths (2026-11-13):** left out of the calculation, but the number is shown in a warning note and in the statistics. | See I14. |
 
 ## Defaults chosen by the implementer
 
@@ -43,6 +45,14 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | I20 | Slots must lie in navigable water; a slot in a `noNavigation` zone is an operational warning, in a `protected` zone or an obstacle buffer a geometric error. | SPEC §6 lists only structures for the zone check. |
 | I21 | Connection to the entrance is tested with a circle 0.2 m narrower than the required fairway width. | Absorbs the polygonal approximation of round buffers. |
 | I22 | Local refinement (SPEC §5, "if time allows") is not implemented. | Owner decision D6. |
+| I23 | **Strategy E, layout rule.** Piers are square to the shore and are placed one after another across the site. Each row is designed for the largest class that still has berths to place, so sizes go from the largest boats to the smallest. Row depth = slot length of that class; the fairway between two piers = the wider of what the two facing rows need; the pier follows at previous row edge + fairway + row depth + half the pier width. | Processing from large to small means the fairway in front of a row is always decided by the row placed before it, so no iteration is needed. Both directions across the site are tried. |
+| I24 | **Strategy E, class mix.** The total number of berths is split over the classes by target share (largest remainder method) into quotas; rows are filled class by class from the largest down. The total is the largest one for which every quota is met, found by bisection. | Gives the exact target mix, unlike assigning whole piers to one class. |
+| I25 | **Strategy E, classes that fit nowhere** (their own row, fairway and pier do not fit the site) are left out and the others are placed. The deviation from the target mix is reported in the statistics. | Otherwise one class that cannot be placed would hold the whole layout back (D3: the mix is a target, not a hard limit). |
+| I26 | **Strategy E, pier heads.** Each pier keeps clear the fairway width of its own largest class at its head. If that leaves berths that cannot be reached from the entrance (large boats having to pass the narrower heads of small-boat piers), the variant with the largest class's fairway width at every head is also tried. | Narrow heads give longer piers for small boats; the reach check decides whether they work for the site's entrance. |
+| I27 | **Strategy E, search.** Start offsets are swept in 2 m steps over one module of the largest class. They are first ranked by how many berths get placed when more are asked for than can fit; the exact search (bisection) is run for the six best per direction. | Keeps the strategy within the time limit. A better start offset can be missed. |
+| I28 | **Search speed-ups that do not change the result:** (a) a candidate is skipped when its piers, both sides full at the average pier length per berth plus two berths per row, cannot reach the best count so far; (b) the reach test is skipped when the berths placed are already too few. **One that can:** (c) strategy C first sweeps every orientation with offsets 4 m apart and runs the 1 m sweep only for orientations within 25 % of the fourth best. | SPEC §10 asks for under 2 s. With (c) an orientation whose best offset lies between coarse steps and gains more than 25 % could be missed; the returned layouts are always swept at 1 m. |
+| I29 | When nothing fits, the diagnostic compares the site with what the **least demanding boat class** needs (was: the longest class). | With strategy E a site is usable as soon as one class fits. |
+| I30 | Strategy E is not produced when only one boat class has a share above zero. | It would equal strategy A. |
 
 ## User interface
 

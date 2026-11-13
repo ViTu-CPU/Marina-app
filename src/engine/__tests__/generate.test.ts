@@ -3,6 +3,7 @@ import { DEFAULT_BOAT_CLASSES, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../defa
 import { DEMO_PROJECTS, IRREGULAR_BAY_SITE, RECT_BASIN_SITE } from '../demos';
 import { setBerthRemoved } from '../edit';
 import {
+  apportion,
   candidateOrientations,
   generateLayouts,
   isNearDuplicate,
@@ -231,6 +232,116 @@ describe('generateLayouts on the demo projects (SPEC §10)', () => {
   }
 });
 
+describe('strategy E: piers sized by boat class (DECISIONS D10)', () => {
+  it('apportion splits a total by share with the largest remainder method', () => {
+    // 30 / 35 / 25 / 10 % of 10 → exact 3.0, 3.5, 2.5, 1.0 → floors 3, 3, 2, 1 = 9;
+    // the one berth left goes to the largest remainder (0.5, first of the tied classes).
+    expect(apportion(10, DEFAULT_BOAT_CLASSES)).toEqual({ c5: 3, c7: 4, c9: 2, c12: 1 });
+    expect(apportion(200, DEFAULT_BOAT_CLASSES)).toEqual({ c5: 60, c7: 70, c9: 50, c12: 20 });
+    expect(apportion(0, DEFAULT_BOAT_CLASSES)).toEqual({ c5: 0, c7: 0, c9: 0, c12: 0 });
+  });
+
+  // Open basin, default mix. Entrance in the north-east corner as in the example.
+  const site: Site = { ...RECT_BASIN_SITE, obstacles: [] };
+  const result = generateLayouts(inputFor(site, { topN: 10 }));
+  const e = byStrategy(result.layouts, 'E')[0]!;
+  const a = byStrategy(result.layouts, 'A')[0]!;
+  const lengthOf = new Map(DEFAULT_BOAT_CLASSES.map((c) => [c.id, c.length]));
+  /** Rows of E in order across the basin: pier x, side, longest boat, slot depth. */
+  const rows = e.piers
+    .flatMap((p) =>
+      (['left', 'right'] as const).flatMap((side) => {
+        const berths = e.berths.filter((b) => b.pierId === p.id && b.side === side);
+        if (berths.length === 0) return [];
+        const longest = Math.max(...berths.map((b) => lengthOf.get(b.boatClassId)!));
+        const xs = berths.flatMap((b) => b.slot.map((v) => v.x));
+        // The piers run north, so 'left' is west: the row lies west of the pier.
+        const pierEdge = side === 'left' ? p.start.x - p.width / 2 : p.start.x + p.width / 2;
+        const farEdge = side === 'left' ? Math.min(...xs) : Math.max(...xs);
+        return [{ pier: p.id, side, longest, pierEdge, farEdge }];
+      }),
+    )
+    .sort((r1, r2) => r1.farEdge - r2.farEdge);
+
+  it('is produced, meets the constraints and follows the target mix', () => {
+    expect(e).toBeDefined();
+    expect(e.issues).toEqual([]);
+    expect(e.feasibility).toBe('operationalOK');
+    expect(e.unreachableRemoved).toBe(0);
+    // Every class gets exactly its share of the total (largest remainder).
+    expect(e.stats.berthsByClass).toEqual(apportion(e.stats.totalBerths, DEFAULT_BOAT_CLASSES));
+  });
+
+  it('fits clearly more berths than the uniform module of strategy A', () => {
+    // With one module sized for 12 m boats (pitch 46 m) every row and fairway is as deep
+    // as the largest class needs. Sizing each row for its own boats must do better.
+    expect(e.stats.totalBerths).toBeGreaterThan(a.stats.totalBerths * 1.3);
+    expect(result.layouts[0]!.strategy).toBe('E');
+  });
+
+  it('row depth is the slot length of the longest boat in the row', () => {
+    for (const row of rows) {
+      // slot length = boat length + lengthClearance (0.5 m)
+      expect(Math.abs(row.farEdge - row.pierEdge)).toBeCloseTo(row.longest + 0.5, 6);
+    }
+  });
+
+  it('boat sizes only go one way across the basin', () => {
+    const sizes = rows.map((r) => r.longest);
+    const ascending = [...sizes].sort((x, y) => x - y);
+    const descending = [...ascending].reverse();
+    expect([JSON.stringify(ascending), JSON.stringify(descending)]).toContain(JSON.stringify(sizes));
+    expect(new Set(sizes).size).toBeGreaterThan(1);
+  });
+
+  it('the fairway between two piers is as wide as the larger of the facing rows needs, and no wider', () => {
+    // Rows come in the order: … east row of pier i | fairway | west row of pier i+1 …
+    let checked = 0;
+    for (let i = 0; i + 1 < rows.length; i++) {
+      const west = rows[i]!;
+      const east = rows[i + 1]!;
+      if (west.pier === east.pier) continue; // two sides of the same pier
+      // fairway = max(fairwayMin 8, 1.5 × longest boat of the two rows)
+      const required = Math.max(8, 1.5 * Math.max(west.longest, east.longest));
+      expect(east.farEdge - west.farEdge).toBeCloseTo(required, 6);
+      checked++;
+    }
+    expect(checked).toBeGreaterThanOrEqual(3);
+  });
+
+  it('classes that fit nowhere are left out and the rest are placed', () => {
+    // Channel 200 m long and 20 m wide, shore along one long side. The uniform module of
+    // strategies A–D (33.5 m for 12 m boats) does not fit at all. Sized by class, piers
+    // across the channel work for the classes whose pier still holds a bay:
+    //   5 m: pier 20 − 8.0 = 12.0 m ≥ 4.1 m   7 m: 20 − 10.5 = 9.5 m ≥ 4.6 m
+    //   9 m: 20 − 13.5 = 6.5 m ≥ 5.1 m        12 m: 20 − 18.0 = 2.0 m < 5.6 m → no
+    const channel: Site = {
+      water: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 20 }, { x: 0, y: 20 }],
+      shoreline: [{ x: 0, y: 0 }, { x: 200, y: 0 }],
+      entrance: { a: { x: 200, y: 0 }, b: { x: 200, y: 20 } },
+      obstacles: [],
+      zones: [],
+    };
+    const narrow = generateLayouts(inputFor(channel));
+    expect(narrow.diagnostics).toEqual([]);
+    expect(narrow.layouts.map((l) => l.strategy)).toEqual(['E']);
+    const stats = narrow.layouts[0]!.stats;
+    expect(stats.berthsByClass.c12).toBe(0);
+    expect(stats.berthsByClass.c5).toBeGreaterThan(0);
+    expect(stats.berthsByClass.c7).toBeGreaterThan(0);
+    expect(stats.berthsByClass.c9).toBeGreaterThan(0);
+    // The 12 m class has a 10 % target share and got nothing: the deviation is 10 %.
+    expect(stats.mixDeviation).toBeCloseTo(0.1, 2);
+    expect(narrow.layouts[0]!.feasibility).toBe('operationalOK');
+  });
+
+  it('with a single boat class there is nothing to zone', () => {
+    const single = generateLayouts(inputFor(site, { boatClasses: FIVE_M_ONLY, topN: 10 }));
+    expect(byStrategy(single.layouts, 'E')).toEqual([]);
+    expect(single.layouts.length).toBeGreaterThan(0);
+  });
+});
+
 describe('berths that cannot be reached from the entrance', () => {
   /**
    * Basin 46 m wide and 140 m deep with the entrance on the north edge, and a rock in the
@@ -324,13 +435,13 @@ describe('generateLayouts options', () => {
 
 describe('generateLayouts when nothing fits (SPEC §5, diagnostics)', () => {
   it('a channel narrower than one pier module', () => {
-    // 200 m long, 20 m wide, shore along one long side. Default mix: a pier module needs
-    // pier 3.0 + row 12.5 + fairway 18.0 = 33.5 m; a pier across the channel could be at
-    // most 20 − 18 = 2 m long.
+    // 200 m long, 10 m wide, shore along one long side. The least demanding class
+    // (5.0 × 2.0 m) needs pier 3.0 + row 5.5 + fairway 8.0 = 16.5 m beside a pier along
+    // the shore; a pier across the channel could be at most 10 − 8 = 2 m long.
     const site: Site = {
-      water: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 20 }, { x: 0, y: 20 }],
+      water: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 10 }, { x: 0, y: 10 }],
       shoreline: [{ x: 0, y: 0 }, { x: 200, y: 0 }],
-      entrance: { a: { x: 200, y: 0 }, b: { x: 200, y: 20 } },
+      entrance: { a: { x: 200, y: 0 }, b: { x: 200, y: 10 } },
       obstacles: [],
       zones: [],
     };
@@ -339,8 +450,8 @@ describe('generateLayouts when nothing fits (SPEC §5, diagnostics)', () => {
     const narrow = result.diagnostics.find((d) => d.code === 'WATER_NARROWER_THAN_MODULE');
     expect(narrow).toBeDefined();
     // "available" = pier 3.0 m + the deepest bay-wide box beside a pier along the shore,
-    // 20 − 3 = 17.0 m → 20.0 m.
-    expect(narrow!.message).toBe('Water area narrower than one pier module (needs 33.5 m, available 20.0 m).');
+    // 10 − 3 = 7.0 m → 10.0 m.
+    expect(narrow!.message).toBe('Water area narrower than one pier module (needs 16.5 m, available 10.0 m).');
     expect(result.diagnostics.map((d) => d.code)).toEqual(['WATER_NARROWER_THAN_MODULE']);
   });
 
@@ -354,19 +465,20 @@ describe('generateLayouts when nothing fits (SPEC §5, diagnostics)', () => {
   });
 
   it('water too short for a pier', () => {
-    // 20 m of water in front of the shore; a pier needs one bay (4.1 m) + 18 m at its head.
-    // The shore is too short (3 m) for a shore-parallel pier.
+    // 10 m of water in front of the shore; even the smallest class needs one bay (4.1 m)
+    // + 8 m at the pier head. The shore is too short (3 m) for a shore-parallel pier.
     const site: Site = {
-      water: [{ x: 0, y: 0 }, { x: 3, y: 0 }, { x: 3, y: 20 }, { x: 0, y: 20 }],
+      water: [{ x: 0, y: 0 }, { x: 3, y: 0 }, { x: 3, y: 10 }, { x: 0, y: 10 }],
       shoreline: [{ x: 0, y: 0 }, { x: 3, y: 0 }],
-      entrance: { a: { x: 0, y: 20 }, b: { x: 3, y: 20 } },
+      entrance: { a: { x: 0, y: 10 }, b: { x: 3, y: 10 } },
       obstacles: [],
       zones: [],
     };
     const result = generateLayouts(inputFor(site));
     expect(result.layouts).toEqual([]);
     const short = result.diagnostics.find((d) => d.code === 'WATER_TOO_SHORT_FOR_PIER');
-    expect(short?.message).toContain('22.1 m is needed');
+    // The least demanding class: one bay of 5 m boats (4.1 m) + 8 m at the head.
+    expect(short?.message).toContain('12.1 m is needed');
   });
 
   it('missing inputs are reported before any search', () => {

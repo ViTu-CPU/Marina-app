@@ -67,6 +67,12 @@ export function rowDesign(classes: BoatClass[], params: Params, pattern: BerthPa
 export interface MixState {
   total: number;
   counts: Record<string, number>;
+  /**
+   * Optional berth quota per class. When set, classes are not chosen by target share:
+   * each berth goes to the LONGEST allowed class that is still below its quota, so the
+   * rows are filled class by class from the largest boats down (size zoning).
+   */
+  quota?: Record<string, number>;
 }
 
 export const newMixState = (classes: BoatClass[]): MixState => ({
@@ -86,6 +92,8 @@ export interface FillContext {
    * The generator turns this off while searching: the order does not change berth counts.
    */
   orderRuns?: boolean;
+  /** Only classes up to this boat length are placed (size zoning). */
+  maxBoatLength?: number;
   /** Derived data, computed once per context. */
   plan?: FillPlan;
 }
@@ -107,7 +115,8 @@ interface FillPlan {
 
 function planFor(ctx: FillContext): FillPlan {
   if (ctx.plan) return ctx.plan;
-  const classes = activeClasses(ctx.classes);
+  const limit = ctx.maxBoatLength ?? Infinity;
+  const classes = activeClasses(ctx.classes).filter((c) => c.length <= limit + 1e-9);
   const shareSum = classes.reduce((sum, c) => sum + c.share, 0);
   const plan: FillPlan = {
     classes,
@@ -159,7 +168,7 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
   const plan = planFor(ctx);
   const { classes, shares, reach } = plan;
   const span = rowEnd - rowStart;
-  if (span < design.minBayFootprint) return [];
+  if (classes.length === 0 || span < design.minBayFootprint) return [];
 
   const at = (s: number, d: number): Vec2 => add(frame.origin, add(scale(frame.along, s), scale(frame.outward, d)));
 
@@ -178,7 +187,13 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
   // Running counts by class index; written back to `mix` at the end.
   const counts = classes.map((c) => mix.counts[c.id] ?? 0);
   let total = mix.total;
+  const quota = mix.quota ? classes.map((c) => mix.quota![c.id] ?? 0) : null;
+  /** Index of the class for the next berth, or -1 when every quota is used up. */
   const pick = (): number => {
+    if (quota) {
+      for (const i of plan.byLengthDesc) if (counts[i]! < quota[i]!) return i;
+      return -1;
+    }
     let best = 0;
     let bestDeficit = -Infinity;
     for (let i = 0; i < classes.length; i++) {
@@ -235,7 +250,10 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
   const structureEdges = localEdges(prepared.structureRegion);
 
   const runs: PlacedBay[][] = [];
+  /** Set when every quota is used up: nothing more can be placed in this row. */
+  let exhausted = false;
   for (const [from, to] of stretches) {
+    if (exhausted) break;
     if (to - from < design.minBayFootprint - 1e-9) continue;
     // Boundary edges that reach into this stretch. Both the pier edge and the far side of
     // the fairway are in navigable water along the whole stretch, so a box in between is
@@ -268,9 +286,20 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
         const picks: number[] = [];
         for (let i = 0; i < n; i++) {
           const index = pick();
+          if (index < 0) break;
           picks.push(index);
           counts[index]!++;
           total++;
+        }
+        if (picks.length < n) {
+          // Not enough quota left for a bay of n boats.
+          for (const index of picks) counts[index]!--;
+          total -= picks.length;
+          if (picks.length === 0) {
+            exhausted = true;
+            return null;
+          }
+          continue;
         }
         const geometry = bayAtOrigin(ctx, plan, picks);
         if (bayIsValid(s, geometry)) return { s, boats: picks.map((i) => classes[i]!), geometry };
@@ -280,6 +309,7 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
         const longest = Math.max(...picks.map((i) => classes[i]!.length));
         for (const index of plan.byLengthDesc) {
           if (classes[index]!.length >= longest) continue;
+          if (quota && counts[index]! + n > quota[index]!) continue;
           const same = Array<number>(n).fill(index);
           const smaller = bayAtOrigin(ctx, plan, same);
           if (bayIsValid(s, smaller)) {
@@ -295,7 +325,7 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
     const stretchRuns: PlacedBay[][] = [];
     let s = from;
     let run: PlacedBay[] = [];
-    while (s + design.minBayFootprint <= to + 1e-9) {
+    while (!exhausted && s + design.minBayFootprint <= to + 1e-9) {
       const bay = chooseBay(s);
       if (bay) {
         run.push(bay);
@@ -348,6 +378,10 @@ export interface FilledRow {
   side: PierSide;
   frame: RowFrame;
   runs: PlacedBay[][];
+  /** Depth reserved for the row, measured from the pier edge, m. */
+  depth: number;
+  /** Fairway width kept clear in front of the row, m. */
+  fairwayWidth: number;
 }
 
 export interface FillOptions {
@@ -368,7 +402,9 @@ export function fillPierRows(pier: PierLike, ctx: FillContext, mix: MixState, op
     const outward = side === 'left' ? leftNormal : scale(leftNormal, -1);
     const frame: RowFrame = { origin: add(pier.start, scale(outward, pier.width / 2)), along, outward };
     const runs = fillRow(frame, options.rowStart ?? ctx.params.shoreOffset, pierLength, ctx, mix);
-    if (runs.length > 0) rows.push({ side, frame, runs });
+    if (runs.length > 0) {
+      rows.push({ side, frame, runs, depth: ctx.design.rowDepth, fairwayWidth: ctx.design.fairwayWidth });
+    }
   }
   return rows;
 }

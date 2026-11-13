@@ -174,6 +174,7 @@ export const fi: Partial<Record<StringKey, string>> = {
   'stat.freeWaterArea': 'Vapaa vesiala',
   'stat.berthsPer1000m2': 'Paikkoja / 1 000 m² vettä',
   'stat.pontoonPerBerth': 'Ponttonia / paikka',
+  'stat.mixDeviation': 'Poikkeama tavoitejakaumasta',
   'stat.unreachableRemoved': 'Pois jätetyt saavuttamattomat paikat',
   'stat.errors': 'Virheet',
   'stat.warnings': 'Varoitukset',

@@ -236,6 +236,7 @@ export function operationalIssues(
   layout: LayoutElements,
   rows: RowInfo[],
   prepared: PreparedSite,
+  options: { skipConnectivity?: boolean } = {},
 ): Issue[] {
   const issues: Issue[] = [];
   const warn = (code: string, elementId: string, message: string) =>
@@ -294,7 +295,7 @@ export function operationalIssues(
   }
 
   // Connection to the entrance.
-  for (const [row, cutOff] of cutOffBerths(layout, rows, prepared, blocked)) {
+  for (const [row, cutOff] of options.skipConnectivity ? [] : cutOffBerths(layout, rows, prepared, blocked)) {
     const n = cutOff.length;
     warn(
       IssueCode.NOT_CONNECTED_TO_ENTRANCE,

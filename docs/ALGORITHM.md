@@ -17,8 +17,8 @@ Piers and fingers must lie in the first, berth slots and fairways in the second 
 
 ## 2. Row design (`fill.ts → rowDesign`)
 
-One module is used for the whole layout (D2), sized by the longest boat class with a
-share above zero:
+Strategies A–D use one module for the whole layout (D2), sized by the longest boat class
+with a share above zero (strategy E sizes each row separately, see §3):
 
 ```
 row depth     = boat length + lengthClearance
@@ -49,6 +49,9 @@ Default mix: 12.5 m, 18 m and 46 m.
 6. **Search score**: number of berths that can be reached from the entrance, estimated on
    a grid (`reach.ts`, I15); for "min infrastructure" pontoon metres per berth with the
    shortfall penalty.
+7. **Pruning** (I28): candidates whose piers cannot hold enough berths to matter are
+   skipped before filling, and strategy C sweeps every orientation coarsely (4 m) before
+   the 1 m sweep of the promising ones.
 
 ### Strategies
 
@@ -58,8 +61,26 @@ Default mix: 12.5 m, 18 m and 46 m.
 | B | shore-perpendicular piers at every other pitch, best offset (I12) |
 | C | best offset for each other orientation; the best four orientations (I13) |
 | D | one pier lying along a shoreline segment, berths on the water side (D4) |
+| E | shore-perpendicular piers, every row sized for its own boat classes (D10) |
 
-The best candidate of each is built in full: unreachable berths are removed (I14),
+**Strategy E in more detail** (I23–I27). The berths to place are split over the classes
+by target share into quotas. Piers are then placed one after another across the site;
+each row is designed for the largest class that still has quota left, so rows run from the
+largest boats to the smallest:
+
+```
+row depth     = slot length of the row's largest class
+fairway width = the wider of what the two facing rows need
+next pier     = previous row edge + fairway + row depth + mainPierWidth / 2
+```
+
+With the default mix the modules range from 22 m (5 m boats) to 46 m (12 m boats) instead
+of 46 m everywhere. The total is the largest for which every quota is met (bisection);
+both directions across the site and start offsets 2 m apart are tried. Classes that fit
+nowhere are left out. Each row is tested for reachability with a circle as wide as its
+own fairway.
+
+The best candidate of each is built in full: unreachable berths are removed and counted (I14),
 fairways are built, the layout is validated and its statistics computed. The alternatives
 are ranked by the selected objective, near-duplicates (berth and pier counts both within
 2 %) are dropped, and the top N (default 5) are returned.
@@ -106,4 +127,4 @@ scaled by the best alternative. Layouts with geometric errors always rank below 
 ## 7. Not implemented
 
 Local refinement of angle and offset (I22); piers from both banks on one line (I18);
-per-pier size zoning with variable pitch (D2).
+size zoning for other pier directions than square to the shore.

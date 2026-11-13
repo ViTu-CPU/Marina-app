@@ -125,6 +125,50 @@ describe('fillPier, hand-calculated berth counts (SPEC §10)', () => {
   });
 });
 
+describe('fillPier with class quotas (size zoning), hand-calculated', () => {
+  it('fills from the largest class down until each quota is used', () => {
+    // 60 m pier, 12.0 × 3.5 m boats (slot 4.0 m) with a quota of 5, then 5.0 × 2.0 m boats.
+    // West row, two boats per bay:
+    //   [12, 12]  0.8 + 4.0 + 4.0 = 8.8   → cursor  8.8
+    //   [12, 12]                    8.8   → cursor 17.6
+    //   [12,  5]  0.8 + 4.0 + 2.5 = 7.3   → cursor 24.9   (the 12 m quota is now used)
+    //   [5, 5] × 5      5 × 5.8 = 29.0    → cursor 53.9   (a sixth would need 53.9 + 6.6 > 60)
+    //   [5]       0.8 + 2.5 + 0.8 = 4.1   → fits (53.9 + 4.1 = 58.0 ≤ 60), cursor 57.2
+    // → 5 boats of 12 m and 1 + 10 + 1 = 12 boats of 5 m: 17 berths.
+    // East row: only 5 m boats are left to place → 20 berths (case 1).
+    const classes: BoatClass[] = [
+      { ...DEFAULT_BOAT_CLASSES[0]!, share: 0.5 },
+      { ...DEFAULT_BOAT_CLASSES[3]!, share: 0.5 },
+    ];
+    const mix = { ...newMixState(classes), quota: { c12: 5, c5: 100 } };
+    const fill = fillPier(pierAt(110, 60), context(OPEN_BASIN, classes), mix);
+    expect(count(fill.berths, 'left', 'c12')).toBe(5);
+    expect(count(fill.berths, 'left', 'c5')).toBe(12);
+    expect(count(fill.berths, 'right', 'c12')).toBe(0);
+    expect(count(fill.berths, 'right', 'c5')).toBe(20);
+    expect(mix.total).toBe(37);
+    expect(mix.counts).toEqual({ c5: 32, c12: 5 });
+  });
+
+  it('stops when every quota is used', () => {
+    const classes = only('c5');
+    const mix = { ...newMixState(classes), quota: { c5: 7 } };
+    const fill = fillPier(pierAt(110, 60), context(OPEN_BASIN, classes), mix);
+    expect(fill.berths).toHaveLength(7);
+    // Three full bays and one single-boat bay on the west side; nothing on the east side.
+    expect(count(fill.berths, 'left')).toBe(7);
+    expect(count(fill.berths, 'right')).toBe(0);
+    expect(fill.fingers).toHaveLength(5);
+  });
+
+  it('a row can be limited to classes up to a given length', () => {
+    const classes = DEFAULT_BOAT_CLASSES;
+    const ctx: FillContext = { ...context(OPEN_BASIN, classes), maxBoatLength: 7 };
+    const fill = fillPier(pierAt(110, 60), ctx, newMixState(classes));
+    expect(new Set(fill.berths.map((b) => b.boatClassId))).toEqual(new Set(['c5', 'c7']));
+  });
+});
+
 describe('fillPier, properties', () => {
   const classes = DEFAULT_BOAT_CLASSES;
   const ctx = context(RECT_BASIN_SITE, classes);

@@ -10,6 +10,8 @@
  */
 import { DEFAULT_TOP_N } from './defaults';
 import {
+  activeClasses,
+  fairwayWidthFor,
   fillPierRows,
   newMixState,
   rowDesign,
@@ -18,6 +20,7 @@ import {
   type FillContext,
   type FilledRow,
   type FillOptions,
+  type MixState,
   type RowDesign,
 } from './fill';
 import {
@@ -91,14 +94,22 @@ export interface GenerateResult {
   diagnostics: Diagnostic[];
 }
 
-export type StrategyId = 'A' | 'B' | 'C' | 'D';
+export type StrategyId = 'A' | 'B' | 'C' | 'D' | 'E';
 
 /** Offset sweep step across one pier pitch, m (SPEC §5.4). */
 export const OFFSET_STEP = 1;
 /** Orientation sweep step, degrees (SPEC §5.2). */
 export const ANGLE_STEP = 5;
+/** Offset sweep step of the size-zoned strategy E, m. */
+export const ZONED_OFFSET_STEP = 2;
+/** For how many start offsets (per direction) strategy E runs its exact search. */
+const ZONED_SHORTLIST = 6;
 /** How many berth-less piers are remembered for the diagnostics. */
 const MAX_BLOCKED_SAMPLE = 200;
+/** Offset step of the coarse first pass over the orientations of strategy C, m. */
+const COARSE_OFFSET_STEP = 4;
+/** Orientations within this fraction of the fourth best after the coarse pass get the full sweep. */
+const COARSE_KEEP_FRACTION = 0.75;
 /** How many different orientations strategy C contributes to the pool of alternatives. */
 const C_POOL_SIZE = 4;
 /** Two layouts are near-duplicates when berth and pier counts are both within this fraction. */
@@ -185,6 +196,11 @@ interface Candidate {
   /** Berths that can be reached from the entrance (estimated on the reach grid). */
   berths: number;
   pontoonLength: number;
+  /**
+   * Builds the piers again with the runs ordered by boat length. Set by strategies whose
+   * rows depend on each other (size zoning); the others are re-filled pier by pier.
+   */
+  rebuild?: () => CandidatePier[];
 }
 
 interface SearchContext {
@@ -193,7 +209,10 @@ interface SearchContext {
   design: RowDesign;
   params: Params;
   objective: ObjectiveSettings;
-  reachGrid: ReachGrid;
+  /** Reach grids by fairway width, built on demand. */
+  reachGrids: Map<number, ReachGrid>;
+  /** Pier length one berth takes on average with the target mix, m (for pruning the search). */
+  meanBerthAdvance: number;
   report: PlacementReport & {
     piersPlaced: number;
     /** Number of piers that could be placed but got no berths. */
@@ -206,21 +225,40 @@ interface SearchContext {
   };
 }
 
+function reachGridFor(ctx: SearchContext, fairwayWidth: number): ReachGrid {
+  let grid = ctx.reachGrids.get(fairwayWidth);
+  if (!grid) {
+    grid = buildReachGrid(ctx.prepared, fairwayWidth);
+    ctx.reachGrids.set(fairwayWidth, grid);
+  }
+  return grid;
+}
+
 /**
  * Berth count and pontoon length of a candidate. Only berths that a boat can reach from
  * the entrance are counted, so the search does not favour layouts that wall off part of
  * the site (estimated on the reach grid; the exact check follows for the layouts returned).
+ * Each row is tested with a circle as wide as its own fairway.
  */
-function summarize(ctx: SearchContext, strategy: StrategyId, angle: number, piers: CandidatePier[]): Candidate {
-  const { design, reachGrid } = ctx;
+function summarize(ctx: SearchContext, strategy: StrategyId, angle: number, piers: CandidatePier[]): Candidate;
+function summarize(ctx: SearchContext, strategy: StrategyId, angle: number, piers: CandidatePier[], floor: number): Candidate | null;
+function summarize(ctx: SearchContext, strategy: StrategyId, angle: number, piers: CandidatePier[], floor = 0): Candidate | null {
+  if (floor > 0) {
+    // Reachable berths cannot exceed the berths placed: skip the reach test when even
+    // those are too few to matter.
+    let placed = 0;
+    for (const p of piers) placed += summarizeRows(p.rows).berths;
+    if (placed < floor) return null;
+  }
   const occupied: OccupiedBox[] = [];
+  const widths = new Set<number>();
   let pontoonLength = 0;
   for (const p of piers) {
     const length = distance(p.segment.start, p.segment.end);
     pontoonLength += length + summarizeRows(p.rows).fingerLength;
     const first = p.rows[0]!;
     const width = ctx.params.mainPierWidth;
-    // The pier itself, expressed in the frame of its first row (d < 0 is under the pier).
+    // The pier itself, in the frame of its first row (d < 0 is under the pier).
     occupied.push({ origin: first.frame.origin, along: first.frame.along, outward: first.frame.outward, s0: 0, s1: length, d0: -width, d1: 0 });
     for (const row of p.rows) {
       let sMin = Infinity;
@@ -230,21 +268,26 @@ function summarize(ctx: SearchContext, strategy: StrategyId, angle: number, pier
         const last = run[run.length - 1]!;
         sMax = Math.max(sMax, last.s + last.geometry.footprint);
       }
-      occupied.push({ origin: row.frame.origin, along: row.frame.along, outward: row.frame.outward, s0: sMin, s1: sMax, d0: 0, d1: design.rowDepth });
+      occupied.push({ origin: row.frame.origin, along: row.frame.along, outward: row.frame.outward, s0: sMin, s1: sMax, d0: 0, d1: row.depth });
+      widths.add(row.fairwayWidth);
     }
   }
-  const reached = reachableCells(reachGrid, occupied);
-  const mid = design.rowDepth + design.fairwayWidth / 2;
   let berths = 0;
-  for (const p of piers) {
-    for (const row of p.rows) {
-      const { origin, along, outward } = row.frame;
-      for (const run of row.runs) {
-        for (const bay of run) {
-          const s = bay.s + bay.geometry.footprint / 2;
-          const x = origin.x + s * along.x + mid * outward.x;
-          const y = origin.y + s * along.y + mid * outward.y;
-          if (isSwept(reachGrid, reached, x, y, design.fairwayWidth / 2)) berths += bay.boats.length;
+  for (const fairwayWidth of widths) {
+    const grid = reachGridFor(ctx, fairwayWidth);
+    const reached = reachableCells(grid, occupied);
+    for (const p of piers) {
+      for (const row of p.rows) {
+        if (row.fairwayWidth !== fairwayWidth) continue;
+        const { origin, along, outward } = row.frame;
+        const mid = row.depth + fairwayWidth / 2;
+        for (const run of row.runs) {
+          for (const bay of run) {
+            const s = bay.s + bay.geometry.footprint / 2;
+            const x = origin.x + s * along.x + mid * outward.x;
+            const y = origin.y + s * along.y + mid * outward.y;
+            if (isSwept(grid, reached, x, y, fairwayWidth / 2)) berths += bay.boats.length;
+          }
         }
       }
     }
@@ -287,7 +330,7 @@ function extentAlong(site: Site, axis: Vec2): { min: number; max: number } {
 }
 
 /** Remove the bays that end beyond `length` and take their boats out of the mix counts. */
-function trimRows(rows: FilledRow[], length: number, mix: { total: number; counts: Record<string, number> }): FilledRow[] {
+function trimRows(rows: FilledRow[], length: number, mix: MixState): FilledRow[] {
   const kept: FilledRow[] = [];
   for (const row of rows) {
     const runs = [];
@@ -313,97 +356,133 @@ const HEAD_SHORTEN_STEP = 1;
 
 /**
  * True when boats can turn around the pier head: the water beyond the head is navigable
- * for one fairway width, across the pier, its rows and the fairways in front of them.
+ * for `headWidth`, across the pier, its rows and the fairways in front of them.
  */
-function headIsClear(ctx: SearchContext, segment: PierSegment, rows: FilledRow[]): boolean {
-  const { design, params, prepared } = ctx;
+function headIsClear(ctx: SearchContext, segment: PierSegment, rows: FilledRow[], headWidth: number): boolean {
+  const { params, prepared } = ctx;
   const length = distance(segment.start, segment.end);
   const along = scale(sub(segment.end, segment.start), 1 / length);
   const left = { x: -along.y, y: along.x };
-  const reach = design.rowDepth + design.fairwayWidth;
+  const reach = (side: PierSide): number => {
+    const row = rows.find((r) => r.side === side);
+    return row ? row.depth + row.fairwayWidth : 0;
+  };
   const frame = { origin: add(segment.start, scale(left, params.mainPierWidth / 2)), along, outward: left };
   const box = localRectToPolygon(
-    {
-      s0: length,
-      s1: length + design.fairwayWidth,
-      d0: -params.mainPierWidth - (rows.some((r) => r.side === 'right') ? reach : 0),
-      d1: rows.some((r) => r.side === 'left') ? reach : 0,
-    },
+    { s0: length, s1: length + headWidth, d0: -params.mainPierWidth - reach('right'), d1: reach('left') },
     frame,
   );
   return convexInsideRegion(box, prepared.navigableRegion);
 }
 
-/** One candidate: parallel piers at `spacing`, the first one `offset` from the edge of the site. */
+/**
+ * Make sure the head of a filled pier is clear. Where the water ends at an angle, the
+ * rows reach it before the pier's centreline does; the pier is then shortened in steps
+ * and the bays beyond the new head are dropped (and taken out of the mix counts).
+ * Returns null when no usable length remains.
+ */
+function fitHead(
+  ctx: SearchContext,
+  segment: PierSegment,
+  rows: FilledRow[],
+  mix: MixState,
+  minLength: number,
+  headWidth: number,
+): { segment: PierSegment; rows: FilledRow[] } | null {
+  if (headIsClear(ctx, segment, rows, headWidth)) return { segment, rows };
+  const full = distance(segment.start, segment.end);
+  for (let cut = HEAD_SHORTEN_STEP; full - cut >= minLength; cut += HEAD_SHORTEN_STEP) {
+    const length = full - cut;
+    const end = roundVec(add(segment.start, scale(sub(segment.end, segment.start), length / full)));
+    const shortened = { start: segment.start, end };
+    if (headIsClear(ctx, shortened, rows, headWidth)) {
+      const trimmed = trimRows(rows, length, mix);
+      return trimmed.length > 0 ? { segment: shortened, rows: trimmed } : null;
+    }
+  }
+  trimRows(rows, 0, mix);
+  return null;
+}
+
+/**
+ * One candidate: parallel piers at `spacing`, the first one `offset` from the edge of the
+ * site. Returns null when the candidate cannot reach `floor` berths, which is known
+ * early from the total length of its piers (see `floorFor`).
+ */
 function parallelCandidate(
   ctx: SearchContext,
   strategy: StrategyId,
   angle: number,
   offset: number,
   spacing: number,
-): Candidate {
+  floor: number,
+): Candidate | null {
   const { prepared, design, params } = ctx;
   const dir = bearingToVector(angle);
   const lateral = { x: dir.y, y: -dir.x }; // to the right of the pier direction
   const { min, max } = extentAlong(prepared.site, lateral);
-  const mix = newMixState(ctx.fill.classes);
-  const piers: CandidatePier[] = [];
+  const minLength = params.shoreOffset + design.minBayFootprint;
+
+  const segments: PierSegment[] = [];
   for (let u = min + offset; u <= max; u += spacing) {
-    const segments = placePiersOnLine(
+    const placed = placePiersOnLine(
       prepared,
       scale(lateral, u),
       dir,
-      {
-        width: params.mainPierWidth,
-        maxLength: params.maxMainPierLength,
-        headClearance: design.fairwayWidth,
-        minLength: params.shoreOffset + design.minBayFootprint,
-      },
+      { width: params.mainPierWidth, maxLength: params.maxMainPierLength, headClearance: design.fairwayWidth, minLength },
       ctx.report,
     );
-    for (const raw of segments) {
-      let segment = { start: roundVec(raw.start), end: roundVec(raw.end) };
-      ctx.report.piersPlaced++;
-      let rows = fillPierRows({ id: '', ...segment, width: params.mainPierWidth }, ctx.fill, mix);
-      if (rows.length === 0) {
-        // Slanted candidates of the sweep are left out: a box square to a slanted pier
-        // measures the site diagonally, which would make the diagnostic misleading.
-        if (strategy !== 'C' && ctx.report.blockedPiers.length < MAX_BLOCKED_SAMPLE) ctx.report.blockedPiers.push(segment);
-        ctx.report.berthlessPiers++;
-        continue;
-      }
-      if (!headIsClear(ctx, segment, rows)) {
-        // Where the water ends at an angle, the rows reach it before the pier's centreline
-        // does. Shorten the pier until boats can turn around its head.
-        const full = distance(segment.start, segment.end);
-        const minLength = params.shoreOffset + design.minBayFootprint;
-        let shortened: PierSegment | null = null;
-        let length = full;
-        for (let cut = HEAD_SHORTEN_STEP; full - cut >= minLength; cut += HEAD_SHORTEN_STEP) {
-          length = full - cut;
-          const end = roundVec(add(segment.start, scale(sub(segment.end, segment.start), length / full)));
-          if (headIsClear(ctx, { start: segment.start, end }, rows)) {
-            shortened = { start: segment.start, end };
-            break;
-          }
-        }
-        // Drop the bays beyond the new head (the final layout is filled afresh in toDraft).
-        rows = shortened ? trimRows(rows, length, mix) : trimRows(rows, 0, mix);
-        if (!shortened || rows.length === 0) continue;
-        segment = shortened;
-      }
-      piers.push({ segment, rows, fillOptions: {} });
-    }
+    for (const raw of placed) segments.push({ start: roundVec(raw.start), end: roundVec(raw.end) });
   }
-  return summarize(ctx, strategy, angle, piers);
+  if (floor > 0) {
+    // Upper estimate of the berths these piers can hold: both sides full at the average
+    // pier length per berth, plus a margin of two berths per row for rounding.
+    let estimate = 0;
+    for (const s of segments) estimate += 2 * ((distance(s.start, s.end) - params.shoreOffset) / ctx.meanBerthAdvance + 2);
+    if (estimate < floor) return null;
+  }
+
+  const mix = newMixState(ctx.fill.classes);
+  const piers: CandidatePier[] = [];
+  for (const placed of segments) {
+    ctx.report.piersPlaced++;
+    const rows = fillPierRows({ id: '', ...placed, width: params.mainPierWidth }, ctx.fill, mix);
+    if (rows.length === 0) {
+      // Slanted candidates of the sweep are left out: a box square to a slanted pier
+      // measures the site diagonally, which would make the diagnostic misleading.
+      if (strategy !== 'C' && ctx.report.blockedPiers.length < MAX_BLOCKED_SAMPLE) ctx.report.blockedPiers.push(placed);
+      ctx.report.berthlessPiers++;
+      continue;
+    }
+    const fitted = fitHead(ctx, placed, rows, mix, minLength, design.fairwayWidth);
+    if (fitted) piers.push({ segment: fitted.segment, rows: fitted.rows, fillOptions: {} });
+  }
+  return summarize(ctx, strategy, angle, piers, floor);
 }
 
-/** Best offset for parallel piers at the given angle and spacing. */
-function bestParallel(ctx: SearchContext, strategy: StrategyId, angle: number, spacing: number): Candidate | null {
+/**
+ * The berth count below which a candidate cannot matter. Pruning relies on the search
+ * score growing with the berth count, which does not hold for 'minInfrastructure'.
+ */
+const floorFor = (ctx: SearchContext, ...counts: number[]): number =>
+  ctx.objective.id === 'minInfrastructure' ? 0 : Math.max(0, ...counts);
+
+/**
+ * Best offset for parallel piers at the given angle and spacing. Candidates that cannot
+ * reach `atLeast` berths are of no interest to the caller and may be skipped.
+ */
+function bestParallel(
+  ctx: SearchContext,
+  strategy: StrategyId,
+  angle: number,
+  spacing: number,
+  atLeast = 0,
+  step = OFFSET_STEP,
+): Candidate | null {
   let best: Candidate | null = null;
-  for (let offset = 0; offset < spacing; offset += OFFSET_STEP) {
-    const candidate = parallelCandidate(ctx, strategy, angle, offset, spacing);
-    if (better(candidate, best, ctx.objective)) best = candidate;
+  for (let offset = 0; offset < spacing; offset += step) {
+    const candidate = parallelCandidate(ctx, strategy, angle, offset, spacing, floorFor(ctx, best?.berths ?? 0, atLeast));
+    if (candidate && better(candidate, best, ctx.objective)) best = candidate;
   }
   return best;
 }
@@ -467,6 +546,267 @@ function bestShoreParallel(ctx: SearchContext): Candidate | null {
 }
 
 // ---------------------------------------------------------------------------
+// Strategy E: piers sized by boat class
+// ---------------------------------------------------------------------------
+
+/** Split `total` berths over the classes by target share (largest remainder method). */
+export function apportion(total: number, classes: BoatClass[]): Record<string, number> {
+  const shareSum = classes.reduce((sum, c) => sum + c.share, 0);
+  const exact = classes.map((c) => (total * c.share) / shareSum);
+  const counts = exact.map(Math.floor);
+  let left = total - counts.reduce((a, b) => a + b, 0);
+  const byRemainder = exact.map((v, i) => ({ i, r: v - Math.floor(v) })).sort((a, b) => b.r - a.r || a.i - b.i);
+  for (const { i } of byRemainder) {
+    if (left <= 0) break;
+    counts[i]!++;
+    left--;
+  }
+  return Object.fromEntries(classes.map((c, i) => [c.id, counts[i]!]));
+}
+
+interface ZonedOptions {
+  angle: number;
+  /** +1: the largest boats start at the low end of the lateral axis; -1: at the high end. */
+  direction: 1 | -1;
+  /** Clear water at the pier heads: by each pier's own largest boat, or by the largest class everywhere. */
+  head: 'own' | 'widest';
+  /** Distance of the first pier line from the edge of the site, m. */
+  offset: number;
+  /** Number of berths to place; split over the classes by target share. */
+  total: number;
+  /** Order the runs by boat length (final layout) or not (search). */
+  order: boolean;
+}
+
+/**
+ * One size-zoned layout (DECISIONS D10). Piers are placed one after another across the
+ * site. Each row is designed for the largest class that still has berths to place, so
+ * rows go from the largest boats to the smallest, and every row gets the depth and the
+ * fairway of its own boats instead of those of the largest class:
+ *
+ *   row depth     = slot length of the row's largest class
+ *   fairway width = the wider of what the two rows facing it need
+ *   pier position = previous row edge + fairway + row depth + half the pier width
+ *
+ * Because sizes only go down along the way, the fairway in front of a row is always
+ * decided by the row placed before it, which is already known.
+ */
+function sizeZonedLayout(ctx: SearchContext, zoned: ZonedContext, options: ZonedOptions): { piers: CandidatePier[]; placed: number } {
+  const { prepared, params } = ctx;
+  const { classes } = zoned;
+  const width = params.mainPierWidth;
+  const dir = bearingToVector(options.angle);
+  const forward = scale({ x: dir.y, y: -dir.x }, options.direction);
+  const { min, max } = extentAlong(prepared.site, forward);
+  const mix: MixState = { ...newMixState(classes), quota: apportion(options.total, classes) };
+  const nextClass = (): ZoneClass | undefined => zoned.zones.find((z) => (mix.counts[z.boat.id] ?? 0) < (mix.quota![z.boat.id] ?? 0));
+
+  const piers: CandidatePier[] = [];
+  /** Far edge of the last row placed, and the fairway that row needs in front of it. */
+  let previous: { edge: number; fairway: number } | null = null;
+  let skipped = 0;
+  for (;;) {
+    const back = nextClass();
+    if (!back) break;
+    // The fairway behind this pier must suit both the row before it and its own back row.
+    const gap: number = previous ? Math.max(previous.fairway, back.fairway) : back.fairway;
+    const u: number = (previous ? previous.edge + gap + back.depth + width / 2 : min + options.offset) + skipped;
+    if (u > max) break;
+    const headWidth = options.head === 'widest' ? zoned.zones[0]!.fairway : back.fairway;
+    const segments = placePiersOnLine(prepared, scale(forward, u), dir, {
+      width,
+      maxLength: params.maxMainPierLength,
+      headClearance: headWidth,
+      minLength: params.shoreOffset + back.minFootprint,
+    });
+
+    let frontDesign: ZoneClass | null = null;
+    let placedHere = false;
+    for (const raw of segments) {
+      let segment: PierSegment = { start: roundVec(raw.start), end: roundVec(raw.end) };
+      const along = scale(sub(segment.end, segment.start), 1 / distance(segment.start, segment.end));
+      // Which side of this pier looks forward depends on which way the pier runs.
+      const frontSide: PierSide = dot({ x: -along.y, y: along.x }, forward) > 0 ? 'left' : 'right';
+      const backSide: PierSide = frontSide === 'left' ? 'right' : 'left';
+      const pier = { id: '', ...segment, width };
+
+      let rows = fillPierRows(pier, zoned.context(back, gap, options.order), mix, { sides: [backSide] });
+      const front = nextClass();
+      if (front) rows = [...rows, ...fillPierRows(pier, zoned.context(front, front.fairway, options.order), mix, { sides: [frontSide] })];
+      if (rows.length === 0) continue;
+      const fitted = fitHead(ctx, segment, rows, mix, params.shoreOffset + back.minFootprint, headWidth);
+      if (!fitted) continue;
+      segment = fitted.segment;
+      piers.push({ segment, rows: fitted.rows, fillOptions: {} });
+      placedHere = true;
+      if (front && fitted.rows.some((r) => r.side === frontSide)) frontDesign = front;
+    }
+
+    if (!placedHere) {
+      // Nothing could be built on this line; try one metre further on.
+      skipped += 1;
+      continue;
+    }
+    skipped = 0;
+    previous = frontDesign
+      ? { edge: u + width / 2 + frontDesign.depth, fairway: frontDesign.fairway }
+      : { edge: u + width / 2, fairway: 0 };
+  }
+  return { piers, placed: mix.total };
+}
+
+interface ZoneClass {
+  boat: BoatClass;
+  /** Row depth for this class, m. */
+  depth: number;
+  /** Fairway width this class needs, m. */
+  fairway: number;
+  /** Shortest bay of this class or a smaller one, m. */
+  minFootprint: number;
+}
+
+interface ZonedContext {
+  classes: BoatClass[];
+  /** Active classes, longest first. */
+  zones: ZoneClass[];
+  /** Fill context for a row designed for `zone` with `fairway` kept clear in front of it. */
+  context: (zone: ZoneClass, fairway: number, order: boolean) => FillContext;
+}
+
+function zonedContext(ctx: SearchContext): ZonedContext {
+  const { params } = ctx;
+  const { pattern, prepared, classes } = ctx.fill;
+  const active = activeClasses(classes);
+  const footprint = (c: BoatClass) => pattern.bay([c], 0, params).footprint;
+  const zones: ZoneClass[] = [...active]
+    .sort((a, b) => b.length - a.length)
+    .map((boat) => ({
+      boat,
+      depth: pattern.slotLength(boat, params),
+      fairway: fairwayWidthFor(boat.length, params),
+      minFootprint: Math.min(...active.filter((c) => c.length <= boat.length).map(footprint)),
+    }));
+  const cache = new Map<string, FillContext>();
+  return {
+    classes,
+    zones,
+    context: (zone, fairway, order) => {
+      const key = `${zone.boat.id}|${fairway}|${order}`;
+      let context = cache.get(key);
+      if (!context) {
+        context = {
+          prepared,
+          classes,
+          params,
+          pattern,
+          design: { rowDepth: zone.depth, fairwayWidth: fairway, pitch: 0, minBayFootprint: zone.minFootprint },
+          orderRuns: order,
+          maxBoatLength: zone.boat.length,
+        };
+        cache.set(key, context);
+      }
+      return context;
+    },
+  };
+}
+
+/**
+ * Strategy E: the best size-zoned layout square to the shore. For every start offset and
+ * both directions, the largest total is found (by bisection) for which every class gets
+ * its full share; the candidate with the most reachable berths wins.
+ */
+function bestSizeZoned(ctx: SearchContext, angle: number): Candidate | null {
+  const all = zonedContext(ctx);
+  if (all.zones.length < 2) return null; // with one class there is nothing to zone
+  // A class whose own module does not fit anywhere would hold the whole layout back
+  // (no total could give it its share). Such classes are left out; the others are placed
+  // and the deviation from the target mix shows in the statistics (DECISIONS D3).
+  const placeable = new Set(
+    all.zones
+      .filter((zone) =>
+        ([1, -1] as const).some(
+          (direction) =>
+            sizeZonedLayout(ctx, zonedContextFor(ctx, [zone.boat]), {
+              angle,
+              direction,
+              head: 'own',
+              offset: ctx.params.mainPierWidth / 2,
+              total: 1e6,
+              order: false,
+            }).placed > 0,
+        ),
+      )
+      .map((zone) => zone.boat.id),
+  );
+  if (placeable.size === 0) return null;
+  const zoned =
+    placeable.size === all.zones.length
+      ? all
+      : zonedContextFor(ctx, ctx.fill.classes.map((c) => (placeable.has(c.id) ? c : { ...c, share: 0 })));
+  const smallest = zoned.zones[zoned.zones.length - 1]!;
+  const largest = zoned.zones[0]!;
+  const firstModule = ctx.params.mainPierWidth + 2 * largest.depth + largest.fairway;
+
+  /** Largest total in [lo, hi] for which the layout places every berth asked for. */
+  const largestComplete = (base: Omit<ZonedOptions, 'total' | 'order'>, lo: number, hi: number): number => {
+    const complete = (total: number) => sizeZonedLayout(ctx, zoned, { ...base, total, order: false }).placed === total;
+    let low = Math.max(0, Math.floor(lo));
+    let high = Math.max(low, Math.ceil(hi));
+    if (complete(high)) return high;
+    if (low > 0 && !complete(low)) low = 0;
+    while (high - low > 1) {
+      const mid = (low + high) >> 1;
+      if (complete(mid)) low = mid;
+      else high = mid;
+    }
+    return low;
+  };
+
+  const placedWith = (base: Omit<ZonedOptions, 'total' | 'order'>, total: number): number =>
+    sizeZonedLayout(ctx, zoned, { ...base, total, order: false }).placed;
+
+  let best: Candidate | null = null;
+  const consider = (head: ZonedOptions['head']): boolean => {
+    let allReachable = true;
+    for (const direction of [1, -1] as const) {
+      const first = { angle, direction, head, offset: ctx.params.mainPierWidth / 2 };
+      // An upper bound for the total: fill the site with the smallest class only.
+      const ceiling = sizeZonedLayout(ctx, zonedContextFor(ctx, [smallest.boat]), { ...first, total: 1e6, order: false }).placed;
+      const reference = largestComplete(first, 0, ceiling);
+      if (reference <= 0) continue;
+      // Rank the start offsets cheaply: ask for more berths than can fit and see how many
+      // are placed. The exact search is then run for the most promising offsets only.
+      const probe = Math.min(ceiling, Math.ceil(reference * 1.25) + 4);
+      const offsets: { offset: number; placed: number }[] = [];
+      for (let offset = first.offset; offset < firstModule; offset += ZONED_OFFSET_STEP) {
+        offsets.push({ offset, placed: placedWith({ ...first, offset }, probe) });
+      }
+      offsets.sort((x, y) => y.placed - x.placed || x.offset - y.offset);
+      for (const { offset } of offsets.slice(0, ZONED_SHORTLIST)) {
+        const base = { ...first, offset };
+        const total = largestComplete(base, reference * 0.8, Math.min(ceiling, reference * 1.3 + 4));
+        if (total <= 0) continue;
+        const built = sizeZonedLayout(ctx, zoned, { ...base, total, order: false });
+        if (built.piers.length === 0) continue;
+        const candidate = summarize(ctx, 'E', angle, built.piers);
+        if (candidate.berths < built.placed) allReachable = false;
+        candidate.rebuild = () => sizeZonedLayout(ctx, zoned, { ...base, total, order: true }).piers;
+        if (better(candidate, best, ctx.objective)) best = candidate;
+      }
+    }
+    return allReachable;
+  };
+  // Narrow heads first; if they cut large boats off from the entrance, also try wide heads.
+  if (!consider('own')) consider('widest');
+  return best;
+}
+
+/** A zoned context restricted to some classes (used for the upper bound of the total). */
+function zonedContextFor(ctx: SearchContext, classes: BoatClass[]): ZonedContext {
+  return zonedContext({ ...ctx, fill: { ...ctx.fill, classes } });
+}
+
+// ---------------------------------------------------------------------------
 // From candidate to layout
 // ---------------------------------------------------------------------------
 
@@ -478,6 +818,7 @@ const STRATEGY_NAME: Record<StrategyId, (c: Candidate) => string> = {
   B: () => 'B – Perpendicular, every other pier',
   C: (c) => `C – Best orientation (${fmtAngle(c.angle)})`,
   D: () => 'D – Shore-parallel pier',
+  E: () => 'E – Piers sized by boat class',
 };
 
 /**
@@ -492,9 +833,10 @@ function toDraft(candidate: Candidate, id: string, ctx: SearchContext): LayoutDr
   const piers: MainPier[] = [];
   const fingers: Finger[] = [];
   const berths: Berth[] = [];
-  candidate.piers.forEach((p, i) => {
+  const rebuilt = candidate.rebuild?.();
+  (rebuilt ?? candidate.piers).forEach((p, i) => {
     const pier: MainPier = { id: `P${i + 1}`, start: p.segment.start, end: p.segment.end, width, locked: false, origin: 'generated' };
-    const elements = rowsToElements(pier.id, fillPierRows(pier, fill, mix, p.fillOptions));
+    const elements = rowsToElements(pier.id, rebuilt ? p.rows : fillPierRows(pier, fill, mix, p.fillOptions));
     piers.push(pier);
     fingers.push(...elements.fingers);
     berths.push(...elements.berths);
@@ -515,10 +857,12 @@ function toDraft(candidate: Candidate, id: string, ctx: SearchContext): LayoutDr
  * if it passes the checks of §6), together with fingers and piers left without berths.
  * The number removed is recorded on the layout so that it can be shown to the user.
  */
-function pruneUnreachable(draft: LayoutDraft, ctx: SearchContext): LayoutDraft {
+function pruneUnreachable(draft: LayoutDraft, ctx: SearchContext): { draft: LayoutDraft; reachabilityChecked: boolean } {
   const { prepared, params } = ctx;
   let current = draft;
   let removed = 0;
+  /** True when the last pass found every remaining berth reachable. */
+  let reachabilityChecked = false;
   // Removing berths only frees water, so this settles quickly; the cap is a safeguard.
   for (let pass = 0; pass < 3; pass++) {
     const rows = layoutRows(current.piers, current.fingers, current.berths, ctx.fill.classes, params);
@@ -526,7 +870,10 @@ function pruneUnreachable(draft: LayoutDraft, ctx: SearchContext): LayoutDraft {
     for (const cutOff of cutOffBerths(current, rows, prepared).values()) {
       for (const berth of cutOff) unreachable.add(berth.id);
     }
-    if (unreachable.size === 0) break;
+    if (unreachable.size === 0) {
+      reachabilityChecked = true;
+      break;
+    }
     removed += unreachable.size;
     const berths = current.berths.filter((b) => !unreachable.has(b.id));
     const piers = current.piers.filter((p) => berths.some((b) => b.pierId === p.id));
@@ -547,7 +894,7 @@ function pruneUnreachable(draft: LayoutDraft, ctx: SearchContext): LayoutDraft {
     });
     current = { ...current, piers, fingers, berths, unreachableRemoved: removed };
   }
-  return current;
+  return { draft: current, reachabilityChecked };
 }
 
 const within = (a: number, b: number, fraction: number): boolean =>
@@ -561,6 +908,17 @@ export const isNearDuplicate = (a: Layout, b: Layout): boolean =>
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
+
+/** Pier length taken by one berth on average when the classes follow their target shares, m. */
+function meanBerthAdvance(classes: BoatClass[], params: Params, pattern: BerthPattern): number {
+  const active = activeClasses(classes);
+  const perBay = pattern.boatsPerBay(params);
+  const shareSum = active.reduce((sum, c) => sum + c.share, 0);
+  return active.reduce(
+    (sum, c) => sum + (c.share / shareSum) * (pattern.bay(Array<BoatClass>(perBay).fill(c), 0, params).advance / perBay),
+    0,
+  );
+}
 
 export function generateLayouts(input: GenerateInput, pattern: BerthPattern = fingerPierPattern): GenerateResult {
   const { site, boatClasses, params, objective } = input;
@@ -590,7 +948,8 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = fi
     design,
     params,
     objective,
-    reachGrid: buildReachGrid(prepared, design.fairwayWidth),
+    reachGrids: new Map(),
+    meanBerthAdvance: meanBerthAdvance(boatClasses, params, pattern),
     // Ordering the runs does not change berth counts, so the search skips it.
     fill: { prepared, classes: boatClasses, params, pattern, design, orderRuns: false },
     report: { shoreRuns: 0, longestShoreRun: 0, piersPlaced: 0, berthlessPiers: 0, blockedPiers: [] },
@@ -607,9 +966,23 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = fi
   if (b) pool.push(b);
   // C: the best orientations of the sweep (the shore-perpendicular one is already covered by A).
   const perOrientation: Candidate[] = [];
+  // First a coarse pass over every orientation (offsets 4 m apart), then the full 1 m
+  // sweep for the orientations that came within reach of the best few. An orientation
+  // far behind after the coarse pass cannot make up the difference with a finer offset.
+  const coarse: { angle: number; berths: number }[] = [];
   for (const angle of orientations.all) {
     if (angle === orientations.shorePerpendicular) continue;
-    const c = bestParallel(ctx, 'C', angle, design.pitch);
+    const c = bestParallel(ctx, 'C', angle, design.pitch, 0, COARSE_OFFSET_STEP);
+    if (c) coarse.push({ angle, berths: c.berths });
+  }
+  coarse.sort((x, y) => y.berths - x.berths || x.angle - y.angle);
+  const cutoff = (coarse[C_POOL_SIZE - 1]?.berths ?? 0) * COARSE_KEEP_FRACTION;
+  for (const { angle, berths } of coarse) {
+    if (berths < cutoff && objective.id !== 'minInfrastructure') continue;
+    // Only the best few orientations are kept, so an orientation need not be searched
+    // below the berth count of the weakest one that would currently be kept.
+    const kept = perOrientation.map((x) => x.berths).sort((x, y) => y - x);
+    const c = bestParallel(ctx, 'C', angle, design.pitch, kept[C_POOL_SIZE - 1] ?? 0);
     if (c) perOrientation.push(c);
   }
   perOrientation.sort((x, y) => (better(x, y, objective) ? -1 : better(y, x, objective) ? 1 : x.angle - y.angle));
@@ -617,13 +990,19 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = fi
   // D: a single pier along the shore.
   const d = bestShoreParallel(ctx);
   if (d) pool.push(d);
+  // E: piers square to the shore, each row sized by its own boat classes.
+  const e = process.env.MARINA_NO_E ? null : bestSizeZoned(ctx, orientations.shorePerpendicular);
+  if (e) pool.push(e);
 
   if (pool.length === 0) return { layouts: [], diagnostics: explainEmpty(ctx) };
 
   const evaluated = pool
     .map((candidate, i) => pruneUnreachable(toDraft(candidate, `L${i + 1}`, ctx), ctx))
-    .filter((draft) => draft.berths.length > 0)
-    .map((draft) => evaluateLayout(draft, prepared, boatClasses, params));
+    .filter(({ draft }) => draft.berths.length > 0)
+    // The connection to the entrance has just been checked for exactly these elements.
+    .map(({ draft, reachabilityChecked }) =>
+      evaluateLayout(draft, prepared, boatClasses, params, { assumeConnected: reachabilityChecked }),
+    );
   if (evaluated.length === 0) {
     return fail('ALL_BERTHS_BLOCKED', 'No berth can be reached from the entrance through a fairway of the required width.');
   }
@@ -677,10 +1056,18 @@ function availableModuleWidth(ctx: SearchContext, segment: PierSegment, maxDepth
 
 /** Why no layout with at least one berth could be produced (SPEC §5, last paragraph). */
 function explainEmpty(ctx: SearchContext): Diagnostic[] {
-  const { design, params, report } = ctx;
+  const { params, report } = ctx;
   const diagnostics: Diagnostic[] = [];
-  const moduleWidth = params.mainPierWidth + design.rowDepth + design.fairwayWidth;
-  const reach = design.rowDepth + design.fairwayWidth;
+  // What the least demanding boat class needs: with size zoning (strategy E) a site is
+  // usable as soon as one class fits.
+  const { pattern } = ctx.fill;
+  const needs = activeClasses(ctx.fill.classes).map((c) => ({
+    reach: pattern.slotLength(c, params) + fairwayWidthFor(c.length, params),
+    pierRun: params.shoreOffset + pattern.bay([c], 0, params).footprint + fairwayWidthFor(c.length, params),
+    fairway: fairwayWidthFor(c.length, params),
+  }));
+  const reach = Math.min(...needs.map((n) => n.reach));
+  const moduleWidth = params.mainPierWidth + reach;
   const available = Math.max(0, ...report.blockedPiers.map((p) => availableModuleWidth(ctx, p, reach + 5)));
   const tooNarrow = report.blockedPiers.length > 0 && available < moduleWidth;
   if (tooNarrow) {
@@ -689,13 +1076,14 @@ function explainEmpty(ctx: SearchContext): Diagnostic[] {
       message: `Water area narrower than one pier module (needs ${fmt(moduleWidth)} m, available ${fmt(available)} m).`,
     });
   }
-  const needed = params.shoreOffset + design.minBayFootprint + design.fairwayWidth;
+  const shortest = needs.reduce((a, b) => (b.pierRun < a.pierRun ? b : a));
+  const needed = shortest.pierRun;
   if (report.shoreRuns === 0) {
     diagnostics.push({ code: 'NO_PIER_REACHES_SHORE', message: 'No pier can reach the shoreline.' });
   } else if (report.longestShoreRun < needed) {
     diagnostics.push({
       code: 'WATER_TOO_SHORT_FOR_PIER',
-      message: `Water is too short for a pier from the shore: the longest run is ${fmt(report.longestShoreRun)} m, but ${fmt(needed)} m is needed (one bay plus ${fmt(design.fairwayWidth)} m clear water at the pier head).`,
+      message: `Water is too short for a pier from the shore: the longest run is ${fmt(report.longestShoreRun)} m, but ${fmt(needed)} m is needed (one bay plus ${fmt(shortest.fairway)} m clear water at the pier head).`,
     });
   }
   if (diagnostics.length === 0 || (report.berthlessPiers > 0 && !tooNarrow)) {
