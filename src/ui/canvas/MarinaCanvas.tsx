@@ -24,6 +24,7 @@ import { hatchPatterns } from './patterns';
 
 const COLORS = {
   water: '#e0f2fe',
+  waterTranslucent: 'rgba(186, 230, 253, 0.35)',
   waterEdge: '#0369a1',
   shoreline: '#15803d',
   entrance: '#f59e0b',
@@ -44,6 +45,8 @@ const COLORS = {
 const SNAP_PIXELS = 10;
 /** A press that moves less than this many pixels is a click, not a drag. */
 const CLICK_PIXELS = 4;
+/** Two clicks at the same place within this time are a double-click, ms. */
+const DOUBLE_CLICK_MS = 350;
 /** Pier drags are rounded to this step, m. */
 const PIER_DRAG_STEP = 0.1;
 
@@ -62,14 +65,16 @@ interface SiteShapesProps {
   layers: Record<LayerId, boolean>;
   /** Hatch tiles keep their pixel size, so their scale follows the zoom. */
   patternScale: number;
+  /** Draw the water see-through so a background image stays visible under it. */
+  translucent: boolean;
 }
 
-const SiteShapes = memo(function SiteShapes({ site, layers, patternScale }: SiteShapesProps) {
+const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, translucent }: SiteShapesProps) {
   const patterns = hatchPatterns();
   return (
     <>
       {layers.water && site.water.length >= 3 && (
-        <Line points={flat(site.water)} closed fill={COLORS.water} stroke={COLORS.waterEdge} strokeWidth={1.5} strokeScaleEnabled={false} listening={false} />
+        <Line points={flat(site.water)} closed fill={translucent ? COLORS.waterTranslucent : COLORS.water} stroke={COLORS.waterEdge} strokeWidth={1.5} strokeScaleEnabled={false} listening={false} />
       )}
       {layers.zones &&
         site.zones.map((z) => (
@@ -229,6 +234,8 @@ export function MarinaCanvas() {
   const drag = useRef<Drag | null>(null);
   const spaceDown = useRef(false);
   const fitted = useRef(false);
+  /** Time and place of the previous click, to recognise a double-click. */
+  const lastClick = useRef<{ time: number; at: Vec2; tool: ToolId } | null>(null);
 
   const view = useAppStore((s) => s.view);
   const viewport = useAppStore((s) => s.viewport);
@@ -417,35 +424,56 @@ export function MarinaCanvas() {
     }
   };
 
+  /**
+   * Two clicks count as a double-click only when they are close in time AND place.
+   * (Konva's own dblclick ignores the distance, so two quick clicks on different points
+   * of a polygon would end the drawing.)
+   */
+  const isDoubleClick = (screen: Vec2): boolean => {
+    const now = performance.now();
+    const previous = lastClick.current;
+    const currentTool = appStore.getState().tool;
+    const double =
+      previous !== null &&
+      previous.tool === currentTool &&
+      now - previous.time < DOUBLE_CLICK_MS &&
+      distance(previous.at, screen) < CLICK_PIXELS;
+    lastClick.current = double ? null : { time: now, at: screen, tool: currentTool };
+    return double;
+  };
+
   const onMouseUp = (e: KonvaEventObject<MouseEvent>) => {
     const s = appStore.getState();
     const d = drag.current;
     drag.current = null;
     if (!d) return;
-    if (d.kind === 'pier' || d.kind === 'vertex') {
-      if (d.kind === 'vertex' && d.moved) s.updateSite(normalizeSite, { coalesce: `vertex:${d.key}` });
+    if (d.kind === 'pier') {
       s.endCoalescing();
+      return;
+    }
+    if (d.kind === 'vertex') {
+      if (d.moved) {
+        s.updateSite(normalizeSite, { coalesce: `vertex:${d.key}` });
+        s.endCoalescing();
+      } else {
+        s.endCoalescing();
+        // Double-click on a point deletes it.
+        if (isDoubleClick(pointer())) s.updateSite((site) => normalizeSite(deleteVertex(site, d.key, d.index)));
+      }
       return;
     }
     if (d.moved) return;
     // A click.
+    const screen = pointer();
     if (s.tool === 'select') {
       const name = e.target.name();
       if (name !== 'pier' && name !== 'berth') s.select(null);
     } else if (DRAWING_TOOLS.includes(s.tool) && e.evt.button === 0) {
-      s.addDraftPoint(snapped(pointer()), SNAP_PIXELS / s.view.zoom);
+      const double = isDoubleClick(screen);
+      // The first click of a double-click has already added the point; the second finishes the shape.
+      if (double && ['water', 'shoreline', 'obstacle', 'zone'].includes(s.tool)) s.finishDraft();
+      else s.addDraftPoint(snapped(screen), SNAP_PIXELS / s.view.zoom);
     }
-  };
-
-  const onDblClick = (e: KonvaEventObject<MouseEvent>) => {
-    const s = appStore.getState();
-    if (s.tool === 'edit' && e.target.name() === 'vertex') {
-      const key = String(attr(e.target, 'pathKey'));
-      const index = Number(attr(e.target, 'pointIndex'));
-      s.updateSite((site) => normalizeSite(deleteVertex(site, key, index)));
-      return;
-    }
-    if (['water', 'shoreline', 'obstacle', 'zone'].includes(s.tool)) s.finishDraft();
   };
 
   const onMouseLeave = () => {
@@ -486,7 +514,6 @@ export function MarinaCanvas() {
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
-        onDblClick={onDblClick}
         onMouseLeave={onMouseLeave}
       >
         <Layer listening={false}>
@@ -515,7 +542,12 @@ export function MarinaCanvas() {
                 listening={false}
               />
             )}
-            <SiteShapes site={project.site} layers={layers} patternScale={patternScale} />
+            <SiteShapes
+              site={project.site}
+              layers={layers}
+              patternScale={patternScale}
+              translucent={layers.background && project.background !== null}
+            />
             {layout && (
               <LayoutShapes layout={layout} classes={project.boatClasses} layers={layers} selection={selection} patternScale={patternScale} />
             )}

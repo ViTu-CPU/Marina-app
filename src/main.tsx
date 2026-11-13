@@ -35,6 +35,9 @@ function startAutosave(): void {
 
 startAutosave();
 
+// Debugging aid, also used by the end-to-end test: the store is reachable from the console.
+(window as unknown as { __marina: typeof appStore }).__marina = appStore;
+
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element #root not found');
 

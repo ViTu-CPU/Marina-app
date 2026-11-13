@@ -43,3 +43,21 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | I20 | Slots must lie in navigable water; a slot in a `noNavigation` zone is an operational warning, in a `protected` zone or an obstacle buffer a geometric error. | SPEC §6 lists only structures for the zone check. |
 | I21 | Connection to the entrance is tested with a circle 0.2 m narrower than the required fairway width. | Absorbs the polygonal approximation of round buffers. |
 | I22 | Local refinement (SPEC §5, "if time allows") is not implemented. | Owner decision D6. |
+
+## User interface
+
+| # | Decision | Why |
+|---|---|---|
+| U1 | A pier is dragged either along its axis or square to it; the direction is chosen by the first movement and kept until the mouse is released. Drags are rounded to 0.1 m. | SPEC §8: "drag a pier along its axis or laterally". |
+| U2 | Removing a berth keeps its fingers. Locking a pier does not mark the layout as manually edited. | Fingers are structures; add/remove fingers is Phase 2. Locking changes no geometry. |
+| U3 | After an edit the alternatives keep their order; scores are updated. Changing the objective re-ranks them. | A list that re-sorts under the cursor while dragging would be confusing. |
+| U4 | A double-click is two clicks within 350 ms **and** 4 px. | Konva's built-in double-click ignores distance, so two quick clicks on different points ended a drawing. |
+| U5 | Site vertices are edited with a separate "Edit points" tool: drag to move, drag a midpoint to insert, double-click to delete. | Keeps point handles out of the way when selecting piers and berths. |
+| U6 | The shoreline and entrance tools snap to water vertices first, then to the nearest point on the water boundary (10 px). | They must lie on the boundary for piers to connect. |
+| U7 | The project file stores the layouts' elements; fairways, issues and statistics are recomputed on load. | One source of truth; a file edited by hand cannot carry inconsistent statistics. |
+| U8 | Autosave to `localStorage` is debounced (0.4 s). If the quota is exceeded the project is saved without the background image and the user is told once. | The quota is small (a few MB); the image stays in the session and in saved project files. The exact quota was not verified. |
+| U9 | The background image is placed by its top-left corner, rotates about that corner, and cannot be dragged. Calibration rescales it about the first clicked point. | Minimal implementation of SPEC §3.2. |
+| U10 | Generation runs on the main thread (0.7–0.9 s for the demos in Chromium). | Simplest; the engine is DOM-free and can move to a Web Worker unchanged if larger sites need it. |
+| U11 | Issue messages come from the engine in English; the rest of the UI is translated. | Finnish may be partial in v1 (SPEC §2); full localisation is Phase 3. |
+| U12 | PNG export is the canvas as shown, at 2× resolution, with scale bar, north arrow and disclaimer drawn on it. CSV decimals use a point and no thousands separators. | Exports must carry the disclaimer (SPEC §1) and be readable by spreadsheets. |
+| U13 | The store is reachable as `window.__marina` for debugging and for the end-to-end test. | The canvas has no DOM elements to query. |

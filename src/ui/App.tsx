@@ -23,6 +23,8 @@ function useShortcuts() {
         if (s.draft.length > 0) s.cancelDraft();
         else if (s.tool !== 'select') s.setTool('select');
       } else if (e.key === 'Enter' && !typing && s.draft.length > 0) {
+        // Without this, Enter would also press the focused tool button again.
+        e.preventDefault();
         s.finishDraft();
       } else if (e.key === 'Backspace' && !typing && s.draft.length > 0) {
         e.preventDefault();
