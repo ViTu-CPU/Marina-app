@@ -1,517 +1,242 @@
-# PROJECT: MARINA DESIGN & OPTIMIZATION
+# PROJECT: MARINA LAYOUT PLANNER — v1 (simple, browser-only)
 
-## 1. YOUR ROLE
+## 0. How to read this prompt
 
-Act as a senior software architect, full-stack developer, computational geometry specialist and marina planning engineer.
-
-Your task is to design and build a professional, browser-based marina planning and optimization application.
-
-The application should take inspiration from TestFit, particularly its ability to generate, visualize and compare different planning solutions based on user-defined constraints.
-
-However, this application focuses specifically on floating marina infrastructure, boat berths, pontoons and marina layouts.
-
-Do not build just a visual prototype. Build a functional application with real geometric calculations, automatic layout generation and optimization capabilities.
-
-Take responsibility for the technical architecture and make sensible implementation decisions independently.
-
-Work iteratively. Start by creating a working MVP and then improve it.
+- This prompt covers **one deliverable: a working v1 (Phase 1)**. Sections marked *Roadmap* are for architecture awareness only — do **not** implement them now.
+- When this prompt conflicts with your own preference, follow this prompt. When something is ambiguous, choose the simplest option that keeps the architecture extendable, and record the decision in `docs/DECISIONS.md`.
+- Work in small steps: after each step, run the app, the type checker and the tests, and fix errors before moving on.
+- Stop when the Definition of Done (section 10) is met and report back. Do not start Phase 2 on your own.
 
 ---
 
-# 2. CORE CONCEPT
+## 1. Goal
 
-The application allows a user to:
+A browser-based tool for **preliminary (feasibility-level) marina layout studies**. The user draws a water area, shoreline and obstacles, sets boat and dock parameters, and the tool **computes** several alternative pontoon layouts, counts berths, checks constraints and compares the alternatives.
 
-1. Define a water area where a marina could be constructed.
-2. Define the shoreline and fixed obstacles.
-3. Set marina design parameters.
-4. Automatically generate several alternative marina layouts.
-5. Calculate the number of boat berths and infrastructure requirements.
-6. Compare alternative layouts.
-7. Visually edit and refine the generated layouts.
-8. Export the final marina plan.
+Primary question the tool answers: *"Roughly how many berths of which sizes fit here, with how many metres of pontoon, and what limits the layout?"*
 
-The primary objective is to maximize the number of usable boat berths while respecting geometric, operational and spatial constraints.
-
-The application should be useful for professional marina planning, municipal waterfront development and marina infrastructure feasibility studies.
+It is **not** a design or compliance tool. Every output must carry the note: *"Preliminary geometric study. Not an engineering design. Requires verification by a qualified marina engineer."*
 
 ---
 
-# 3. USER INTERFACE AND DESIGN
+## 2. Technical constraints (fixed)
 
-Build a modern, professional web application.
+- **Frontend only, no backend, no database.** Runs with `npm install && npm run dev`, deployable as static files.
+- React + TypeScript (strict) + Vite. Tailwind CSS for styling.
+- Canvas: **Konva / react-konva**.
+- State: a single store (e.g. Zustand) with **undo/redo** via immutable snapshots.
+- Geometry: a **planar (Cartesian) geometry library**, e.g. JSTS (JTS port: buffer, intersection, difference, contains) or flatten-js. **Do not use Turf.js for measurements or clearance checks** — Turf assumes WGS84 lon/lat coordinates, and all calculations here are in local metres.
+- Tests: Vitest.
+- Persistence: browser localStorage + **JSON project file export/import**.
+- Localization: put all UI strings in `src/i18n/en.ts` and `src/i18n/fi.ts` from the start (simple key → string dictionary). English is complete; Finnish may be partial.
 
-The visual style should be inspired by professional engineering software, CAD applications and TestFit.
+### Architecture rule
 
-The interface should be clean, precise and easy to understand.
+```
+src/
+  engine/        # pure TypeScript, NO React, NO DOM. All geometry, generation, validation, scoring.
+    model.ts       # data types (section 4)
+    geometry.ts    # wrappers around the geometry library
+    generate.ts    # layout generator (section 5)
+    validate.ts    # constraint checks (section 6)
+    score.ts       # statistics and objectives (section 7)
+    __tests__/
+  state/         # store, undo/redo, persistence
+  ui/            # React components (panels, canvas, tools)
+  i18n/
+docs/
+  DECISIONS.md   # design decisions and assumptions
+  ALGORITHM.md   # short description of generator + validation
+```
 
-Use a large central planning canvas.
-
-Suggested interface structure:
-
-LEFT SIDEBAR:
-- Project information
-- Site boundary tools
-- Marina configuration
-- Boat dimensions
-- Dock dimensions
-- Navigation channel settings
-- Optimization objectives
-
-CENTER:
-- Interactive map and planning canvas
-- Site boundary
-- Shoreline
-- Floating pontoons
-- Boat berths
-- Navigation areas
-- Obstacles
-- Measurement tools
-
-RIGHT SIDEBAR:
-- Generated alternatives
-- Optimization results
-- Marina statistics
-- Comparison of alternatives
-
-TOP TOOLBAR:
-- New project
-- Save project
-- Undo / redo
-- Generate layouts
-- Optimize
-- Export
-
-Use metric units throughout the application.
-
-All dimensions must be displayed in meters (m), areas in square meters (m²) and quantities as integers.
-
-The application should initially be in English, but the architecture should support Finnish localization later.
+The engine must be callable from a test with plain JSON in and plain JSON out. Deterministic: same input → same output (use a seeded RNG if randomness is ever used).
 
 ---
 
-# 4. SITE DEFINITION
+## 3. Units and coordinates
 
-The user must be able to define a marina planning area.
-
-Implement the following tools:
-
-A. Draw water area boundary
-- Draw a polygon defining the available water area.
-- Edit polygon vertices.
-- Move and resize the boundary.
-
-B. Define shoreline
-- Draw or import shoreline geometry.
-- Allow the user to define the direction in which docks can connect to the shore.
-
-C. Define obstacles
-- Existing piers
-- Rocks
-- Islands
-- Navigation restrictions
-- Other fixed structures
-
-D. Define restricted areas
-- Areas where docks cannot be placed.
-- Areas where boats cannot navigate.
-- Protected areas.
-
-E. Coordinate system
-- Use a metric local coordinate system for all geometric calculations.
-- Ensure accurate distances and areas.
-- Do not perform engineering calculations directly using latitude/longitude coordinates.
-
-The planning canvas should support zooming, panning and accurate drawing.
+- Local Cartesian coordinate system, **metres**, x = east, y = north. Angles in degrees, clockwise from north in the UI, radians internally.
+- Display: lengths in m (1 decimal), areas in m² (integer), counts as integers.
+- Site input options in v1:
+  1. Draw directly on an empty metric grid.
+  2. **Background image** (aerial photo or map screenshot) with **two-point scale calibration** (user clicks two points and enters the real distance in metres) and optional rotation.
+  3. *Optional if quick:* GeoJSON import in a **projected metric CRS** (e.g. EPSG:3879 ETRS-GK25, EPSG:3067 ETRS-TM35FIN). Translate coordinates to a local origin; store the original CRS code and offset in the project for later.
+- Never compute distances or areas from lat/lon.
 
 ---
 
-# 5. MARINA DESIGN PARAMETERS
+## 4. Data model (implement in `engine/model.ts`)
 
-Allow users to configure the following parameters.
+Use these as a starting point; extend if needed and document changes.
 
-## Boat dimensions
+```ts
+type Vec2 = { x: number; y: number };
+type Polygon = Vec2[];          // closed ring, counter-clockwise, no repeated end point
+type Polyline = Vec2[];
 
-Create editable boat size categories.
+interface Site {
+  water: Polygon;                // permitted planning water area
+  shoreline: Polyline;           // where piers may connect to land
+  entrance: { a: Vec2; b: Vec2 } // line segment where boats enter/leave the marina
+  obstacles: Obstacle[];
+  zones: RestrictedZone[];
+}
+interface Obstacle { id: string; kind: 'pier' | 'rock' | 'island' | 'structure' | 'other'; shape: Polygon; }
+interface RestrictedZone { id: string; kind: 'noStructures' | 'noNavigation' | 'protected'; shape: Polygon; }
 
-Default categories:
+interface BoatClass { id: string; name: string; length: number; beam: number; color: string; share: number; } // share = target fraction 0..1
 
-Small boats:
-- Length: 5 m
-- Width: 2 m
+interface Params {
+  mainPierWidth: number;         // default 3.0
+  fingerWidth: number;           // default 0.8
+  fingerLengthRatio: number;     // finger length = ratio × boat length, default 0.8 (assumption)
+  boatsPerBay: 1 | 2;            // 1 = finger between every boat, 2 = two boats share a bay
+  beamClearance: number;         // total extra width per boat in a berth, default 0.5
+  lengthClearance: number;       // extra length per berth, default 0.5
+  fairwayFactor: number;         // fairway width = factor × longest adjacent boat length, default 1.5
+  fairwayMin: number;            // absolute minimum fairway width, default 8.0
+  obstacleClearance: number;     // min distance structures/boats ↔ obstacles, default 2.0
+  maxMainPierLength: number;     // default 150
+  orientation: 'auto' | number;  // pier direction; 'auto' = generator searches
+}
 
-Medium boats:
-- Length: 7 m
-- Width: 2.5 m
+interface MainPier { id: string; start: Vec2; end: Vec2; width: number; locked: boolean; origin: 'generated' | 'manual'; }
+interface Finger   { id: string; pierId: string; shape: Polygon; }
+interface Berth    { id: string; pierId: string; side: 'left' | 'right'; boatClassId: string;
+                     slot: Polygon;      // the water rectangle reserved for the boat (incl. clearances)
+                     boat: Polygon;      // simplified top-view boat rectangle inside the slot
+                     removed: boolean; issues: Issue[]; }
+interface Fairway  { id: string; shape: Polygon; requiredWidth: number; }
 
-Large boats:
-- Length: 9 m
-- Width: 3 m
+interface Issue { severity: 'error' | 'warning'; code: string; message: string; elementId?: string; }
 
-Extra large boats:
-- Length: 12 m
-- Width: 3.5 m
+type Feasibility = 'geometricFail' | 'geometricOK' | 'operationalOK';
 
-Allow users to define the number or percentage of berths in each category.
+interface Layout {
+  id: string; name: string; strategy: string;
+  piers: MainPier[]; fingers: Finger[]; berths: Berth[]; fairways: Fairway[];
+  feasibility: Feasibility; issues: Issue[]; stats: Stats; score: number;
+  modified: boolean;              // true once the user edits it manually
+}
+```
 
-The user must also be able to create custom boat categories.
+**Berth geometry (finger pier type, v1):**
+along each side of a main pier, bays repeat as `finger | slot | (slot) | finger | …`.
+- Slot width = boat beam + beamClearance. Bay width = boatsPerBay × slot width.
+- Slot length = boat length + lengthClearance, measured perpendicular to the main pier.
+- Finger length = fingerLengthRatio × boat length of the adjacent boats (use the longer one).
+- The boat rectangle is centred in the slot, touching the pier side minus a small gap.
 
-## Floating docks
-
-Configurable parameters:
-
-- Main pier width
-- Finger pier width
-- Finger pier length
-- Floating dock freeboard is optional information
-- Minimum distance between docks
-- Maximum dock length
-- Dock orientation
-- Dock connection to shoreline
-
-Initial default values:
-
-- Main pier width: 3 m
-- Finger pier width: 0.8 m
-- Minimum fairway width: 8 m
-- Minimum distance between boats: configurable
-
-These are initial design assumptions, not universal engineering standards.
-
-## Navigation and maneuvering
-
-Allow the user to configure:
-
-- Main navigation channel width
-- Secondary fairway width
-- Turning basin dimensions
-- Minimum distance from obstacles
-- Minimum clearance between boat envelopes
-
-Boat maneuvering areas must be represented separately from physical dock structures.
-
-Do not assume that a geometrically fitting boat berth automatically represents a safe or operationally feasible berth.
+Design the berth code behind an interface (`BerthPattern`) so that other mooring types can be added later without touching the generator: **side-to berths (kylkipaikka)**, **Y-boom berths (aisapaikka)** and **bow-to with stern buoy (peräpoiju)** — the last two are common in Finnish marinas.
 
 ---
 
-# 6. AUTOMATIC MARINA GENERATION ENGINE
+## 5. Layout generator (systematic, not random)
 
-This is the most important component of the application.
+Implement a **deterministic parametric search** in `engine/generate.ts`:
 
-Develop a geometric algorithm that automatically generates marina layouts based on the user's parameters.
+1. **Feasible region** = `water` − (obstacles buffered by `obstacleClearance`) − `noStructures` zones.
+2. **Candidate orientations**: if `orientation = 'auto'`, test angles perpendicular to the main shoreline direction, parallel to the longest water-boundary edges, and a sweep in 5° steps (0–175°). Otherwise use the given angle.
+3. For each orientation, conceptually rotate the site so piers run along the y-axis. The repeating cross-section is
+   `fairway | berths | main pier | berths | fairway | berths | main pier | berths | …`
+   with **pier pitch** = mainPierWidth + 2 × slot length + fairway width (fairway width = max(fairwayMin, fairwayFactor × longest boat in the adjacent rows)).
+4. **Sweep the lateral offset** of the first pier across one pitch in 1 m steps. For each offset, intersect each pier centreline with the feasible region; keep the segment that **touches the shoreline** (shore-connected), clipped to `maxMainPierLength`. Skip piers shorter than one bay.
+5. **Fill both sides** of each pier with bays from the shore end outwards. Assign boat classes to meet the target `share` mix as closely as possible; put larger boats at the outer (fairway/entrance) end. Keep a bay only if its slot and fingers pass the checks in section 6; otherwise try a smaller boat class; otherwise leave it empty.
+6. **Build fairways** as the water strips between facing berth rows and around pier heads, and check them (section 6).
+7. **Strategies** — produce at least these layout families, each with its own best offset/orientation:
+   - A: piers perpendicular to shore, max count of piers
+   - B: piers perpendicular to shore, fewer and longer piers (every other pitch)
+   - C: best orientation found by the angle sweep
+   - D: single shore-parallel main pier with fingers on the water side (for narrow sites)
+8. Return the **top N (default 5) layouts** ranked by the selected objective, removing near-duplicates (same berth count and pier count within 2 %).
 
-The algorithm should explore different configurations, including:
+If time allows, add a simple **local refinement** (coordinate descent over angle ±2°, offset ±0.5 m) on the top candidates. Document anything not implemented.
 
-1. Parallel finger piers connected to a main pier.
-2. Multiple parallel floating piers.
-3. Shore-connected dock systems.
-4. Different dock orientations.
-5. Different numbers of main piers.
-6. Different finger pier lengths and spacing.
-
-The system should be capable of generating multiple alternative layouts.
-
-For each generated alternative, calculate:
-
-- Total number of berths.
-- Number of berths by boat category.
-- Total floating dock length.
-- Total main pier length.
-- Total finger pier length.
-- Estimated floating dock area.
-- Water area occupied by the marina.
-- Remaining navigable water area.
-- Estimated marina utilization efficiency.
-
-The generation engine must check:
-
-- All dock structures remain inside the permitted planning area.
-- No dock structures overlap.
-- No structures intersect obstacles.
-- Required fairway widths are maintained.
-- Berth dimensions are respected.
-- Boat envelopes do not overlap.
-- Boats do not extend into restricted areas.
-
-Use computational geometry libraries where appropriate.
-
-Do not rely on random positioning alone.
-
-Develop a systematic generation and optimization approach.
+If no layout with ≥ 1 berth can be produced, return an empty result with a **diagnostic message**, e.g. "Water area narrower than one pier module (needs X m, available Y m)", "No pier can reach the shoreline", "All candidate berths intersect obstacles".
 
 ---
 
-# 7. OPTIMIZATION ENGINE
+## 6. Validation (`engine/validate.ts`)
 
-Create a multi-objective optimization system.
+Run on every generated layout **and after every manual edit**. Each check produces `Issue`s linked to element ids.
 
-The user should be able to select the primary optimization objective.
+Geometric (→ `geometricFail` if any error):
+- All piers, fingers and boat slots lie inside `water`.
+- No structure intersects an obstacle buffer or a `noStructures`/`protected` zone.
+- No overlaps between piers, fingers, slots (tolerance 1 cm).
+- Each boat rectangle lies inside its slot.
 
-Available objectives:
+Operational (→ `operationalOK` only if all pass; otherwise `geometricOK` with warnings):
+- Every slot borders a fairway of the required width.
+- Fairways do not overlap `noNavigation` zones or obstacle buffers.
+- **Fairway network is connected to the entrance segment** (union of fairway polygons + free water touching the entrance contains a path to every berth row).
+- Every main pier connects to the shoreline.
 
-A. MAXIMUM CAPACITY
-Maximize the total number of boat berths.
-
-B. MAXIMUM SPACE EFFICIENCY
-Maximize the number of berths relative to the available water area.
-
-C. MINIMUM INFRASTRUCTURE
-Minimize total floating dock length while maintaining a specified berth capacity.
-
-D. BALANCED SOLUTION
-Find a balance between berth capacity, infrastructure length and navigability.
-
-The system should generate multiple solutions and rank them according to the selected objective.
-
-Use an appropriate optimization method, such as:
-- Constraint-based search
-- Heuristic optimization
-- Genetic algorithms
-- Simulated annealing
-- Mixed-integer optimization where appropriate
-
-Choose a technically appropriate method.
-
-The optimization engine should be modular so that better algorithms can be introduced later.
-
-Always distinguish between:
-- Geometrically feasible solutions.
-- Solutions that meet the configured operational constraints.
-- Solutions requiring further engineering verification.
+Never label anything "safe" or "compliant". `operationalOK` means only "meets the constraints configured by the user".
 
 ---
 
-# 8. VISUALIZATION
+## 7. Statistics and objectives (`engine/score.ts`)
 
-Represent the generated marina clearly on the planning canvas.
+Stats per layout: total berths; berths per boat class; main pier length; finger length; total pontoon length; pontoon deck area (m²); water area occupied by marina (berths + fairways, m²); remaining free water (m²); berths per 1,000 m² water; pontoon metres per berth; number of issues by severity.
 
-Use different visual elements for:
+Objectives (user selects one; implement each as a pure function `Layout → number`):
+- **Max capacity**: total berths.
+- **Space efficiency**: berths per 1,000 m² of water area.
+- **Min infrastructure**: pontoon metres per berth, subject to berths ≥ user target (otherwise heavily penalised).
+- **Balanced**: weighted sum of normalised capacity, inverse pontoon length and free fairway area; weights editable in the UI, default equal.
 
-- Water area
-- Shoreline
-- Main floating piers
-- Finger piers
-- Boat berths
-- Boats
-- Navigation channels
-- Restricted areas
-- Obstacles
-
-Display boats as simplified top-view rectangles.
-
-Boats should be positioned inside their respective berths.
-
-Use different visual styles for different boat size categories.
-
-The user should be able to select individual docks and inspect their properties.
-
-The visualization must update immediately when parameters change or a new layout is generated.
+Layouts with `geometricFail` are never ranked above valid ones.
 
 ---
 
-# 9. ALTERNATIVE COMPARISON
+## 8. User interface (v1)
 
-Generate at least three alternative marina layouts whenever possible.
+Layout: left sidebar (inputs), central canvas, right sidebar (results), top toolbar.
 
-Present the alternatives in a comparison panel.
-
-Compare:
-
-- Total berth count
-- Berth count by boat category
-- Total dock length
-- Infrastructure area
-- Water area utilization
-- Remaining navigation area
-- Estimated infrastructure requirements
-
-Allow the user to switch between alternatives.
-
-Allow the user to save a preferred alternative.
-
-The comparison should make it easy to understand why one solution performs better than another.
+- **Toolbar**: New, Open (JSON), Save (JSON), Undo, Redo, Generate, Export (PNG, CSV), language toggle EN/FI.
+- **Left sidebar**: project name; site tools (draw water polygon, draw shoreline, set entrance, draw obstacle, draw restricted zone, load/calibrate background image); boat classes table (add/edit/delete, length, beam, target share %, colour); dock parameters; fairway parameters; objective selector.
+- **Canvas**: pan (drag / space+drag), zoom (wheel, to cursor), snap to vertices, metric grid and scale bar, vertex editing for polygons, a **measure tool** (distance between two clicks). Layer toggles: water, shoreline, obstacles, zones, piers, fingers, slots, boats, fairways, issues.
+  - Styles: piers dark grey, fingers lighter grey, slots outlined, boats filled with the class colour, fairways light blue hatched, obstacles dark, restricted zones red hatched, issues drawn as red outlines with an icon.
+- **Right sidebar**: list of alternatives (name, berths, pontoon m, feasibility badge); a **comparison table** of all stats side by side with the best value per row highlighted; issue list for the selected layout (click → zoom to element); "Mark as preferred".
+- **Selection & minimal editing in v1**: click a pier or berth to see its properties; **remove/restore individual berths**; **lock a pier** and **drag a pier** along its axis or laterally, with immediate re-validation and stats update. Edited layouts get `modified = true` and a "Manually edited" badge.
+- Results update immediately after any parameter change that does not require regeneration; parameters that do require it show a "Regenerate" hint.
 
 ---
 
-# 10. MANUAL EDITING
+## 9. Built-in demo projects
 
-After automatic generation, users must be able to refine the layouts.
+Ship two demo projects that load from a "Load example" menu, so the tool can be tried without drawing:
+1. **Rectangular basin**, 220 m × 140 m, shoreline along the south edge, entrance at the north-east corner, one rock obstacle (circle Ø 12 m approximated as a polygon).
+2. **Irregular bay**, an L-shaped or concave water polygon with an existing pier as obstacle and one `noNavigation` zone.
 
-Allow users to:
-
-- Move docks.
-- Rotate docks.
-- Change dock dimensions.
-- Add or remove finger piers.
-- Change boat berth dimensions.
-- Remove individual berths.
-- Lock selected structures in place.
-
-When a user modifies the layout, recalculate the relevant statistics.
-
-Clearly indicate any constraint violations.
-
-The system must distinguish between automatically generated and manually modified layouts.
+Default boat mix: 5.0×2.0 m (30 %), 7.0×2.5 m (35 %), 9.0×3.0 m (25 %), 12.0×3.5 m (10 %).
 
 ---
 
-# 11. EXPORT AND REPORTING
+## 10. Definition of Done for v1
 
-Allow users to export:
-
-1. PDF marina layout.
-2. PNG image.
-3. DXF drawing if technically feasible.
-4. CSV berth inventory.
-
-The PDF report should include:
-
-- Project name
-- Planning area
-- Selected marina layout
-- Total berth count
-- Berth distribution by boat size
-- Dock lengths
-- Area calculations
-- Key design parameters
-- Important warnings and limitations
-
-The output should look professional enough to be used in preliminary planning presentations.
+- [ ] `npm install`, `npm run dev`, `npm run build`, `npm test` and `tsc --noEmit` all succeed without errors.
+- [ ] Both demo projects generate **at least 3 distinct alternatives** in under 2 seconds on a normal laptop.
+- [ ] A user can draw a new site from scratch, generate layouts, compare them, remove berths, move a pier, see issues update, save to JSON, reload it, and export PNG and CSV.
+- [ ] Engine tests include:
+  - at least 5 cases with **hand-calculated expected berth counts** (e.g. a single straight pier in a rectangle; document the calculation in the test);
+  - property checks on demo projects: no overlaps, everything inside water, every boat inside its slot;
+  - a case where nothing fits, asserting the diagnostic message;
+  - determinism: running the generator twice gives identical JSON.
+- [ ] `README.md` with: how to run, feature list, assumptions behind default parameters (marked as assumptions, not standards), known limitations, and next steps.
+- [ ] The disclaimer from section 1 is visible in the UI and included in exports.
 
 ---
 
-# 12. TECHNICAL ARCHITECTURE
+## 11. Out of scope for v1 (*Roadmap*, design for it but do not build)
 
-Use a modern, maintainable architecture.
-
-Suggested technology stack:
-
-Frontend:
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
-
-Visualization:
-- Konva.js or Fabric.js
-- Turf.js for suitable geometric operations
-
-Backend:
-- Python
-- FastAPI
-
-Geometry and optimization:
-- Shapely
-- OR-Tools or another appropriate optimization library
-- NumPy
-
-Database:
-- PostgreSQL with PostGIS for future scalability.
-
-For the initial MVP, a simpler local project storage system is acceptable.
-
-Choose the architecture that allows rapid development without sacrificing future scalability.
-
-Keep the geometric calculations separate from the user interface.
-
-Create modular components.
+- Phase 2: more berth patterns (side-to, Y-boom, stern buoy), rotate/resize piers manually, add/remove fingers, T- and L-shaped pier heads, turning basin check, better optimisation (e.g. simulated annealing over pier positions), DXF export.
+- Phase 3: PDF report, full Finnish localisation, project versioning.
+- Phase 4: bathymetry (depth vs. draught per boat class), real geographic coordinates and map tiles, wind/wave exposure, environmental restrictions, cost estimation, manufacturer-specific pontoon modules, backend (e.g. Python/Shapely) if computation outgrows the browser.
 
 ---
 
-# 13. DEVELOPMENT PROCESS
+## 12. Final report
 
-Do not attempt to implement everything in one step.
-
-Follow this development sequence.
-
-PHASE 1: WORKING MVP
-
-Build:
-- Application shell
-- Interactive planning canvas
-- Site boundary drawing
-- Obstacle drawing
-- Parameter configuration
-- Boat categories
-- Basic floating dock generation
-- Automatic berth placement
-- Geometric constraint checking
-- Basic marina statistics
-
-At the end of Phase 1, the application must be usable.
-
-PHASE 2: GENERATION AND OPTIMIZATION
-
-Implement:
-- Multiple layout configurations
-- Alternative comparison
-- Improved geometric optimization
-- Different optimization objectives
-- Better constraint handling
-
-PHASE 3: PROFESSIONAL FEATURES
-
-Implement:
-- Manual editing
-- Saving projects
-- PDF export
-- CSV export
-- DXF export
-- Advanced visualization
-- Finnish localization
-
-PHASE 4: ADVANCED PLANNING
-
-Prepare the architecture for:
-- Bathymetric data
-- Real geographic coordinates
-- Wind and wave exposure
-- Environmental restrictions
-- Marina construction cost estimation
-- Different pontoon systems and manufacturers
-
----
-
-# 14. QUALITY REQUIREMENTS
-
-Important:
-
-1. The application must actually calculate layouts, not merely display predefined examples.
-2. Geometric calculations must be based on real coordinates and dimensions.
-3. Invalid layouts must be rejected or clearly flagged.
-4. The system must provide meaningful feedback when no feasible layout can be generated.
-5. All calculations must be repeatable and testable.
-6. Keep the code modular and well documented.
-7. Include automated tests for the geometry and optimization engine.
-8. Avoid unnecessary complexity in the initial MVP.
-9. Prioritize functionality over visual decoration.
-10. Never claim engineering compliance or safety certification based solely on geometric optimization.
-
----
-
-# 15. FIRST TASK
-
-Start by:
-
-1. Reviewing the project directory.
-2. Creating a technical architecture.
-3. Defining the data structures for marina geometry.
-4. Creating the initial application.
-5. Implementing the planning canvas.
-6. Implementing the first working automatic marina generator.
-
-Do not stop after writing a plan.
-
-Actually create the files, implement the application and run it.
-
-Test the application and fix errors.
-
-If a feature is too complex for the first implementation, create a simplified but functional version and document the limitation.
-
-At the end, provide:
-- Instructions for running the application.
-- Description of implemented features.
-- Known limitations.
-- Recommended next development steps.
-
-Your goal is to deliver a working first version of a professional marina design and optimization tool.
+When done, report: how to run, what works, what was simplified and why (link to `docs/DECISIONS.md`), known limitations, test results, and recommended next steps.
