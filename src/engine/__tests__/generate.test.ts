@@ -313,6 +313,8 @@ describe('generateLayouts when nothing fits (SPEC §5, diagnostics)', () => {
     expect(noClasses.diagnostics.map((d) => d.code)).toEqual(['NO_BOAT_CLASSES']);
     const noShore = generateLayouts(inputFor({ ...RECT_BASIN_SITE, shoreline: [] }));
     expect(noShore.diagnostics.map((d) => d.code)).toEqual(['NO_SHORELINE']);
+    const noEntrance = generateLayouts(inputFor({ ...RECT_BASIN_SITE, entrance: { a: { x: 0, y: 0 }, b: { x: 0, y: 0 } } }));
+    expect(noEntrance.diagnostics.map((d) => d.code)).toEqual(['NO_ENTRANCE']);
     const noWater = generateLayouts(inputFor({ ...RECT_BASIN_SITE, water: [] }));
     expect(noWater.diagnostics.map((d) => d.code)).toEqual(['NO_WATER_AREA']);
   });

@@ -158,10 +158,13 @@ export function compareLayouts(a: Layout, b: Layout): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+/** Score all layouts against a common reference, keeping their order. */
+export function scoreLayouts(layouts: Layout[], settings: ObjectiveSettings): Layout[] {
+  const reference = scoreReference(layouts);
+  return layouts.map((l) => ({ ...l, score: OBJECTIVES[settings.id](l, settings, reference) }));
+}
+
 /** Score all layouts against a common reference and return them best first. */
 export function rankLayouts(layouts: Layout[], settings: ObjectiveSettings): Layout[] {
-  const reference = scoreReference(layouts);
-  return layouts
-    .map((l) => ({ ...l, score: OBJECTIVES[settings.id](l, settings, reference) }))
-    .sort(compareLayouts);
+  return scoreLayouts(layouts, settings).sort(compareLayouts);
 }

@@ -240,4 +240,9 @@ export interface Project {
   layouts: Layout[];
   preferredLayoutId: string | null;
   background: BackgroundImage | null;
+  /**
+   * Fingerprint of the inputs (site, boat classes, parameters) the layouts were generated
+   * from, or null when there are no generated layouts. Used for the "Regenerate" hint.
+   */
+  generatedFrom: string | null;
 }

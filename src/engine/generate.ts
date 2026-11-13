@@ -76,6 +76,7 @@ export interface Diagnostic {
   code:
     | 'NO_WATER_AREA'
     | 'NO_SHORELINE'
+    | 'NO_ENTRANCE'
     | 'NO_BOAT_CLASSES'
     | 'NO_PIER_REACHES_SHORE'
     | 'WATER_TOO_SHORT_FOR_PIER'
@@ -571,6 +572,9 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = fi
   }
   if (site.shoreline.length < 2) {
     return fail('NO_SHORELINE', 'Draw the shoreline first: piers must connect to it.');
+  }
+  if (distance(site.entrance.a, site.entrance.b) === 0) {
+    return fail('NO_ENTRANCE', 'Set the entrance first: berths must be reachable from it.');
   }
   const design = rowDesign(boatClasses, params, pattern);
   if (!design) {
