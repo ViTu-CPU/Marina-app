@@ -146,7 +146,10 @@ export interface Berth {
 
 export interface Fairway {
   id: string;
+  /** Outer ring. */
   shape: Polygon;
+  /** Extension: clockwise rings of water inside `shape` that is not fairway (e.g. around a rock). */
+  holes: Polygon[];
   requiredWidth: number;
 }
 

@@ -4,18 +4,27 @@
  * The result only says whether the layout meets the constraints configured by the user.
  * It is never a statement about safety or regulatory compliance.
  */
+import { occupiedRegion } from './fairways';
 import {
+  add,
   boundingBox,
   boxesOverlap,
   convexInsideRegion,
   convexIntersectsRegion,
   convexOverlapDepth,
+  distancePointToPart,
+  distancePointToPolyline,
+  distanceSegmentToPart,
   EPS,
   regionFromPolygon,
+  scale,
   type Box,
 } from './geometry';
+import { bufferRegion, differenceRegions } from './geometryOps';
 import type { Berth, BoatClass, Feasibility, Finger, Issue, MainPier, Params, Polygon } from './model';
-import { pierPolygon, type PreparedSite } from './site';
+import { localRectToPolygon } from './patterns';
+import { layoutRows, pierAxis, toLocalRect, type RowInfo } from './rows';
+import { pierPolygon, SHORE_TOLERANCE, type PreparedSite } from './site';
 
 export interface LayoutElements {
   piers: MainPier[];
@@ -42,7 +51,21 @@ export const IssueCode = {
   SLOT_IN_PROTECTED_ZONE: 'SLOT_IN_PROTECTED_ZONE',
   OVERLAP: 'OVERLAP',
   BOAT_OUTSIDE_SLOT: 'BOAT_OUTSIDE_SLOT',
+  // Operational (warnings)
+  SLOT_IN_NO_NAVIGATION_ZONE: 'SLOT_IN_NO_NAVIGATION_ZONE',
+  FAIRWAY_OUTSIDE_WATER: 'FAIRWAY_OUTSIDE_WATER',
+  FAIRWAY_IN_OBSTACLE_BUFFER: 'FAIRWAY_IN_OBSTACLE_BUFFER',
+  FAIRWAY_IN_RESTRICTED_ZONE: 'FAIRWAY_IN_RESTRICTED_ZONE',
+  FAIRWAY_OBSTRUCTED: 'FAIRWAY_OBSTRUCTED',
+  NOT_CONNECTED_TO_ENTRANCE: 'NOT_CONNECTED_TO_ENTRANCE',
+  PIER_NOT_CONNECTED_TO_SHORE: 'PIER_NOT_CONNECTED_TO_SHORE',
 } as const;
+
+/**
+ * Passages up to this much narrower than the required fairway width still count as
+ * connected, m. Absorbs the polygonal approximation of round buffers.
+ */
+export const CONNECTIVITY_SLACK = 0.1;
 
 type ElementKind = 'pier' | 'finger' | 'slot';
 
@@ -153,12 +176,122 @@ export function withBerthIssues(berths: Berth[], issues: Issue[]): Berth[] {
   return berths.map((b) => ({ ...b, issues: byElement.get(b.id) ?? [] }));
 }
 
+/**
+ * Operational checks (SPEC §6). Every issue is a warning.
+ *
+ * - Each berth must have clear navigable water straight out from its slot to the far
+ *   side of its row's fairway ("every slot borders a fairway of the required width").
+ * - That water must not be in an obstacle buffer, a noNavigation or protected zone,
+ *   nor be taken by another pier, finger or slot.
+ * - A circle as wide as the required fairway must be able to travel from the entrance
+ *   to the fairway of every berth ("fairway network is connected to the entrance").
+ * - Every main pier must start at the shoreline.
+ */
+export function operationalIssues(
+  layout: LayoutElements,
+  rows: RowInfo[],
+  prepared: PreparedSite,
+): Issue[] {
+  const issues: Issue[] = [];
+  const warn = (code: string, elementId: string, message: string) =>
+    issues.push({ severity: 'warning', code, message, elementId });
+  const elements = collectElements(layout);
+
+  // Pier ↔ shoreline.
+  for (const pier of layout.piers) {
+    const { left } = pierAxis(pier);
+    const connected = [0, pier.width / 2, -pier.width / 2].some(
+      (lateral) =>
+        distancePointToPolyline(add(pier.start, scale(left, lateral)), prepared.site.shoreline) <= SHORE_TOLERANCE,
+    );
+    if (!connected) warn(IssueCode.PIER_NOT_CONNECTED_TO_SHORE, pier.id, `Pier ${pier.id} does not connect to the shoreline.`);
+  }
+
+  // Corridor in front of every berth.
+  const blocked = new Set<string>();
+  for (const row of rows) {
+    const width = row.fairwayWidth.toFixed(1);
+    for (const berth of row.berths) {
+      if (convexIntersectsRegion(berth.slot, prepared.zones.noNavigation)) {
+        warn(IssueCode.SLOT_IN_NO_NAVIGATION_ZONE, berth.id, `Berth ${berth.id} is inside a no-navigation zone.`);
+      }
+      const slot = toLocalRect(berth.slot, row.frame);
+      const reach = row.depth + row.fairwayWidth;
+      if (reach - slot.d1 < EPS) continue;
+      const corridor = localRectToPolygon({ s0: slot.s0, s1: slot.s1, d0: slot.d1, d1: reach }, row.frame);
+      const fail = (code: string, why: string) => {
+        blocked.add(berth.id);
+        warn(code, berth.id, `Berth ${berth.id} does not have a ${width} m fairway in front of it: ${why}.`);
+      };
+      if (!convexInsideRegion(corridor, prepared.water)) {
+        fail(IssueCode.FAIRWAY_OUTSIDE_WATER, 'the water area ends too close');
+        continue;
+      }
+      if (convexIntersectsRegion(corridor, prepared.obstacleBuffer)) {
+        fail(IssueCode.FAIRWAY_IN_OBSTACLE_BUFFER, 'an obstacle is too close');
+        continue;
+      }
+      if (
+        convexIntersectsRegion(corridor, prepared.zones.noNavigation) ||
+        convexIntersectsRegion(corridor, prepared.zones.protected)
+      ) {
+        fail(IssueCode.FAIRWAY_IN_RESTRICTED_ZONE, 'a restricted zone is in the way');
+        continue;
+      }
+      const box = boundingBox(corridor);
+      const obstruction = elements.find(
+        (e) => e.id !== berth.id && boxesOverlap(box, e.box) && convexOverlapDepth(corridor, e.shape) > EPS,
+      );
+      if (obstruction) {
+        fail(IssueCode.FAIRWAY_OBSTRUCTED, `${KIND_LABEL[obstruction.kind].toLowerCase()} ${obstruction.id} is in the way`);
+      }
+    }
+  }
+
+  // Connection to the entrance, once per distinct fairway width.
+  if (rows.length > 0) {
+    const free = differenceRegions(prepared.navigableRegion, occupiedRegion(layout.piers, rows));
+    const { a, b } = prepared.site.entrance;
+    const widths = [...new Set(rows.map((r) => r.fairwayWidth))];
+    for (const width of widths) {
+      const radius = width / 2 - CONNECTIVITY_SLACK;
+      // Centres of a circle of the fairway width that fits in the free water …
+      const passable = bufferRegion(free, -radius);
+      // … restricted to the parts such a circle can reach from the entrance.
+      const reachable = passable.filter((part) => distanceSegmentToPart(a, b, part) <= width / 2 + CONNECTIVITY_SLACK);
+      for (const row of rows) {
+        if (row.fairwayWidth !== width) continue;
+        let cutOff = 0;
+        for (const berth of row.berths) {
+          if (blocked.has(berth.id)) continue; // already reported above
+          const slot = toLocalRect(berth.slot, row.frame);
+          const s = (slot.s0 + slot.s1) / 2;
+          const d = row.depth + width / 2;
+          const point = add(row.frame.origin, add(scale(row.frame.along, s), scale(row.frame.outward, d)));
+          // The point must lie in the water swept by such a circle (dead ends at the shore
+          // are swept even though the circle's centre cannot get there).
+          if (!reachable.some((part) => distancePointToPart(point, part) <= radius + 2 * CONNECTIVITY_SLACK)) cutOff++;
+        }
+        if (cutOff > 0) {
+          warn(
+            IssueCode.NOT_CONNECTED_TO_ENTRANCE,
+            row.pierId,
+            `${cutOff} berth${cutOff === 1 ? '' : 's'} on the ${row.side} side of pier ${row.pierId} cannot be reached from the entrance through a ${width.toFixed(1)} m wide fairway.`,
+          );
+        }
+      }
+    }
+  }
+  return issues;
+}
+
 export function validateLayout(
   layout: LayoutElements,
   prepared: PreparedSite,
-  _classes: BoatClass[],
+  classes: BoatClass[],
   params: Params,
 ): ValidationResult {
-  const issues = geometricIssues(layout, prepared, params);
+  const rows = layoutRows(layout.piers, layout.fingers, layout.berths, classes, params);
+  const issues = [...geometricIssues(layout, prepared, params), ...operationalIssues(layout, rows, prepared)];
   return { issues, feasibility: feasibilityOf(issues), berths: withBerthIssues(layout.berths, issues) };
 }

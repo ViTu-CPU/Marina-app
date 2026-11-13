@@ -425,3 +425,39 @@ export function intersectIntervals(a: [number, number][], b: [number, number][])
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Distances to regions
+// ---------------------------------------------------------------------------
+
+/** Shortest distance between segments a–b and c–d (0 when they intersect). */
+export function distanceSegmentToSegment(a: Vec2, b: Vec2, c: Vec2, d: Vec2): number {
+  if (segmentIntersectionParam(a, b, c, d) !== null) return 0;
+  return Math.min(
+    distancePointToSegment(a, c, d),
+    distancePointToSegment(b, c, d),
+    distancePointToSegment(c, a, b),
+    distancePointToSegment(d, a, b),
+  );
+}
+
+/** Shortest distance from the segment a–b to a polygon with holes (0 when it touches or enters it). */
+export function distanceSegmentToPart(a: Vec2, b: Vec2, part: PolygonWithHoles): number {
+  if (pointInPart(a, part)) return 0;
+  let best = Infinity;
+  for (const ring of [part.outer, ...part.holes]) {
+    for (let i = 0; i < ring.length; i++) {
+      best = Math.min(best, distanceSegmentToSegment(a, b, ring[i]!, ring[(i + 1) % ring.length]!));
+      if (best === 0) return 0;
+    }
+  }
+  return best;
+}
+
+/** Shortest distance from a point to a polygon with holes (0 when inside). */
+export function distancePointToPart(p: Vec2, part: PolygonWithHoles): number {
+  if (pointInPart(p, part)) return 0;
+  let best = distancePointToRing(p, part.outer);
+  for (const hole of part.holes) best = Math.min(best, distancePointToRing(p, hole));
+  return best;
+}

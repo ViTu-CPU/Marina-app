@@ -29,7 +29,9 @@ function sampleLayout(site: Site): LayoutElements {
 }
 
 const shift = (shape: Polygon, dx: number, dy: number): Polygon => shape.map((p) => ({ x: p.x + dx, y: p.y + dy }));
-const codes = (r: { issues: { code: string }[] }) => [...new Set(r.issues.map((i) => i.code))].sort();
+/** Distinct codes of the geometric errors (warnings are covered in operational.test.ts). */
+const codes = (r: { issues: { code: string; severity: string }[] }) =>
+  [...new Set(r.issues.filter((i) => i.severity === 'error').map((i) => i.code))].sort();
 const validate = (layout: LayoutElements, site: Site = RECT_BASIN_SITE) =>
   validateLayout(layout, prepareSite(site, params), classes, params);
 
@@ -68,11 +70,11 @@ describe('geometric validation (SPEC §6)', () => {
   it('flags a pier inside the obstacle buffer but not one just outside it', () => {
     // Rock centre (150, 70), circumscribed radius ≈ 6.12 m, buffer 2 m → clear beyond ≈ 8.12 m.
     // A 3 m wide pier at x = 140 has its east edge at 141.5: 8.5 m from the centre → clear.
-    expect(validate({ piers: [pier('P1', 140, 0, 120)], fingers: [], berths: [] }).issues).toEqual([]);
+    expect(codes(validate({ piers: [pier('P1', 140, 0, 120)], fingers: [], berths: [] }))).toEqual([]);
     // At x = 141 the east edge is at 142.5: 7.5 m from the centre → inside the buffer.
     const result = validate({ piers: [pier('P1', 141, 0, 120)], fingers: [], berths: [] });
     expect(codes(result)).toEqual([IssueCode.STRUCTURE_IN_OBSTACLE_BUFFER]);
-    expect(result.issues[0]!.message).toContain('2.0 m');
+    expect(result.issues.find((i) => i.severity === 'error')!.message).toContain('2.0 m');
   });
 
   it('structures may not enter noStructures or protected zones; slots may lie in noStructures', () => {
@@ -97,9 +99,9 @@ describe('geometric validation (SPEC §6)', () => {
   it('flags overlaps above 1 cm and ignores touching elements', () => {
     const a = pier('P1', 60, 0, 60);
     // Second pier 3.0 m to the east: edges touch exactly.
-    expect(validate({ piers: [a, pier('P2', 63, 0, 60)], fingers: [], berths: [] }).issues).toEqual([]);
+    expect(codes(validate({ piers: [a, pier('P2', 63, 0, 60)], fingers: [], berths: [] }))).toEqual([]);
     // 2.995 m: overlap of 5 mm is within the tolerance.
-    expect(validate({ piers: [a, pier('P2', 62.995, 0, 60)], fingers: [], berths: [] }).issues).toEqual([]);
+    expect(codes(validate({ piers: [a, pier('P2', 62.995, 0, 60)], fingers: [], berths: [] }))).toEqual([]);
     // 2.5 m: overlap of 0.5 m.
     const result = validate({ piers: [a, pier('P2', 62.5, 0, 60)], fingers: [], berths: [] });
     expect(codes(result)).toEqual([IssueCode.OVERLAP]);
