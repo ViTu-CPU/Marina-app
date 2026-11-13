@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOAT_CLASSES, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../defaults';
 import { DEMO_PROJECTS, IRREGULAR_BAY_SITE, RECT_BASIN_SITE } from '../demos';
+import { setBerthRemoved } from '../edit';
 import {
   candidateOrientations,
   generateLayouts,
@@ -109,6 +110,13 @@ describe('generateLayouts, hand-calculated (SPEC §10)', () => {
     expect(d!.stats.mainPierLength).toBeCloseTo(60, 6);
     expect(new Set(d!.berths.map((x) => x.side)).size).toBe(1);
     expect(d!.feasibility).toBe('operationalOK');
+  });
+
+  it('nothing is unreachable in an open basin', () => {
+    for (const layout of result.layouts) {
+      expect(layout.unreachableRemoved).toBe(0);
+      expect(layout.stats.unreachableRemoved).toBe(0);
+    }
   });
 
   it('the alternatives are ranked by capacity and A is the best', () => {
@@ -221,6 +229,59 @@ describe('generateLayouts on the demo projects (SPEC §10)', () => {
       });
     });
   }
+});
+
+describe('berths that cannot be reached from the entrance', () => {
+  /**
+   * Basin 46 m wide and 140 m deep with the entrance on the north edge, and a rock in the
+   * middle. Default mix: one pier with one row fits (3 + 12.5 + 18 = 33.5 m of 46 m).
+   * The rock with its 2 m clearance covers x = 16 … 30, leaving 16 m on either side:
+   * wherever the 18 m fairway is put, it cannot pass the rock. Berths between the rock
+   * and the shore are therefore cut off from the entrance.
+   */
+  const site: Site = {
+    water: [{ x: 0, y: 0 }, { x: 46, y: 0 }, { x: 46, y: 140 }, { x: 0, y: 140 }],
+    shoreline: [{ x: 0, y: 0 }, { x: 46, y: 0 }],
+    entrance: { a: { x: 0, y: 140 }, b: { x: 46, y: 140 } },
+    // 10 × 8 m rock in the middle of the basin, 60 m from the shore.
+    obstacles: [{ id: 'rock', kind: 'rock', shape: [{ x: 18, y: 60 }, { x: 28, y: 60 }, { x: 28, y: 68 }, { x: 18, y: 68 }] }],
+    zones: [],
+  };
+  const withRock = generateLayouts(inputFor(site));
+  const open = generateLayouts(inputFor({ ...site, obstacles: [] }));
+  const a = byStrategy(withRock.layouts, 'A')[0]!;
+  // Without the rock the best layout is the same single pier (it may be listed under
+  // another strategy name, because near-duplicates are removed).
+  const best = open.layouts[0]!;
+
+  it('are left out of the layout, and the number is recorded', () => {
+    for (const layout of open.layouts) expect(layout.unreachableRemoved).toBe(0);
+    expect(a.unreachableRemoved).toBeGreaterThan(0);
+    expect(a.stats.unreachableRemoved).toBe(a.unreachableRemoved);
+    // They are not part of the layout: not in the berth list, not in the totals.
+    expect(a.stats.totalBerths).toBe(a.berths.length);
+    expect(a.berths.every((b) => !b.removed)).toBe(true);
+    expect(a.stats.totalBerths).toBeLessThan(best.stats.totalBerths);
+  });
+
+  it('the remaining berths all lie beyond the rock, towards the entrance', () => {
+    // The rock's buffer reaches y = 70; nothing may remain in the pocket south of y = 58.
+    const southmost = Math.min(...a.berths.flatMap((b) => b.slot.map((p) => p.y)));
+    expect(southmost).toBeGreaterThan(58);
+  });
+
+  it('leaving berths out is not an issue of the layout: what remains meets the constraints', () => {
+    expect(a.issues).toEqual([]);
+    expect(a.feasibility).toBe('operationalOK');
+  });
+
+  it('the count survives a manual edit', () => {
+    const ctx = { prepared: prepareSite(site, DEFAULT_PARAMS), classes: DEFAULT_BOAT_CLASSES, params: DEFAULT_PARAMS };
+    const edited = setBerthRemoved(a, a.berths[0]!.id, true, ctx);
+    expect(edited.unreachableRemoved).toBe(a.unreachableRemoved);
+    expect(edited.stats.unreachableRemoved).toBe(a.unreachableRemoved);
+    expect(edited.stats.totalBerths).toBe(a.stats.totalBerths - 1);
+  });
 });
 
 describe('generateLayouts options', () => {

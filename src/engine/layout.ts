@@ -17,6 +17,8 @@ export interface LayoutDraft {
   fingers: Finger[];
   berths: Berth[];
   modified: boolean;
+  /** Berths left out by the generator as unreachable (default 0). */
+  unreachableRemoved?: number;
 }
 
 /** The score is left at 0; it is set when layouts are ranked against each other. */
@@ -40,8 +42,13 @@ export function evaluateLayout(
     fairways,
     feasibility: feasibilityOf(issues),
     issues,
-    stats: computeStats({ piers: draft.piers, fingers: draft.fingers, berths, fairways, issues }, prepared, classes),
+    stats: computeStats(
+      { piers: draft.piers, fingers: draft.fingers, berths, fairways, issues, unreachableRemoved: draft.unreachableRemoved ?? 0 },
+      prepared,
+      classes,
+    ),
     score: 0,
     modified: draft.modified,
+    unreachableRemoved: draft.unreachableRemoved ?? 0,
   };
 }

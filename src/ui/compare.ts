@@ -35,6 +35,7 @@ const METRICS: Metric[] = [
   { key: 'stat.freeWaterArea', unit: 'm²', value: (s) => s.freeWaterArea, format: formatArea, better: 'higher' },
   { key: 'stat.berthsPer1000m2', unit: '', value: (s) => s.berthsPer1000m2, format: formatRatio, better: 'higher' },
   { key: 'stat.pontoonPerBerth', unit: 'm', value: (s) => s.pontoonPerBerth, format: formatLength, better: 'lower' },
+  { key: 'stat.unreachableRemoved', unit: '', value: (s) => s.unreachableRemoved, format: formatCount, better: 'lower' },
   { key: 'stat.errors', unit: '', value: (s) => s.issueCounts.error, format: formatCount, better: 'lower' },
   { key: 'stat.warnings', unit: '', value: (s) => s.issueCounts.warning, format: formatCount, better: 'lower' },
 ];

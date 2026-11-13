@@ -133,6 +133,11 @@ export const en = {
   'results.berths': 'berths',
   'results.pontoon': 'pontoon',
   'results.score': 'Score',
+  'results.leftOut': 'left out (unreachable)',
+  'results.leftOutNote':
+    'berths were left out of this layout because they cannot be reached from the entrance through a fairway of the required width. They are not counted in the totals.',
+  'results.leftOutNoteOne':
+    'berth was left out of this layout because it cannot be reached from the entrance through a fairway of the required width. It is not counted in the totals.',
   'feasibility.geometricFail': 'Geometry fails',
   'feasibility.geometricOK': 'Geometry OK',
   'feasibility.operationalOK': 'Constraints met',
@@ -167,6 +172,7 @@ export const en = {
   'stat.freeWaterArea': 'Free water',
   'stat.berthsPer1000m2': 'Berths per 1,000 m² water',
   'stat.pontoonPerBerth': 'Pontoon per berth',
+  'stat.unreachableRemoved': 'Unreachable berths left out',
   'stat.errors': 'Errors',
   'stat.warnings': 'Warnings',
 

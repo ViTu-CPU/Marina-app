@@ -110,6 +110,7 @@ describe('objectives (SPEC §7)', () => {
     berthsPer1000m2: 3.2,
     pontoonPerBerth: 4,
     mixDeviation: 0,
+    unreachableRemoved: 0,
     issueCounts: { error: 0, warning: 0 },
     ...over,
   });
@@ -126,6 +127,7 @@ describe('objectives (SPEC §7)', () => {
     stats: stats(over),
     score: 0,
     modified: false,
+    unreachableRemoved: 0,
   });
   const settings = (over: Partial<ObjectiveSettings>): ObjectiveSettings => ({ ...DEFAULT_OBJECTIVE, ...over });
   const noRef = { maxBerths: 0, minPontoonLength: 0, maxFairwayArea: 0 };

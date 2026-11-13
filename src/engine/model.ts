@@ -192,6 +192,11 @@ export interface Stats {
   pontoonPerBerth: number;
   /** Extension (D3): sum over classes of |actual share − target share| / 2, 0..1. */
   mixDeviation: number;
+  /**
+   * Extension: berths the generator left out because they could not be reached from the
+   * entrance. They are not part of the layout and are not counted anywhere else.
+   */
+  unreachableRemoved: number;
   issueCounts: Record<IssueSeverity, number>;
 }
 
@@ -209,6 +214,11 @@ export interface Layout {
   score: number;
   /** True once the user edits it manually. */
   modified: boolean;
+  /**
+   * Extension: number of berths the generator left out of this layout because they could
+   * not be reached from the entrance through a fairway of the required width.
+   */
+  unreachableRemoved: number;
 }
 
 // ---------------------------------------------------------------------------

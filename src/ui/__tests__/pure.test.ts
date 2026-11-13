@@ -168,11 +168,12 @@ describe('comparison table (SPEC §8: best value per row highlighted)', () => {
     berthsPer1000m2: 3.2,
     pontoonPerBerth: 4,
     mixDeviation: 0,
+    unreachableRemoved: 0,
     issueCounts: { error: 0, warning: 0 },
     ...over,
   });
   const layout = (id: string, over: Partial<Stats>): Layout =>
-    ({ id, name: id, strategy: 'A', piers: [], fingers: [], berths: [], fairways: [], feasibility: 'operationalOK', issues: [], stats: stats(over), score: 0, modified: false }) as Layout;
+    ({ id, name: id, strategy: 'A', piers: [], fingers: [], berths: [], fairways: [], feasibility: 'operationalOK', issues: [], stats: stats(over), score: 0, modified: false, unreachableRemoved: 0 }) as Layout;
 
   it('more berths and free water are better; less pontoon and fewer issues are better', () => {
     const rows = comparisonRows(
@@ -187,6 +188,7 @@ describe('comparison table (SPEC §8: best value per row highlighted)', () => {
     expect(row('stat.pontoonLength').best).toEqual([0]);
     expect(row('stat.warnings').best).toEqual([0]);
     expect(row('stat.errors').best).toEqual([]); // equal
+    expect(row('stat.unreachableRemoved').values).toEqual(['0', '0']);
     expect(row('stat.mainPierLength').best).toEqual([]); // no "better" direction
     // One row per boat class follows the total.
     expect(rows.slice(1, 5).map((r) => ('text' in r.label ? r.label.text : ''))).toEqual(['5 m', '7 m', '9 m', '12 m']);

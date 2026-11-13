@@ -115,6 +115,25 @@ describe('app shell (SPEC §8)', () => {
     expect(appStore.getState().project.layouts[0]!.stats.totalBerths).toBe(before);
   });
 
+  it('unreachable berths left out are shown on the card, as a warning note and in the table', () => {
+    renderShell();
+    act(() => {
+      appStore.getState().loadDemo('rectBasin');
+      appStore.getState().generate();
+    });
+    // In the example basin the rock blocks one fairway; the berths behind it are left out.
+    const layout = appStore.getState().project.layouts[0]!;
+    expect(layout.unreachableRemoved).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('left-out')[0]!.textContent).toBe(`${layout.unreachableRemoved} left out (unreachable)`);
+    const note = screen.getByTestId('left-out-note').textContent!;
+    expect(note).toContain(`${layout.unreachableRemoved} berths were left out of this layout`);
+    expect(note).toContain('Warning');
+    const row = within(screen.getByTestId('comparison')).getByRole('row', { name: /Unreachable berths left out/ });
+    expect(within(row).getAllByRole('cell')[0]!.textContent).toBe(String(layout.unreachableRemoved));
+    // The layout itself still meets the constraints.
+    expect(screen.getAllByTestId('alternative')[0]!.textContent).toContain('Constraints met');
+  });
+
   it('an empty project explains why nothing was generated', () => {
     renderShell();
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));

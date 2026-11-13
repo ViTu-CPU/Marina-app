@@ -213,10 +213,15 @@ function layout(v: unknown, i: number): Layout {
       berthsPer1000m2: 0,
       pontoonPerBerth: 0,
       mixDeviation: 0,
+      unreachableRemoved: 0,
       issueCounts: { error: 0, warning: 0 },
     },
     score: typeof o.score === 'number' && Number.isFinite(o.score) ? o.score : 0,
     modified: bool(o.modified, `${p}.modified`),
+    unreachableRemoved:
+      typeof o.unreachableRemoved === 'number' && Number.isFinite(o.unreachableRemoved) && o.unreachableRemoved > 0
+        ? Math.round(o.unreachableRemoved)
+        : 0,
   };
 }
 

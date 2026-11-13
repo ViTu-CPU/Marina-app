@@ -513,10 +513,12 @@ function toDraft(candidate: Candidate, id: string, ctx: SearchContext): LayoutDr
 /**
  * Remove berths that cannot be reached from the entrance (SPEC §5.5: a bay is kept only
  * if it passes the checks of §6), together with fingers and piers left without berths.
+ * The number removed is recorded on the layout so that it can be shown to the user.
  */
 function pruneUnreachable(draft: LayoutDraft, ctx: SearchContext): LayoutDraft {
   const { prepared, params } = ctx;
   let current = draft;
+  let removed = 0;
   // Removing berths only frees water, so this settles quickly; the cap is a safeguard.
   for (let pass = 0; pass < 3; pass++) {
     const rows = layoutRows(current.piers, current.fingers, current.berths, ctx.fill.classes, params);
@@ -525,6 +527,7 @@ function pruneUnreachable(draft: LayoutDraft, ctx: SearchContext): LayoutDraft {
       for (const berth of cutOff) unreachable.add(berth.id);
     }
     if (unreachable.size === 0) break;
+    removed += unreachable.size;
     const berths = current.berths.filter((b) => !unreachable.has(b.id));
     const piers = current.piers.filter((p) => berths.some((b) => b.pierId === p.id));
     const fingers = current.fingers.filter((f) => {
@@ -542,7 +545,7 @@ function pruneUnreachable(draft: LayoutDraft, ctx: SearchContext): LayoutDraft {
         return Math.abs(slot.s0 - finger.s1) < 0.005 || Math.abs(slot.s1 - finger.s0) < 0.005;
       });
     });
-    current = { ...current, piers, fingers, berths };
+    current = { ...current, piers, fingers, berths, unreachableRemoved: removed };
   }
   return current;
 }

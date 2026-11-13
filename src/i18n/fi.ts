@@ -135,6 +135,11 @@ export const fi: Partial<Record<StringKey, string>> = {
   'results.berths': 'paikkaa',
   'results.pontoon': 'ponttonia',
   'results.score': 'Pisteet',
+  'results.leftOut': 'jätetty pois (ei pääsyä)',
+  'results.leftOutNote':
+    'paikkaa jätettiin pois tästä asettelusta, koska niihin ei pääse sataman suulta vaaditun levyistä väylää. Niitä ei lasketa summiin.',
+  'results.leftOutNoteOne':
+    'paikka jätettiin pois tästä asettelusta, koska siihen ei pääse sataman suulta vaaditun levyistä väylää. Sitä ei lasketa summiin.',
   'feasibility.geometricFail': 'Geometria ei toteudu',
   'feasibility.geometricOK': 'Geometria OK',
   'feasibility.operationalOK': 'Rajoitteet täyttyvät',
@@ -169,6 +174,7 @@ export const fi: Partial<Record<StringKey, string>> = {
   'stat.freeWaterArea': 'Vapaa vesiala',
   'stat.berthsPer1000m2': 'Paikkoja / 1 000 m² vettä',
   'stat.pontoonPerBerth': 'Ponttonia / paikka',
+  'stat.unreachableRemoved': 'Pois jätetyt saavuttamattomat paikat',
   'stat.errors': 'Virheet',
   'stat.warnings': 'Varoitukset',
 

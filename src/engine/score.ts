@@ -23,6 +23,7 @@ export interface StatsInput {
   berths: Berth[];
   fairways: Fairway[];
   issues: Issue[];
+  unreachableRemoved?: number;
 }
 
 export function computeStats(layout: StatsInput, prepared: PreparedSite, classes: BoatClass[]): Stats {
@@ -83,6 +84,7 @@ export function computeStats(layout: StatsInput, prepared: PreparedSite, classes
     berthsPer1000m2: prepared.waterArea > 0 ? totalBerths / (prepared.waterArea / 1000) : 0,
     pontoonPerBerth: totalBerths > 0 ? pontoonLength / totalBerths : 0,
     mixDeviation,
+    unreachableRemoved: layout.unreachableRemoved ?? 0,
     issueCounts: {
       error: layout.issues.filter((i) => i.severity === 'error').length,
       warning: layout.issues.filter((i) => i.severity === 'warning').length,
