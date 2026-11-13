@@ -86,7 +86,8 @@ npx playwright install chromium
   other pier (B), other pier directions from a 5° sweep (C), one pier along the shore (D),
   and piers sized by boat class (E), where every row and fairway is as deep and wide as
   its own boats need.
-- Berths that cannot be reached from the entrance are left out; the number is shown.
+- Berths that cannot be reached from the entrance are left out; the number is shown and
+  the layout is marked with a warning instead of "Constraints met".
 - Up to five alternatives, ranked by the objective, near-duplicates removed.
 - If nothing fits, a message says why.
 

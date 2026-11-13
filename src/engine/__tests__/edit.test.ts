@@ -6,14 +6,16 @@ import { generateLayouts } from '../generate';
 import { prepareSite } from '../site';
 import { IssueCode } from '../validate';
 
+// The example basin without its rock, so that the starting layout has no issues at all.
+const SITE = { ...RECT_BASIN_SITE, obstacles: [] };
 const ctx: EditContext = {
-  prepared: prepareSite(RECT_BASIN_SITE, DEFAULT_PARAMS),
+  prepared: prepareSite(SITE, DEFAULT_PARAMS),
   classes: DEFAULT_BOAT_CLASSES,
   params: DEFAULT_PARAMS,
 };
 // Strategy A: every pier on the uniform 46 m pitch, with 18 m fairways.
 const base = generateLayouts({
-  site: RECT_BASIN_SITE,
+  site: SITE,
   boatClasses: DEFAULT_BOAT_CLASSES,
   params: DEFAULT_PARAMS,
   objective: DEFAULT_OBJECTIVE,

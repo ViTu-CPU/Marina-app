@@ -136,10 +136,6 @@ export const fi: Partial<Record<StringKey, string>> = {
   'results.pontoon': 'ponttonia',
   'results.score': 'Pisteet',
   'results.leftOut': 'jätetty pois (ei pääsyä)',
-  'results.leftOutNote':
-    'paikkaa jätettiin pois tästä asettelusta, koska niihin ei pääse sataman suulta vaaditun levyistä väylää. Niitä ei lasketa summiin.',
-  'results.leftOutNoteOne':
-    'paikka jätettiin pois tästä asettelusta, koska siihen ei pääse sataman suulta vaaditun levyistä väylää. Sitä ei lasketa summiin.',
   'feasibility.geometricFail': 'Geometria ei toteudu',
   'feasibility.geometricOK': 'Geometria OK',
   'feasibility.operationalOK': 'Rajoitteet täyttyvät',

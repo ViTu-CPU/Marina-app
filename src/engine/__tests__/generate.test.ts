@@ -19,6 +19,7 @@ import {
 } from '../geometry';
 import type { BoatClass, Layout, Site } from '../model';
 import { pierPolygon, prepareSite } from '../site';
+import { IssueCode } from '../validate';
 
 const inputFor = (site: Site, over: Partial<GenerateInput> = {}): GenerateInput => ({
   site,
@@ -163,12 +164,19 @@ describe('generateLayouts on the demo projects (SPEC §10)', () => {
         expect(JSON.stringify(generateLayouts(input))).toBe(JSON.stringify(result));
       });
 
-      it('every alternative meets the configured constraints', () => {
+      it('every alternative meets the configured constraints, or says what was left out', () => {
         for (const layout of result.layouts) {
-          expect(layout.issues).toEqual([]);
-          expect(layout.feasibility).toBe('operationalOK');
           expect(layout.stats.totalBerths).toBeGreaterThan(0);
           expect(layout.modified).toBe(false);
+          expect(layout.stats.issueCounts.error).toBe(0);
+          if (layout.unreachableRemoved === 0) {
+            expect(layout.issues).toEqual([]);
+            expect(layout.feasibility).toBe('operationalOK');
+          } else {
+            // The only issue is the warning about berths left out as unreachable (D12).
+            expect(layout.issues.map((i) => i.code)).toEqual([IssueCode.BERTHS_LEFT_OUT_UNREACHABLE]);
+            expect(layout.feasibility).toBe('geometricOK');
+          }
         }
       });
 
@@ -381,9 +389,19 @@ describe('berths that cannot be reached from the entrance', () => {
     expect(southmost).toBeGreaterThan(58);
   });
 
-  it('leaving berths out is not an issue of the layout: what remains meets the constraints', () => {
-    expect(a.issues).toEqual([]);
-    expect(a.feasibility).toBe('operationalOK');
+  it('the layout gets a warning and is no longer "constraints met" (DECISIONS D12)', () => {
+    expect(a.issues).toHaveLength(1);
+    const [issue] = a.issues;
+    expect(issue!.code).toBe(IssueCode.BERTHS_LEFT_OUT_UNREACHABLE);
+    expect(issue!.severity).toBe('warning');
+    expect(issue!.message).toContain(`${a.unreachableRemoved} berths were left out of this layout`);
+    expect(a.stats.issueCounts).toEqual({ error: 0, warning: 1 });
+    expect(a.feasibility).toBe('geometricOK');
+    // Nothing else is wrong with what remains: no berth carries an issue of its own.
+    expect(a.berths.every((b) => b.issues.length === 0)).toBe(true);
+    // Without the rock nothing is left out and the layout meets the constraints.
+    expect(best.issues).toEqual([]);
+    expect(best.feasibility).toBe('operationalOK');
   });
 
   it('the count survives a manual edit', () => {
@@ -392,6 +410,8 @@ describe('berths that cannot be reached from the entrance', () => {
     expect(edited.unreachableRemoved).toBe(a.unreachableRemoved);
     expect(edited.stats.unreachableRemoved).toBe(a.unreachableRemoved);
     expect(edited.stats.totalBerths).toBe(a.stats.totalBerths - 1);
+    expect(edited.issues.map((i) => i.code)).toEqual([IssueCode.BERTHS_LEFT_OUT_UNREACHABLE]);
+    expect(edited.feasibility).toBe('geometricOK');
   });
 });
 

@@ -52,7 +52,9 @@ describe('app shell (SPEC §8)', () => {
     expect(alternatives[0]!.textContent).toContain('E – Piers sized by boat class');
     expect(alternatives[1]!.textContent).toContain('A – Piers perpendicular to shore');
     expect(alternatives[0]!.textContent).toContain('berths');
-    expect(alternatives[0]!.textContent).toContain('Constraints met');
+    // Berths behind the rock were left out, so the best alternative is not "Constraints met".
+    expect(alternatives[0]!.textContent).toContain('Geometry OK');
+    expect(alternatives.some((a) => a.textContent!.includes('Constraints met'))).toBe(true);
     expect(alternatives[0]!.getAttribute('aria-pressed')).toBe('true');
 
     // Best value per row is highlighted: the first alternative has the most berths.
@@ -61,6 +63,9 @@ describe('app shell (SPEC §8)', () => {
     const cells = within(totalRow).getAllByRole('cell');
     expect(cells[0]!.getAttribute('data-best')).toBe('true');
     expect(cells[1]!.getAttribute('data-best')).toBeNull();
+    // An alternative with nothing left out has no issues.
+    const clean = appStore.getState().project.layouts.find((l) => l.unreachableRemoved === 0)!;
+    act(() => appStore.getState().selectLayout(clean.id));
     expect(screen.getByText('No issues found against the configured constraints.')).toBeTruthy();
   });
 
@@ -116,7 +121,7 @@ describe('app shell (SPEC §8)', () => {
     expect(appStore.getState().project.layouts[0]!.stats.totalBerths).toBe(before);
   });
 
-  it('unreachable berths left out are shown on the card, as a warning note and in the table', () => {
+  it('unreachable berths left out are shown on the card, as a warning and in the table', () => {
     renderShell();
     act(() => {
       appStore.getState().loadDemo('rectBasin');
@@ -126,13 +131,18 @@ describe('app shell (SPEC §8)', () => {
     const layout = appStore.getState().project.layouts[0]!;
     expect(layout.unreachableRemoved).toBeGreaterThan(0);
     expect(screen.getAllByTestId('left-out')[0]!.textContent).toBe(`${layout.unreachableRemoved} left out (unreachable)`);
-    const note = screen.getByTestId('left-out-note').textContent!;
-    expect(note).toContain(`${layout.unreachableRemoved} berths were left out of this layout`);
-    expect(note).toContain('Warning');
+    const issues = screen.getByTestId('issues').textContent!;
+    expect(issues).toContain(`${layout.unreachableRemoved} berths were left out of this layout`);
+    expect(issues).toContain('Warning');
+    expect(screen.getByText('Issues (1)')).toBeTruthy();
     const row = within(screen.getByTestId('comparison')).getByRole('row', { name: /Unreachable berths left out/ });
     expect(within(row).getAllByRole('cell')[0]!.textContent).toBe(String(layout.unreachableRemoved));
-    // The layout itself still meets the constraints.
-    expect(screen.getAllByTestId('alternative')[0]!.textContent).toContain('Constraints met');
+    // The status drops from "Constraints met" (green) to "Geometry OK" (amber).
+    expect(layout.feasibility).toBe('geometricOK');
+    expect(screen.getAllByTestId('alternative')[0]!.textContent).toContain('Geometry OK');
+    expect(screen.getAllByTestId('alternative')[0]!.textContent).not.toContain('Constraints met');
+    const warnings = within(screen.getByTestId('comparison')).getByRole('row', { name: /Warnings/ });
+    expect(within(warnings).getAllByRole('cell')[0]!.textContent).toBe('1');
   });
 
   it('an empty project explains why nothing was generated', () => {

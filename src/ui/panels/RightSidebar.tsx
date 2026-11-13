@@ -214,12 +214,6 @@ function Issues({ layout }: { layout: Layout }) {
   const sorted = [...layout.issues].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));
   return (
     <Section title={`${t('results.issues')} (${layout.issues.length})`}>
-      {layout.unreachableRemoved > 0 && (
-        <p className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900" data-testid="left-out-note">
-          <span className="mr-1 rounded bg-amber-100 px-1 font-medium">{t('severity.warning')}</span>
-          {layout.unreachableRemoved} {layout.unreachableRemoved === 1 ? t('results.leftOutNoteOne') : t('results.leftOutNote')}
-        </p>
-      )}
       {sorted.length === 0 ? (
         <p className="text-sm text-slate-500">{t('results.noIssues')}</p>
       ) : (

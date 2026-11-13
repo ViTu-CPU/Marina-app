@@ -112,7 +112,9 @@ fingers and slots by more than 1 cm · boat outside its slot.
 - berths cannot be reached from the entrance: the free navigable water is shrunk by half
   the fairway width (less 0.1 m), and the fairway in front of the berth must lie in the
   water swept by a circle of that size starting at the entrance (I21);
-- a pier does not start at the shoreline.
+- a pier does not start at the shoreline;
+- the generator left berths out of the layout because they could not be reached from the
+  entrance (one warning with the count, D12).
 
 Removed berths are ignored. `operationalOK` means only "meets the constraints configured
 by the user".

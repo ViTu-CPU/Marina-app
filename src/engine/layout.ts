@@ -7,7 +7,7 @@ import type { Berth, BoatClass, Finger, Layout, MainPier, Params } from './model
 import { layoutRows } from './rows';
 import { computeStats } from './score';
 import type { PreparedSite } from './site';
-import { feasibilityOf, geometricIssues, operationalIssues, withBerthIssues } from './validate';
+import { feasibilityOf, geometricIssues, leftOutIssue, operationalIssues, withBerthIssues } from './validate';
 
 export interface LayoutDraft {
   id: string;
@@ -42,6 +42,7 @@ export function evaluateLayout(
   const issues = [
     ...geometricIssues(draft, prepared, params),
     ...operationalIssues(draft, rows, prepared, { skipConnectivity: options.assumeConnected === true }),
+    ...((draft.unreachableRemoved ?? 0) > 0 ? [leftOutIssue(draft.unreachableRemoved ?? 0)] : []),
   ];
   const berths = withBerthIssues(draft.berths, issues);
   return {

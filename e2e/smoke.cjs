@@ -124,7 +124,7 @@ async function waitForServer() {
       await page.getByTestId('comparison').waitFor();
       const s = await state();
       assert.ok(s.project.layouts[0].stats.totalBerths > 0);
-      assert.equal(s.project.layouts[0].issues.length, 0);
+      assert.equal(s.project.layouts[0].stats.issueCounts.error, 0);
     });
 
     let berthsBefore;
@@ -157,7 +157,7 @@ async function waitForServer() {
       const movedPier = moved.piers.find((x) => x.id === pier.id);
       const shift = Math.hypot(movedPier.start.x - pier.start.x, movedPier.start.y - pier.start.y);
       assert.ok(shift > 2, `pier moved by ${shift.toFixed(2)} m`);
-      assert.ok(moved.issues.length > 0, 'moving a pier off the design pitch raises issues');
+      assert.ok(moved.issues.length > layout.issues.length, 'moving a pier off its place raises issues');
       await page.getByTestId('issues').waitFor();
       // The whole drag is one undo step.
       await page.getByRole('button', { name: 'Undo' }).click();
@@ -266,7 +266,13 @@ async function waitForServer() {
         console.log(`        ${id}: ${s.project.layouts.length} alternatives in ${ms.toFixed(0)} ms`);
         assert.ok(s.project.layouts.length >= 3);
         assert.ok(ms < 2000, `${id} took ${ms.toFixed(0)} ms`);
-        assert.ok(s.project.layouts.every((l) => l.issues.length === 0));
+        // No errors; the only warning a generated layout may carry is the one about
+        // berths left out as unreachable.
+        for (const l of s.project.layouts) {
+          assert.equal(l.stats.issueCounts.error, 0);
+          assert.deepEqual(l.issues.map((i) => i.code), l.unreachableRemoved > 0 ? ['BERTHS_LEFT_OUT_UNREACHABLE'] : []);
+          assert.equal(l.feasibility, l.unreachableRemoved > 0 ? 'geometricOK' : 'operationalOK');
+        }
       }
       await page.screenshot({ path: path.join(outDir, 'app.png') });
     });

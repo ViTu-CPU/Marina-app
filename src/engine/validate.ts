@@ -58,6 +58,7 @@ export const IssueCode = {
   FAIRWAY_IN_RESTRICTED_ZONE: 'FAIRWAY_IN_RESTRICTED_ZONE',
   FAIRWAY_OBSTRUCTED: 'FAIRWAY_OBSTRUCTED',
   NOT_CONNECTED_TO_ENTRANCE: 'NOT_CONNECTED_TO_ENTRANCE',
+  BERTHS_LEFT_OUT_UNREACHABLE: 'BERTHS_LEFT_OUT_UNREACHABLE',
   PIER_NOT_CONNECTED_TO_SHORE: 'PIER_NOT_CONNECTED_TO_SHORE',
 } as const;
 
@@ -156,6 +157,22 @@ export function geometricIssues(layout: LayoutElements, prepared: PreparedSite, 
     }
   }
   return issues;
+}
+
+/**
+ * Warning for a layout from which the generator left out berths that could not be reached
+ * from the entrance (DECISIONS D12). It keeps such a layout from being `operationalOK`:
+ * the site could not be used as the pier layout intended.
+ */
+export function leftOutIssue(count: number): Issue {
+  return {
+    severity: 'warning',
+    code: IssueCode.BERTHS_LEFT_OUT_UNREACHABLE,
+    message:
+      count === 1
+        ? '1 berth was left out of this layout because it cannot be reached from the entrance through a fairway of the required width. It is not counted in the totals.'
+        : `${count} berths were left out of this layout because they cannot be reached from the entrance through a fairway of the required width. They are not counted in the totals.`,
+  };
 }
 
 export function feasibilityOf(issues: Issue[]): Feasibility {
