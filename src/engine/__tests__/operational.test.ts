@@ -161,7 +161,8 @@ describe('fairway polygons (SPEC §5.6)', () => {
     expect(isCounterClockwise(fairways[0]!.shape)).toBe(true);
     // Row strips: x 28–46, 74–92 (shared by both piers), 120–138, each 18 m wide and
     // 122 m long → 3 × 18 × 122 = 6588 m². Head strip: x 28–138, y 122–140 → 110 × 18 = 1980 m².
-    expect(polygonArea(fairways[0]!.shape)).toBeCloseTo(6588 + 1980, 3);
+    // Compared to ± 0.5 m²: strips are built with a 1 mm margin (OVERLAY_MARGIN).
+    expect(Math.abs(polygonArea(fairways[0]!.shape) - (6588 + 1980))).toBeLessThan(0.5);
   });
 
   it('is clipped by obstacle buffers and never overlaps slots or piers', () => {

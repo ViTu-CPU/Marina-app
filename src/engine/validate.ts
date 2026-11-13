@@ -177,6 +177,51 @@ export function withBerthIssues(berths: Berth[], issues: Issue[]): Berth[] {
 }
 
 /**
+ * Berths whose fairway cannot be reached from the entrance, per row.
+ *
+ * Model: a circle as wide as the required fairway travels through the navigable water
+ * that is not occupied by piers and berth rows. A berth is reachable when the point in the
+ * middle of the fairway in front of it lies in the water swept by such a circle starting
+ * at the entrance. Computed once per distinct fairway width. Berths in `skip` are ignored.
+ */
+export function cutOffBerths(
+  layout: LayoutElements,
+  rows: RowInfo[],
+  prepared: PreparedSite,
+  skip: ReadonlySet<string> = new Set(),
+): Map<RowInfo, Berth[]> {
+  const result = new Map<RowInfo, Berth[]>();
+  if (rows.length === 0) return result;
+  const free = differenceRegions(prepared.navigableRegion, occupiedRegion(layout.piers, rows));
+  const { a, b } = prepared.site.entrance;
+  for (const width of new Set(rows.map((r) => r.fairwayWidth))) {
+    const radius = width / 2 - CONNECTIVITY_SLACK;
+    // Centres of a circle of the fairway width that fits in the free water …
+    const passable = bufferRegion(free, -radius);
+    // … restricted to the parts such a circle can reach from the entrance.
+    const reachable = passable.filter((part) => distanceSegmentToPart(a, b, part) <= width / 2 + CONNECTIVITY_SLACK);
+    for (const row of rows) {
+      if (row.fairwayWidth !== width) continue;
+      const cutOff: Berth[] = [];
+      for (const berth of row.berths) {
+        if (skip.has(berth.id)) continue;
+        const slot = toLocalRect(berth.slot, row.frame);
+        const s = (slot.s0 + slot.s1) / 2;
+        const d = row.depth + width / 2;
+        const point = add(row.frame.origin, add(scale(row.frame.along, s), scale(row.frame.outward, d)));
+        // Dead ends at the shore are swept even though the circle's centre cannot get there,
+        // hence the distance test against the centre positions.
+        if (!reachable.some((part) => distancePointToPart(point, part) <= radius + 2 * CONNECTIVITY_SLACK)) {
+          cutOff.push(berth);
+        }
+      }
+      if (cutOff.length > 0) result.set(row, cutOff);
+    }
+  }
+  return result;
+}
+
+/**
  * Operational checks (SPEC §6). Every issue is a warning.
  *
  * - Each berth must have clear navigable water straight out from its slot to the far
@@ -248,39 +293,14 @@ export function operationalIssues(
     }
   }
 
-  // Connection to the entrance, once per distinct fairway width.
-  if (rows.length > 0) {
-    const free = differenceRegions(prepared.navigableRegion, occupiedRegion(layout.piers, rows));
-    const { a, b } = prepared.site.entrance;
-    const widths = [...new Set(rows.map((r) => r.fairwayWidth))];
-    for (const width of widths) {
-      const radius = width / 2 - CONNECTIVITY_SLACK;
-      // Centres of a circle of the fairway width that fits in the free water …
-      const passable = bufferRegion(free, -radius);
-      // … restricted to the parts such a circle can reach from the entrance.
-      const reachable = passable.filter((part) => distanceSegmentToPart(a, b, part) <= width / 2 + CONNECTIVITY_SLACK);
-      for (const row of rows) {
-        if (row.fairwayWidth !== width) continue;
-        let cutOff = 0;
-        for (const berth of row.berths) {
-          if (blocked.has(berth.id)) continue; // already reported above
-          const slot = toLocalRect(berth.slot, row.frame);
-          const s = (slot.s0 + slot.s1) / 2;
-          const d = row.depth + width / 2;
-          const point = add(row.frame.origin, add(scale(row.frame.along, s), scale(row.frame.outward, d)));
-          // The point must lie in the water swept by such a circle (dead ends at the shore
-          // are swept even though the circle's centre cannot get there).
-          if (!reachable.some((part) => distancePointToPart(point, part) <= radius + 2 * CONNECTIVITY_SLACK)) cutOff++;
-        }
-        if (cutOff > 0) {
-          warn(
-            IssueCode.NOT_CONNECTED_TO_ENTRANCE,
-            row.pierId,
-            `${cutOff} berth${cutOff === 1 ? '' : 's'} on the ${row.side} side of pier ${row.pierId} cannot be reached from the entrance through a ${width.toFixed(1)} m wide fairway.`,
-          );
-        }
-      }
-    }
+  // Connection to the entrance.
+  for (const [row, cutOff] of cutOffBerths(layout, rows, prepared, blocked)) {
+    const n = cutOff.length;
+    warn(
+      IssueCode.NOT_CONNECTED_TO_ENTRANCE,
+      row.pierId,
+      `${n} berth${n === 1 ? '' : 's'} on the ${row.side} side of pier ${row.pierId} cannot be reached from the entrance through a ${row.fairwayWidth.toFixed(1)} m wide fairway.`,
+    );
   }
   return issues;
 }

@@ -10,7 +10,7 @@ import Coordinate from 'jsts/org/locationtech/jts/geom/Coordinate.js';
 import GeometryFactory from 'jsts/org/locationtech/jts/geom/GeometryFactory.js';
 import BufferOp from 'jsts/org/locationtech/jts/operation/buffer/BufferOp.js';
 import OverlayOp from 'jsts/org/locationtech/jts/operation/overlay/OverlayOp.js';
-import SnapIfNeededOverlayOp from 'jsts/org/locationtech/jts/operation/overlay/snap/SnapIfNeededOverlayOp.js';
+import SnapOverlayOp from 'jsts/org/locationtech/jts/operation/overlay/snap/SnapOverlayOp.js';
 import UnaryUnionOp from 'jsts/org/locationtech/jts/operation/union/UnaryUnionOp.js';
 import { ensureCounterClockwise, isCounterClockwise, polygonArea, type Region } from './geometry';
 import type { Polygon, Vec2 } from './model';
@@ -92,8 +92,33 @@ function fromJsts(geometry: JGeometry): Region {
   return region;
 }
 
+const snapRegion = (region: Region, grid: number): Region => {
+  const snap = (ring: Polygon): Polygon => ring.map((p) => ({ x: Math.round(p.x / grid) * grid, y: Math.round(p.y / grid) * grid }));
+  return region.map((part) => ({ outer: snap(part.outer), holes: part.holes.map(snap) }));
+};
+
+/**
+ * Overlay with fallbacks. JTS's classic overlay can throw a TopologyException when edges
+ * of the two inputs nearly coincide. JSTS's own SnapIfNeededOverlayOp does not catch that
+ * exception (its `instanceof` test fails), so the fallback chain is implemented here:
+ * plain overlay → snapping overlay → the same on coordinates rounded to 1 µm, then 1 mm.
+ */
 function overlay(a: Region, b: Region, opCode: number): Region {
-  return fromJsts(SnapIfNeededOverlayOp.overlayOp(toJsts(a), toJsts(b), opCode) as JGeometry);
+  const attempts: (() => JGeometry)[] = [
+    () => OverlayOp.overlayOp(toJsts(a), toJsts(b), opCode) as JGeometry,
+    () => SnapOverlayOp.overlayOp(toJsts(a), toJsts(b), opCode) as JGeometry,
+    () => SnapOverlayOp.overlayOp(toJsts(snapRegion(a, 1e-6)), toJsts(snapRegion(b, 1e-6)), opCode) as JGeometry,
+    () => SnapOverlayOp.overlayOp(toJsts(snapRegion(a, 1e-3)), toJsts(snapRegion(b, 1e-3)), opCode) as JGeometry,
+  ];
+  let lastError: unknown;
+  for (const attempt of attempts) {
+    try {
+      return fromJsts(attempt());
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(`Polygon overlay failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
 }
 
 /**
@@ -111,9 +136,13 @@ export function unionRegions(regions: Region[]): Region {
   const parts = regions.flat();
   if (parts.length === 0) return [];
   if (parts.length === 1) return parts;
-  const polygons = parts.map((part) => toJsts([part]));
-  const collection = factory.createGeometryCollection(polygons);
-  return fromJsts(UnaryUnionOp.union(collection) as JGeometry);
+  const collection = factory.createGeometryCollection(parts.map((part) => toJsts([part])));
+  try {
+    return fromJsts(UnaryUnionOp.union(collection) as JGeometry);
+  } catch {
+    // Buffering by zero also unions a collection and uses JTS's more tolerant buffer noding.
+    return fromJsts(BufferOp.bufferOp(collection, 0) as JGeometry);
+  }
 }
 
 /** a − b */

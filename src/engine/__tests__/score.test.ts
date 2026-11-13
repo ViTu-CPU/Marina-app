@@ -51,13 +51,19 @@ describe('computeStats, hand-calculated (SPEC §7)', () => {
     expect(s.pontoonPerBerth).toBeCloseTo(3.7, 6); // 148 / 40
   });
 
+  /**
+   * Areas that involve fairways are compared to ± 0.5 m²: fairway strips are built with a
+   * 1 mm margin (fairways.ts, OVERLAY_MARGIN), and areas are displayed as whole m².
+   */
+  const near = (actual: number, expected: number) => expect(Math.abs(actual - expected)).toBeLessThan(0.5);
+
   it('water areas', () => {
     // Fairways: two row strips 60 × 8 = 480 m² each, head strip (3 + 2 × 13.5) × 8 = 240 m².
-    expect(s.fairwayArea).toBeCloseTo(1200, 3);
+    near(s.fairwayArea, 1200);
     // Slots: 40 × 2.5 × 5.5 = 550 m².
-    expect(s.marinaWaterArea).toBeCloseTo(1750, 3);
+    near(s.marinaWaterArea, 1750);
     // 30 800 − 250.4 − 1750 = 28 799.6 m².
-    expect(s.freeWaterArea).toBeCloseTo(28799.6, 3);
+    near(s.freeWaterArea, 28799.6);
     // 40 berths on 30.8 thousand m².
     expect(s.berthsPer1000m2).toBeCloseTo(40 / 30.8, 9);
   });
@@ -72,15 +78,14 @@ describe('computeStats, hand-calculated (SPEC §7)', () => {
     );
     expect(edited.stats.totalBerths).toBe(36);
     expect(edited.stats.pontoonLength).toBeCloseTo(148, 6); // structures stay
-    expect(edited.stats.marinaWaterArea).toBeCloseTo(1750 - 4 * 13.75, 3);
+    near(edited.stats.marinaWaterArea, 1750 - 4 * 13.75);
     expect(edited.modified).toBe(true);
   });
 
   it('obstacles are not free water', () => {
     // The rock 16-gon is 16 × 6² × tan(π/16) ≈ 114.6 m².
     const withRock = singlePierLayout(FIVE_M_ONLY, 60, 60, RECT_BASIN_SITE);
-    // Tolerance 0.05 m²: the rock's vertices are stored rounded to millimetres.
-    expect(withRock.stats.freeWaterArea).toBeCloseTo(28799.6 - 16 * 36 * Math.tan(Math.PI / 16), 1);
+    near(withRock.stats.freeWaterArea, 28799.6 - 16 * 36 * Math.tan(Math.PI / 16));
   });
 
   it('mix deviation: half the sum of absolute share differences', () => {

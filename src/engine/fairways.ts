@@ -7,15 +7,33 @@
 import { regionFromPolygon, roundVec, type Region } from './geometry';
 import { differenceRegions, intersectRegions, unionRegions } from './geometryOps';
 import type { Fairway, MainPier } from './model';
-import { localRectToPolygon } from './patterns';
+import { localRectToPolygon, type LocalRect } from './patterns';
 import { pierAxis, rowFrame, type RowInfo } from './rows';
-import { pierPolygon, type PreparedSite } from './site';
+import type { PreparedSite } from './site';
+
+/**
+ * Shapes handed to the polygon overlay are grown by this much, m. Rows, piers, strips and
+ * the shoreline would otherwise share edges exactly, and nearly coincident edges are what
+ * makes polygon overlay numerically fragile. One millimetre is far below the 1 cm
+ * tolerance of the checks and invisible in areas shown as whole square metres.
+ */
+export const OVERLAY_MARGIN = 0.001;
+
+const grow = (r: LocalRect): LocalRect => ({
+  s0: r.s0 - OVERLAY_MARGIN,
+  s1: r.s1 + OVERLAY_MARGIN,
+  d0: r.d0 - OVERLAY_MARGIN,
+  d1: r.d1 + OVERLAY_MARGIN,
+});
 
 /** Piers and the full blocks of their berth rows: water that is not available for passing. */
 export function occupiedRegion(piers: MainPier[], rows: RowInfo[]): Region {
-  const shapes: Region[] = piers.map((p) => regionFromPolygon(pierPolygon(p.start, p.end, p.width)));
+  const shapes: Region[] = piers.map((p) => {
+    const { length } = pierAxis(p);
+    return regionFromPolygon(localRectToPolygon(grow({ s0: 0, s1: length, d0: -p.width, d1: 0 }), rowFrame(p, 'left')));
+  });
   for (const row of rows) {
-    shapes.push(regionFromPolygon(localRectToPolygon({ s0: row.sMin, s1: row.sMax, d0: 0, d1: row.depth }, row.frame)));
+    shapes.push(regionFromPolygon(localRectToPolygon(grow({ s0: row.sMin, s1: row.sMax, d0: 0, d1: row.depth }), row.frame)));
   }
   return unionRegions(shapes);
 }
@@ -34,7 +52,7 @@ export function buildFairways(piers: MainPier[], rows: RowInfo[], prepared: Prep
     for (const row of pierRows) {
       strips.push(
         regionFromPolygon(
-          localRectToPolygon({ s0: row.sMin, s1: length, d0: row.depth, d1: row.depth + row.fairwayWidth }, row.frame),
+          localRectToPolygon(grow({ s0: row.sMin, s1: length, d0: row.depth, d1: row.depth + row.fairwayWidth }), row.frame),
         ),
       );
     }
@@ -46,7 +64,7 @@ export function buildFairways(piers: MainPier[], rows: RowInfo[], prepared: Prep
     strips.push(
       regionFromPolygon(
         localRectToPolygon(
-          { s0: length, s1: length + headWidth, d0: -(pier.width + reach('right')), d1: reach('left') },
+          grow({ s0: length, s1: length + headWidth, d0: -(pier.width + reach('right')), d1: reach('left') }),
           rowFrame(pier, 'left'),
         ),
       ),

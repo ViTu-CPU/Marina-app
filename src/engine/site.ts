@@ -95,6 +95,14 @@ export function pierPolygon(start: Vec2, end: Vec2, width: number): Polygon {
   ];
 }
 
+/** Counters filled in by `placePiersOnLine`, used for diagnostics when nothing fits. */
+export interface PlacementReport {
+  /** Stretches of buildable water that touch the shoreline. */
+  shoreRuns: number;
+  /** Longest such stretch, m. */
+  longestShoreRun: number;
+}
+
 export interface PierPlacementOptions {
   width: number;
   maxLength: number;
@@ -116,6 +124,7 @@ export function placePiersOnLine(
   base: Vec2,
   dir: Vec2,
   options: PierPlacementOptions,
+  report?: PlacementReport,
 ): PierSegment[] {
   const { site, structureRegion } = prepared;
   const left = { x: -dir.y, y: dir.x };
@@ -155,19 +164,16 @@ export function placePiersOnLine(
 
   const piers: PierSegment[] = [];
   for (const [t0, t1] of intervals ?? []) {
+    const fromStart = touchesShore(t0);
+    if (!fromStart && !touchesShore(t1)) continue;
+    if (report) {
+      report.shoreRuns++;
+      report.longestShoreRun = Math.max(report.longestShoreRun, t1 - t0);
+    }
     const usable = Math.min(options.maxLength, t1 - t0 - options.headClearance);
     if (usable < options.minLength || usable <= 0) continue;
-    let startT: number;
-    let endT: number;
-    if (touchesShore(t0)) {
-      startT = t0;
-      endT = t0 + usable;
-    } else if (touchesShore(t1)) {
-      startT = t1;
-      endT = t1 - usable;
-    } else {
-      continue;
-    }
+    const startT = fromStart ? t0 : t1;
+    const endT = fromStart ? t0 + usable : t1 - usable;
     const start = add(base, scale(dir, startT));
     const end = add(base, scale(dir, endT));
     // The three lines can miss a boundary spike narrower than half the pier: verify the rectangle.

@@ -212,14 +212,19 @@ export function pointInRing(p: Vec2, ring: Polygon): boolean {
  * or null when they do not intersect. Parallel and collinear segments return null.
  */
 export function segmentIntersectionParam(a: Vec2, b: Vec2, c: Vec2, d: Vec2): number | null {
-  const r = sub(b, a);
-  const s = sub(d, c);
-  const denom = cross(r, s);
+  // Written out without helper calls: this is the innermost loop of the generator.
+  const rx = b.x - a.x;
+  const ry = b.y - a.y;
+  const sx = d.x - c.x;
+  const sy = d.y - c.y;
+  const denom = rx * sy - ry * sx;
   if (denom === 0) return null;
-  const ac = sub(c, a);
-  const t = cross(ac, s) / denom;
-  const u = cross(ac, r) / denom;
-  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  const acx = c.x - a.x;
+  const acy = c.y - a.y;
+  const t = (acx * sy - acy * sx) / denom;
+  if (t < 0 || t > 1) return null;
+  const u = (acx * ry - acy * rx) / denom;
+  if (u < 0 || u > 1) return null;
   return t;
 }
 
@@ -313,8 +318,15 @@ export function regionArea(region: Region): number {
   return sum;
 }
 
-export const pointInPart = (p: Vec2, part: PolygonWithHoles): boolean =>
-  pointInRing(p, part.outer) && !part.holes.some((h) => pointInRing(p, h));
+const inBox = (p: Vec2, b: Box): boolean => p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY;
+
+export function pointInPart(p: Vec2, part: PolygonWithHoles): boolean {
+  if (!pointInRing(p, part.outer)) return false;
+  for (const hole of part.holes) {
+    if (inBox(p, ringBox(hole)) && pointInRing(p, hole)) return false;
+  }
+  return true;
+}
 
 export const pointInRegion = (p: Vec2, region: Region): boolean =>
   region.some((part) => pointInPart(p, part));
@@ -325,7 +337,20 @@ export const rotateRegion = (region: Region, angleRad: number): Region =>
     holes: part.holes.map((h) => rotatePolygon(h, angleRad)),
   }));
 
+const ringBoxes = new WeakMap<Polygon, Box>();
+
+/** Bounding box of a ring, remembered per ring object (rings are treated as immutable). */
+function ringBox(ring: Polygon): Box {
+  let box = ringBoxes.get(ring);
+  if (!box) {
+    box = boundingBox(ring);
+    ringBoxes.set(ring, box);
+  }
+  return box;
+}
+
 function ringCrossesPolygon(ring: Polygon, poly: Polygon, polyBox: Box): boolean {
+  if (!boxesOverlap(ringBox(ring), polyBox)) return false;
   for (let i = 0; i < ring.length; i++) {
     const a = ring[i]!;
     const b = ring[(i + 1) % ring.length]!;
@@ -356,6 +381,7 @@ export function convexInsideRegion(poly: Polygon, region: Region, tolerance = EP
   for (const v of p) if (!pointInPart(v, part)) return false;
   if (ringCrossesPolygon(part.outer, p, box)) return false;
   for (const hole of part.holes) {
+    if (!boxesOverlap(ringBox(hole), box)) continue;
     if (ringCrossesPolygon(hole, p, box)) return false;
     // No crossing: the hole is either entirely inside the polygon or entirely outside it.
     if (pointInRing(hole[0]!, p)) return false;
@@ -387,8 +413,15 @@ export function convexIntersectsRegion(poly: Polygon, region: Region, tolerance 
  */
 export function clipSegmentToRegion(a: Vec2, b: Vec2, region: Region): [number, number][] {
   const cuts = [0, 1];
+  const segmentBox: Box = {
+    minX: Math.min(a.x, b.x),
+    minY: Math.min(a.y, b.y),
+    maxX: Math.max(a.x, b.x),
+    maxY: Math.max(a.y, b.y),
+  };
   for (const part of region) {
     for (const ring of [part.outer, ...part.holes]) {
+      if (!boxesOverlap(ringBox(ring), segmentBox)) continue;
       for (let i = 0; i < ring.length; i++) {
         const t = segmentIntersectionParam(a, b, ring[i]!, ring[(i + 1) % ring.length]!);
         if (t !== null) cuts.push(t);
@@ -460,4 +493,41 @@ export function distancePointToPart(p: Vec2, part: PolygonWithHoles): number {
   let best = distancePointToRing(p, part.outer);
   for (const hole of part.holes) best = Math.min(best, distancePointToRing(p, hole));
   return best;
+}
+
+/**
+ * True when the segment (x0, y0)–(x1, y1) intersects the closed axis-aligned box
+ * (Liang–Barsky clipping). Takes plain numbers because it runs in the generator's inner loop.
+ */
+export function segmentIntersectsBox(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const p = [-dx, dx, -dy, dy];
+  const q = [x0 - minX, maxX - x0, y0 - minY, maxY - y0];
+  for (let i = 0; i < 4; i++) {
+    if (p[i] === 0) {
+      if (q[i]! < 0) return false;
+    } else {
+      const r = q[i]! / p[i]!;
+      if (p[i]! < 0) {
+        if (r > t1) return false;
+        if (r > t0) t0 = r;
+      } else {
+        if (r < t0) return false;
+        if (r < t1) t1 = r;
+      }
+    }
+  }
+  return t0 <= t1;
 }
