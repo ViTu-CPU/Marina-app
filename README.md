@@ -39,6 +39,18 @@ Other commands:
 
 `dist/` uses relative paths and can be hosted from any directory of a static web server.
 
+### Publishing to GitHub Pages
+
+`.github/workflows/pages.yml` tests, builds and publishes `dist/` on every push to `main`.
+It needs a one-time setting in the repository: **Settings → Pages → Build and deployment →
+Source: GitHub Actions**. Until then the workflow only tests and builds, and says so in a
+warning. The site is then served at `https://<owner>.github.io/<repository>/`.
+
+Two things to know before switching it on: a GitHub Pages site is **public** even when the
+repository is private, and on the GitHub Free plan Pages is available for public
+repositories only
+([GitHub Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)).
+
 The browser test needs [Playwright](https://playwright.dev), which is deliberately not a
 dependency of this project. To run it, install Playwright and a Chromium separately:
 
