@@ -21,6 +21,6 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 
 | # | Decision | Why |
 |---|---|---|
-| I1 | Geometry library: **JSTS**, imported only inside `src/engine/geometry.ts`. | SPEC §5.1/§6 need polygon buffering. `@flatten-js/core` 1.6.15 has no buffer/offset operation (it is a separate package last published 2023-08). JSTS's bundled type declarations do not cover the operations we use, so the wrapper carries its own narrow typings. |
+| I1 | Geometry library: **JSTS**, imported only inside `src/engine/geometryOps.ts` (buffer, union, difference, intersection). `src/engine/geometry.ts` holds the pure vector/polygon maths and predicates with no library dependency. | SPEC §5.1/§6 need polygon buffering. `@flatten-js/core` 1.6.15 has no buffer/offset operation (it is a separate package last published 2023-08). JSTS's bundled type declarations do not cover the operations we use, so the wrapper carries its own narrow typings. |
 | I2 | Undo/redo is a hand-written snapshot history (past / present / future) over the project document only. | View state (pan, zoom, active tool) must not be undoable; keeps dependencies small. |
 | I3 | No ESLint for now. Gates are `tsc --noEmit` (strict) and the test suite. | `typescript-eslint` declares peer support for TypeScript `<6.1.0` only (checked on npm 2026-11-13); SPEC does not require a linter. |
