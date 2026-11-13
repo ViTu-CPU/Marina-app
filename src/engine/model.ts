@@ -181,9 +181,11 @@ export interface Stats {
   pontoonLength: number;
   /** Deck area of main piers and fingers, m². */
   pontoonDeckArea: number;
+  /** Extension: area of the fairway polygons, m². */
+  fairwayArea: number;
   /** Water occupied by the marina: berth slots + fairways, m². */
   marinaWaterArea: number;
-  /** Water area not occupied by pontoons, slots or fairways, m². */
+  /** Water (less obstacles) not occupied by pontoons, slots or fairways, m². */
   freeWaterArea: number;
   berthsPer1000m2: number;
   /** Pontoon metres per berth; 0 when there are no berths. */

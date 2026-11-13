@@ -12,6 +12,7 @@ import {
   dot,
   EPS,
   intersectIntervals,
+  regionArea,
   regionFromPolygon,
   scale,
   type Region,
@@ -28,6 +29,10 @@ export const SHORE_TOLERANCE = 0.5;
 export interface PreparedSite {
   site: Site;
   water: Region;
+  /** Area of the water polygon, m². */
+  waterArea: number;
+  /** Water area less the obstacles themselves (without clearance), m². */
+  openWaterArea: number;
   /** Union of all obstacles grown by `obstacleClearance`. */
   obstacleBuffer: Region;
   /** Union of the zones of each kind. */
@@ -57,9 +62,12 @@ export function prepareSite(site: Site, params: Pick<Params, 'obstacleClearance'
     protected: zoneRegion('protected'),
   };
   const withoutObstacles = differenceRegions(differenceRegions(water, obstacleBuffer), zones.protected);
+  const obstacles = unionRegions(site.obstacles.map((o) => regionFromPolygon(o.shape)));
   return {
     site,
     water,
+    waterArea: regionArea(water),
+    openWaterArea: regionArea(differenceRegions(water, obstacles)),
     obstacleBuffer,
     zones,
     structureRegion: differenceRegions(withoutObstacles, zones.noStructures),
