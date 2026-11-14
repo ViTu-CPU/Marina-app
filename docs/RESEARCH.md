@@ -127,13 +127,16 @@ Source: [hinnasto](https://topmarinelaiturit.fi/hinnasto/),
 [venepuomit](https://topmarinelaiturit.fi/laituritarvikkeet/venepuomit/),
 [käveltävät venepuomit](https://topmarinelaiturit.fi/laituritarvikkeet/kaveltavat-venepuomit/).
 *"Kaikki hinnat sisältävät arvonlisäveron"*, *"Hinnat eivät sisällä asennuskuluja."*
-Part of the price list page was only available as a machine summary; rows marked
-*unverified* in the catalogue come from that part.
+Part of the price list page was only available as a machine summary in the first session;
+those rows were checked verbatim on the page in the third session (2026-11-14, §9.10).
 
 - Heavy pontoons (pontoon price without the 717 € gangway, € incl. VAT): MDP 2,4×9 m
-  7 813 (8,3 t capacity, 9,4 t weight, deck 0,4 m); MDP 2,4×12 m 10 037; HD 2,4×12 m 12 120
+  7 813 (8,3 t capacity, 9,4 t weight, deck 0,4 m); MDP 2,4×12 m 10 037; MDP 2,4×15 m 12 213
+  (16,3 t / 13,9 t / 0,46 m, price list page); HD 2,4×12 m 12 120
   (15,0 t / 15,0 t / 0,54 m); HD 2,4×15 m 14 886 (19,8 t / 17,9 t / 0,56 m). HD: allowed wave
-  height 0,5 m, current 1 m/s, boats up to 24 m; MD: wave 0,3 m.
+  height 0,5 m, current 1 m/s, boats up to 24 m; MD: wave 0,3 m. HD 3,0 × 9 / 12 / 15 m:
+  11 126 / 14 532 / 17 790 € (13,7 / 20,1 / 26,3 t capacity, 13,8 / 17,3 / 20,7 t weight,
+  deck 0,53 / 0,57 / 0,6 m).
   *"Jäätyminen on sallittua, jään liikkuminen ei"* (freezing allowed, moving ice not).
   Anchoring for HD: chain 20–22 mm, concrete anchors 2000–3000 kg.
 - Finger booms ("venepuomit", height above water 0,5 m): 4 m 595; 5 m 628; 6 m 665; 7 m 730;
@@ -143,7 +146,13 @@ Part of the price list page was only available as a machine summary; rows marked
   (components 542 + 300 + 28); 2 × 2000 kg + 20 mm 30 m + 4 × 25 mm = 1 574 €;
   2 × 3000 kg + 20 mm 40 m = 2 070 €.
 - Gangway 1,2 × 5 m 717 €; shore abutments (maatuki) 487–828 €; power pedestals
-  1 416–1 717 € (*unverified*); ladders 301–766 € (*unverified*).
+  RM Platinum 2/4/6 × 16 A + water 1 416 / 1 581 / 1 717 €; *"Turvaporras"* 382 €; swimming
+  ladders 301–766 € (checked verbatim 2026-11-14).
+- The price list page (read 2026-11-14) words the MD package differently from the anchoring
+  page used above: *"MD Massiiviponttonilaiturin ankkurointipaketti- betonipaino 2x1000kg,
+  kettinki 16mm, sakkeli20 mm. 1574 €"* — the same contents as the 870 € package at a higher
+  price, so one of the two pages is probably in error. The catalogue keeps the component
+  prices of the anchoring page.
 - Rules of thumb on the same site **conflict**: chain length *"viisi kertaa veden syvyyden
   verran"* ([syvyysmittaus](https://topmarinelaiturit.fi/hyodyllista/laiturin-ankkurointi-syvyysmittaus/))
   versus about twice the depth ([ponttonilaituri-tieto](https://topmarinelaiturit.fi/hyodyllista/ponttonilaituri-tieto/)).
@@ -518,8 +527,11 @@ status not stated on the product page: 300 kg 126; 600 kg 205; 800 kg 270; 1 000
 (1 190 × 1 190 × 320 mm); 1 500 kg 435; 2 000 kg 550; 2 400 kg 660; 3 000 kg 790
 (1 190 × 2 390 × 460 mm). Chain *"DIN 763 (5685C)"* hot-dip galvanised, breaking strength
 10 mm n. 4 t … 22 mm n. 19 t (same figures as Laatulaituri), sold in 7.5/15/30 m lengths
-(e.g. 20 mm 30 m 1 200 €). Packages up to *"koneasennus 2 x 2000 kg"*. Not yet in the price
-list ([anchoring](https://savorak.fi/tuoteosasto/ankkurointi/),
+(e.g. 20 mm 30 m 1 200 €). Packages up to *"koneasennus 2 x 2000 kg"* (3 815 €). In the price
+list since the third session (§9.10): the order terms say *"Tuotteiden hinnat sisältävät
+arvonlisäveron."* ([toimitusehdot](https://savorak.fi/toimitusehdot/)); chain prices per metre
+from the 30 m lengths (10 mm 325 €, 13 mm 510 €, 16 mm 760 €, 20 mm 1 200 €, 22 mm 1 500 € per
+30 m; DECISIONS I63) ([anchoring](https://savorak.fi/tuoteosasto/ankkurointi/),
 [weights](https://savorak.fi/tuotteet/betonipaino-300kg/),
 [chain](https://savorak.fi/tuotteet/kettinki-20mm-kuumasinkitty/)).
 
@@ -536,3 +548,23 @@ Used only as the source of the default splay angle (D25); a light kit, not a mar
 
 www.theseus.fi answers with a Cloudflare browser check; the NAVFAC handbook on apps.dtic.mil
 is refused by the server ("The request is blocked."); shipmin.gov.in was not tried again.
+In the third session (2026-11-14) theseus.fi still answered HTTP 403.
+
+### 9.10 Third session (2026-11-14): price list checks and the search for real anchoring plans
+
+- **Price list.** Top Marine's HD 3,0 m pontoons, ladders and power pedestals were checked
+  verbatim on the [price list page](https://topmarinelaiturit.fi/hinnasto/) (§2.3); MDP
+  2,4 × 15 m added. Savorak's weights 300–3 000 kg and chains 10–22 mm added (§9.7). A-Laiturit
+  still publishes no breaking load for its 16 and 20 mm G40 chains
+  ([20 mm](https://www.a-laiturit.fi/tuote/kettinki-pitkahahlo-20-mm-metritavara-g40-lujuusluokiteltu/)):
+  *"Laatuluokitus DIN 763 Grade 40 (erityiskova). Kettinki on vetotestattu Suomessa."* They stay
+  out of the anchoring calculation.
+- **Real anchoring plans for calibration.** No public Finnish anchoring plan was found (web
+  searches for *ankkurointisuunnitelma* and municipal marina tenders). Scottish marine licence
+  applications were read: the Easdale pontoon application lists *"Mooring Chains no 20 at 15m, 1
+  at 20m, 1 at 50m, 2 at 44m"* for 80 m of aluminium-and-timber and HDPE pontoons (sections
+  11.5 × 2.5 m and 15 × 2.5 m), but chain sizes, anchors and loads are not given and the drawings
+  are redacted ([application](https://marine.gov.scot/sites/default/files/updated_complete_easdale_pontoon_application_1_redacted.pdf));
+  the Aith (Shetland) pontoon drawings show a pile-guided pontoon, not chains
+  ([details](https://marine.gov.scot/sites/default/files/pontoon_details_collated.pdf)). Neither
+  can calibrate the method.
