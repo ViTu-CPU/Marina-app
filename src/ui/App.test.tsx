@@ -123,6 +123,32 @@ describe('app shell (SPEC §8)', () => {
     expect(appStore.getState().project.params.berthTarget).toBe('count');
   });
 
+  it('a pier side can be filled with one class, a berth can change class, a pier can be deleted (D22)', () => {
+    renderShell();
+    act(() => {
+      appStore.getState().loadDemo('rectBasin');
+      appStore.getState().generate();
+    });
+    const layout = () => appStore.getState().project.layouts.find((l) => l.id === appStore.getState().selectedLayoutId)!;
+    const pier = layout().piers[0]!;
+    act(() => appStore.getState().select({ kind: 'pier', id: pier.id }));
+    fireEvent.change(screen.getByLabelText('Boat class to fill with'), { target: { value: 'c5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Fill left side' }));
+    const left = layout().berths.filter((b) => b.pierId === pier.id && b.side === 'left');
+    expect(left.length).toBeGreaterThan(0);
+    expect(left.every((b) => b.boatClassId === 'c5')).toBe(true);
+    expect(layout().modified).toBe(true);
+
+    act(() => appStore.getState().select({ kind: 'berth', id: left[0]!.id }));
+    fireEvent.change(screen.getByLabelText('Boat class'), { target: { value: 'c7' } });
+    expect(layout().berths.find((b) => b.id === left[0]!.id)!.boatClassId).toBe('c7');
+
+    act(() => appStore.getState().select({ kind: 'pier', id: pier.id }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete pier' }));
+    expect(layout().piers.some((p) => p.id === pier.id)).toBe(false);
+    expect(appStore.getState().selection).toBeNull();
+  });
+
   it('removing a berth from the selection panel marks the layout as manually edited', () => {
     renderShell();
     act(() => {

@@ -9,7 +9,18 @@ import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { DEFAULT_BOAT_CLASSES, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import { DEMO_PROJECTS, type DemoEntry } from '../engine/demos';
-import { movePier, setBerthRemoved, setPierLocked, type EditContext } from '../engine/edit';
+import {
+  addPier,
+  deletePier,
+  fillPierSide,
+  movePier,
+  setBerthClass,
+  setBerthRemoved,
+  setPierLength,
+  setPierLocked,
+  type EditContext,
+  type FillSideOptions,
+} from '../engine/edit';
 import { generateLayouts, type Diagnostic } from '../engine/generate';
 import { boundingBox, distance, ensureCounterClockwise, type Box } from '../engine/geometry';
 import { evaluateLayout } from '../engine/layout';
@@ -22,6 +33,7 @@ import {
   type ObjectiveSettings,
   type ObstacleKind,
   type Params,
+  type PierSide,
   type Project,
   type Site,
   type Vec2,
@@ -72,6 +84,7 @@ export type ToolId =
   | 'shoreline'
   | 'entrance'
   | 'access'
+  | 'pier'
   | 'obstacle'
   | 'zone'
   | 'measure'
@@ -180,6 +193,12 @@ export interface AppState {
   setBerthRemoved: (layoutId: string, berthId: string, removed: boolean) => void;
   setPierLocked: (layoutId: string, pierId: string, locked: boolean) => void;
   movePier: (layoutId: string, pierId: string, delta: Vec2, options?: CommitOptions) => void;
+  /** D22: refill one side of a pier with one class or the mix. */
+  fillPierSide: (layoutId: string, pierId: string, side: PierSide, options: FillSideOptions) => void;
+  setBerthClass: (layoutId: string, berthId: string, classId: string) => void;
+  deletePier: (layoutId: string, pierId: string) => void;
+  setPierLength: (layoutId: string, pierId: string, length: number, options?: CommitOptions) => void;
+  addPier: (layoutId: string, start: Vec2, end: Vec2) => void;
 
   setView: (view: View) => void;
   setViewport: (size: Size) => void;
@@ -364,6 +383,21 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       setPierLocked: (layoutId, pierId, locked) => editLayout(layoutId, (layout) => setPierLocked(layout, pierId, locked)),
       movePier: (layoutId, pierId, delta, options) =>
         editLayout(layoutId, (layout, ctx) => movePier(layout, pierId, delta, ctx), options),
+      fillPierSide: (layoutId, pierId, side, options) =>
+        editLayout(layoutId, (layout, ctx) => fillPierSide(layout, pierId, side, options, ctx)),
+      setBerthClass: (layoutId, berthId, classId) =>
+        editLayout(layoutId, (layout, ctx) => setBerthClass(layout, berthId, classId, ctx)),
+      deletePier: (layoutId, pierId) => {
+        editLayout(layoutId, (layout, ctx) => deletePier(layout, pierId, ctx));
+        const { selection } = get();
+        if (selection && !get().project.layouts.find((l) => l.id === layoutId)?.piers.some((p) => p.id === pierId)) {
+          // The pier (and with it any selected berth of it) is gone.
+          set({ selection: null });
+        }
+      },
+      setPierLength: (layoutId, pierId, length, options) =>
+        editLayout(layoutId, (layout, ctx) => setPierLength(layout, pierId, length, ctx), options),
+      addPier: (layoutId, start, end) => editLayout(layoutId, (layout, ctx) => addPier(layout, start, end, ctx)),
 
       setView: (view) => set({ view }),
       setViewport: (viewport) => set({ viewport }),
@@ -384,7 +418,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
           return;
         }
         set({ draft: [...draft, point] });
-        if ((tool === 'entrance' || tool === 'access') && draft.length === 1) get().finishDraft();
+        if ((tool === 'entrance' || tool === 'access' || tool === 'pier') && draft.length === 1) get().finishDraft();
       },
       removeLastDraftPoint: () => set((s) => ({ draft: s.draft.slice(0, -1) })),
       cancelDraft: () => set({ draft: [] }),
@@ -402,6 +436,16 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
           set({ tool: 'select' });
         } else if (tool === 'entrance' && points.length >= 2) {
           get().updateSite((site) => ({ ...site, entrance: { a: points[0]!, b: points[1]! } }));
+          set({ tool: 'select' });
+        } else if (tool === 'pier' && points.length >= 2) {
+          // D22: a new empty pier in the selected alternative (shore end first).
+          const layoutId = get().selectedLayoutId;
+          if (layoutId) {
+            const before = get().project.layouts.find((l) => l.id === layoutId)?.piers.length ?? 0;
+            get().addPier(layoutId, points[0]!, points[1]!);
+            const piers = get().project.layouts.find((l) => l.id === layoutId)?.piers ?? [];
+            if (piers.length > before) set({ selection: { kind: 'pier', id: piers[piers.length - 1]!.id } });
+          }
           set({ tool: 'select' });
         } else if (tool === 'access' && points.length >= 2) {
           // Access pontoon (D21): the two clicks are the ends of its centreline; it takes

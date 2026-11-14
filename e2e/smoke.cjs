@@ -59,7 +59,7 @@ async function waitForServer() {
     };
     const state = () => page.evaluate(() => {
       const s = window.__marina.getState();
-      return JSON.parse(JSON.stringify({ project: s.project, view: s.view, viewport: s.viewport, selectedLayoutId: s.selectedLayoutId, tool: s.tool, draft: s.draft }));
+      return JSON.parse(JSON.stringify({ project: s.project, view: s.view, viewport: s.viewport, selectedLayoutId: s.selectedLayoutId, tool: s.tool, draft: s.draft, selection: s.selection }));
     });
     /** Screen position of a world point. */
     const toScreen = (s, p) => ({
@@ -301,6 +301,32 @@ async function waitForServer() {
       assert.ok(between.length > 0);
       for (const p of between) assert.ok(Math.abs(p.start.y - edge) < 0.6, `pier ${p.id} starts at y = ${p.start.y}`);
       await page.screenshot({ path: path.join(outDir, 'access-pontoon.png') });
+    });
+
+    await step('delete a pier, draw a new one with "Add pier" and fill its sides (D22)', async () => {
+      let s = await state();
+      const layout = s.project.layouts.find((l) => l.id === s.selectedLayoutId);
+      const pier = layout.piers.find((p) => !p.locked);
+      await page.evaluate((id) => window.__marina.getState().select({ kind: 'pier', id }), pier.id);
+      await page.getByRole('button', { name: 'Delete pier', exact: true }).click();
+      s = await state();
+      assert.ok(!s.project.layouts.find((l) => l.id === s.selectedLayoutId).piers.some((p) => p.id === pier.id));
+      await page.getByRole('button', { name: 'Add pier', exact: true }).click();
+      for (const p of [pier.start, pier.end]) {
+        const q = toScreen(s, p);
+        await page.mouse.click(q.x, q.y);
+      }
+      s = await state();
+      const edited = s.project.layouts.find((l) => l.id === s.selectedLayoutId);
+      const added = edited.piers.find((p) => p.origin === 'manual');
+      assert.ok(added, 'pier added');
+      assert.equal(s.selection.id, added.id);
+      await page.getByRole('button', { name: 'Fill left side', exact: true }).click();
+      await page.getByRole('button', { name: 'Fill right side', exact: true }).click();
+      s = await state();
+      const filled = s.project.layouts.find((l) => l.id === s.selectedLayoutId);
+      assert.ok(filled.berths.filter((b) => b.pierId === added.id).length > 0);
+      await page.screenshot({ path: path.join(outDir, 'add-pier.png') });
     });
 
     await step('language toggle', async () => {

@@ -28,6 +28,7 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | D19 | **Price file (2026-11-14):** the prices and calculation parameters live in an Excel file in the repository that the user can edit. | Requested by the owner. |
 | D20 | **Target counts (2026-11-14):** the boat mix can be given as a target **number of berths per class** instead of shares. | Owner request. Details in I31–I34. |
 | D21 | **Access pontoon (2026-11-14):** empty pontoon metres can be placed, e.g. in front of a quay wall too high to step down from, and main piers ("pistolaiturit") start from it. | Owner request. Details in I35–I38. |
+| D22 | **More manual editing (2026-11-14):** fill one side of a pier with one boat class or the mix (with empty metres at the shore end), change a berth's class, change a pier's length, delete a pier, add a pier. | Owner request ("assign pier sides to one berth type", "add/remove berths"). Details in I39–I43. |
 
 ## Defaults chosen by the implementer
 
@@ -71,6 +72,11 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | I36 | The access pontoon's length and deck area count in the pontoon metres of **every** layout (`Stats.accessPontoonLength`). | It is built whichever layout is chosen. |
 | I37 | An access pontoon more than **12 m** from the shoreline gets a warning: Marinetek states access bridges of "4–12 m lengths" (docs/RESEARCH.md §2.1). | Reaching it needs a gangway. |
 | I38 | Drawing and editing an access pontoon does not snap to the site. | It lies off the wall on purpose; snapping pulled it onto the shoreline. |
+| I39 | **Filling a side** replaces all berths and fingers on that side by a fresh fill with the generator's row filling (I7–I10), using only the chosen class or the project's mix; the bays start `emptyLength` m from the shore end (default `shoreOffset`). The fill is kept clear of the site's obstacles and zones and of every other pier, finger and slot of the layout. | Reuses the generator's checks, so a manual fill is as valid as a generated one. |
+| I40 | A fill **never takes the fairway** another row's berths need in front of them: new berths whose slot lies in such a fairway are dropped, with fingers left without a berth. | Filling one side must not break the rows already there. Found in the browser test. |
+| I41 | With the mix, the classes follow the targets counted over the whole layout; target counts are **not** applied as limits in manual edits. | The user asked for that side to be filled; the shortfall statistic still shows the result. |
+| I42 | **Changing a berth's class** keeps the slot's start along the row and its position at the pier edge; the slot gets the new class's size. A wider boat therefore shows up as an overlap issue instead of moving its neighbours. | Transparent; the user can fill the side again. |
+| I43 | **Changing a pier's length** keeps the shore end and deletes fingers and berths that would end beyond the new head (rounded to 0.1 m). Deleting or resizing a locked pier is not possible. | Same rule as moving (U1, U2). |
 
 ## User interface
 
@@ -89,6 +95,7 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | U11 | Issue messages come from the engine in English; the rest of the UI is translated. | Finnish may be partial in v1 (SPEC §2); full localisation is Phase 3. |
 | U12 | PNG export is the canvas as shown, at 2× resolution, with scale bar, north arrow and disclaimer drawn on it. CSV decimals use a point and no thousands separators. | Exports must carry the disclaimer (SPEC §1) and be readable by spreadsheets. |
 | U13 | The store is reachable as `window.__marina` for debugging and for the end-to-end test. | The canvas has no DOM elements to query. |
+| U18 | "Add pier" draws a new empty pier in the selected alternative with two clicks (shore end first); it is then selected so its sides can be filled. | Same two-click pattern as the entrance. |
 | U14 | **The drawing stays in local metres.** The map only stores the latitude and longitude of the local origin (`Project.map`). Nothing in the engine reads it; no distance or area is computed from latitude/longitude (SPEC §3). | Keeps the engine and every existing project unchanged. |
 | U15 | **Map scale.** Tiles are in Web Mercator. They are scaled to ground metres with two factors taken at the origin, on the WGS 84 ellipsoid: east–west `cos φ / √(1 − e² sin² φ)`, north–south `(1 − e²) cos φ / (1 − e² sin² φ)^1.5`. | Web Mercator stretches the map by about 1/cos φ (×2 at 60° N) and slightly differently in the two directions. Checked against reference lengths at 60° N (1° of longitude 55 800 m, 1° of latitude 111 412 m): 5 cm over 450 m, under 0.2 m over 1.1 km. |
 | U16 | **Choosing the place:** the user types "lat, lon" or pastes a link from openstreetmap.org or Google Maps. The place is put in the middle of the current view; existing drawings do not move. There is no place-name search. | A search would need a geocoding service with its own usage terms. |

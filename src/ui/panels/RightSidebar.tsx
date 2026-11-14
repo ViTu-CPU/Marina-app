@@ -1,13 +1,14 @@
 /** Right sidebar (SPEC §8): alternatives, selection, comparison table, issues. */
+import { useState } from 'react';
 import { boundingBox } from '../../engine/geometry';
-import type { Feasibility, Issue, Layout } from '../../engine/model';
+import type { Feasibility, Issue, Layout, MainPier, PierSide } from '../../engine/model';
 import { pierAxis } from '../../engine/rows';
 import { pierPolygon } from '../../engine/site';
 import { appStore, useAppStore } from '../../state/store';
 import { comparisonRows } from '../compare';
 import { formatCount, formatLength } from '../format';
 import { useT } from '../useT';
-import { Button, Section } from './fields';
+import { Button, NumberField, Section } from './fields';
 
 const state = () => appStore.getState();
 
@@ -99,11 +100,49 @@ function Alternatives() {
   );
 }
 
+/** D22: refill one side of the selected pier with one class or the mix. */
+function FillSides({ layout, pier }: { layout: Layout; pier: MainPier }) {
+  const t = useT();
+  const classes = useAppStore((s) => s.project.boatClasses);
+  const shoreOffset = useAppStore((s) => s.project.params.shoreOffset);
+  const [classId, setClassId] = useState<string>('');
+  const [emptyLength, setEmptyLength] = useState<number>(shoreOffset);
+  const fill = (side: PierSide) =>
+    state().fillPierSide(layout.id, pier.id, side, { classId: classId === '' ? null : classId, emptyLength });
+  return (
+    <div className="space-y-1 rounded border border-slate-200 p-1.5">
+      <div className="text-xs font-medium text-slate-500">{t('selection.fillTitle')}</div>
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('selection.fillClass')}
+        <select
+          className="rounded border border-slate-300 px-1 py-0.5 text-sm"
+          value={classId}
+          onChange={(e) => setClassId(e.target.value)}
+        >
+          <option value="">{t('selection.fillMixed')}</option>
+          {classes.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <NumberField label={t('selection.emptyLength')} value={emptyLength} min={0} max={1000} onChange={setEmptyLength} />
+      <div className="flex gap-1">
+        <Button onClick={() => fill('left')}>{t('selection.fillLeft')}</Button>
+        <Button onClick={() => fill('right')}>{t('selection.fillRight')}</Button>
+      </div>
+      <p className="text-xs text-slate-500">{t('selection.fillNote')}</p>
+    </div>
+  );
+}
+
 function SelectionPanel({ layout }: { layout: Layout }) {
   const t = useT();
   const selection = useAppStore((s) => s.selection);
   const classes = useAppStore((s) => s.project.boatClasses);
   const language = useAppStore((s) => s.language);
+  const tool = useAppStore((s) => s.tool);
   const row = (label: string, value: string) => (
     <div className="flex justify-between text-sm">
       <span className="text-slate-600">{label}</span>
@@ -119,10 +158,27 @@ function SelectionPanel({ layout }: { layout: Layout }) {
     body = (
       <div className="space-y-1">
         {row(t('selection.pier'), pier.locked ? `${pier.id} (${t('selection.locked')})` : pier.id)}
-        {row(t('selection.length'), `${formatLength(pierAxis(pier).length, language)} m`)}
+        {pier.locked ? (
+          row(t('selection.length'), `${formatLength(pierAxis(pier).length, language)} m`)
+        ) : (
+          <NumberField
+            key={`${pier.id}-length`}
+            label={t('selection.lengthEdit')}
+            value={Math.round(pierAxis(pier).length * 10) / 10}
+            min={1}
+            max={1000}
+            onChange={(length) => state().setPierLength(layout.id, pier.id, length, { coalesce: `pier-length:${pier.id}` })}
+          />
+        )}
         {row(t('selection.width'), `${formatLength(pier.width, language)} m`)}
         {row(t('selection.berthCount'), formatCount(berths, language))}
-        <Button onClick={() => state().setPierLocked(layout.id, pier.id, !pier.locked)}>{pier.locked ? t('selection.unlock') : t('selection.lock')}</Button>
+        <div className="flex flex-wrap gap-1">
+          <Button onClick={() => state().setPierLocked(layout.id, pier.id, !pier.locked)}>{pier.locked ? t('selection.unlock') : t('selection.lock')}</Button>
+          <Button variant="danger" disabled={pier.locked} onClick={() => state().deletePier(layout.id, pier.id)}>
+            {t('selection.deletePier')}
+          </Button>
+        </div>
+        <FillSides key={pier.id} layout={layout} pier={pier} />
       </div>
     );
   } else if (berth) {
@@ -131,7 +187,21 @@ function SelectionPanel({ layout }: { layout: Layout }) {
       <div className="space-y-1">
         {row(t('selection.berth'), berth.removed ? `${berth.id} (${t('selection.removed')})` : berth.id)}
         {row(t('selection.pier'), `${berth.pierId}, ${t(`side.${berth.side}`)}`)}
-        {row(t('selection.class'), boat ? `${boat.name} (${formatLength(boat.length, language)} × ${formatLength(boat.beam, language)} m)` : berth.boatClassId)}
+        <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+          {t('selection.class')}
+          <select
+            className="rounded border border-slate-300 px-1 py-0.5 text-sm"
+            value={berth.boatClassId}
+            onChange={(e) => state().setBerthClass(layout.id, berth.id, e.target.value)}
+          >
+            {!boat && <option value={berth.boatClassId}>{berth.boatClassId}</option>}
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {`${c.name} (${formatLength(c.length, language)} × ${formatLength(c.beam, language)} m)`}
+              </option>
+            ))}
+          </select>
+        </label>
         <Button variant={berth.removed ? 'default' : 'danger'} onClick={() => state().setBerthRemoved(layout.id, berth.id, !berth.removed)}>
           {berth.removed ? t('selection.restore') : t('selection.remove')}
         </Button>
@@ -145,7 +215,17 @@ function SelectionPanel({ layout }: { layout: Layout }) {
       </div>
     );
   }
-  return <Section title={t('selection.title')}>{body}</Section>;
+  return (
+    <Section title={t('selection.title')}>
+      {body}
+      <div className="flex items-center gap-2 border-t border-slate-100 pt-1">
+        <Button active={tool === 'pier'} onClick={() => state().setTool(tool === 'pier' ? 'select' : 'pier')}>
+          {t('tool.pier')}
+        </Button>
+        {tool === 'pier' && <span className="text-xs text-slate-600">{t('hint.pier')}</span>}
+      </div>
+    </Section>
+  );
 }
 
 function Comparison() {

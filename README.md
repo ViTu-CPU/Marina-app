@@ -106,6 +106,9 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 - Issue list; clicking an issue zooms to the element.
 - Select a pier or berth; remove/restore berths; lock a pier; drag a pier along its axis
   or sideways. Edited layouts are marked "Manually edited".
+- Fill one side of a pier with one boat class or with the mix, leaving empty metres at the
+  shore end; change a berth's boat class; change a pier's length; delete a pier; draw a new
+  pier and fill it. Fills never take the fairway that existing berths need.
 
 **Files**
 - Autosave in the browser; project file export/import (JSON).

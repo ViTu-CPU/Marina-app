@@ -56,7 +56,7 @@ const PIER_DRAG_STEP = 0.1;
 /** A custom attribute of the node under the pointer (set as a prop on the shape). */
 const attr = (node: unknown, name: string): unknown => (node as { attrs: Record<string, unknown> }).attrs[name];
 
-const DRAWING_TOOLS: ToolId[] = ['water', 'shoreline', 'entrance', 'access', 'obstacle', 'zone', 'measure', 'calibrate'];
+const DRAWING_TOOLS: ToolId[] = ['water', 'shoreline', 'entrance', 'access', 'pier', 'obstacle', 'zone', 'measure', 'calibrate'];
 const flat = (points: Vec2[]): number[] => points.flatMap((p) => [p.x, p.y]);
 
 // ---------------------------------------------------------------------------
