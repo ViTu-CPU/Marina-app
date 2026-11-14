@@ -101,14 +101,18 @@ navigable region, minus piers and row blocks.
 
 ## Anchoring plan and cost estimate (`anchoring.ts`, `bom.ts`)
 
-Derived from a layout, the site and the price list (DECISIONS D23, D24, I47–I58):
+Derived from a layout, the site and the price list (DECISIONS D23–D25, I47–I61):
 
 1. Wind load per pier after UFC 4-152-07 (I54): across the pier the boats are hit bow-on
    (beam × profile height), windward row in full, leeward row 20 %, plus the pier face not
    hidden by the windward boats; along the pier they are hit broadside (length × profile
-   height), the first boat of each row in full and the others 20 %, plus the pier end.
-2. Crossed chain pairs every `lineSpacing` m (each side's lines carry the load from that
-   side), two axial lines at the head.
+   height), the first boat of each row from the windward end in full and the others 20 %,
+   plus the pier end; for wind from the sea and from the shore.
+2. Crossed chain pairs every `lineSpacing` m, splayed by `splayAngle` from square to the
+   pier (D25, I60): the shore half towards the head (they hold wind from the sea), the head
+   half towards the shore (wind from the shore). Each direction is checked on its own:
+   across, the lines of one side share the load (÷ cos θ); along, the lines splayed against
+   it share it (÷ sin θ); a line takes the larger. Access pontoons keep square lines.
 3. Each line: chain length `k × depth at high water`, catenary with uplift at the anchor;
    cheapest chain with breaking load × ((d − c)/d)² ≥ SF × tension; cheapest anchor with
    submerged weight ≥ SF × (H/μ + uplift), no heavier than the largest piece to be handled

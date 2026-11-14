@@ -354,7 +354,7 @@ async function waitForServer() {
       await page.screenshot({ path: path.join(outDir, 'cost.png') });
     });
 
-    await step('anchor type: wedge anchors need lighter anchors than blocks; reset keeps site values and type (I59, U19)', async () => {
+    await step('anchor type: wedge anchors need lighter anchors than blocks; splay angle; reset keeps site values and type (I59, U19, D25)', async () => {
       const largest = async () => {
         const text = await page.getByText('Largest anchor needed', { exact: true }).locator('xpath=following-sibling::span').textContent();
         return Number(text.replace(/[^\d]/g, ''));
@@ -367,10 +367,14 @@ async function waitForServer() {
       assert.ok(wedgeKg > 0 && wedgeKg < blockKg, `wedge ${wedgeKg} kg should be below block ${blockKg} kg`);
       await page.getByLabel('Design water depth (m)', { exact: true }).fill('6');
       await page.getByLabel('Drag coefficient', { exact: true }).fill('1.2');
+      // Square chains leave the wind along the piers unheld (D25).
+      await page.getByLabel('Chain splay from square to the pier (°)', { exact: true }).fill('0');
+      await page.waitForFunction(() => window.__marina.getState().project.anchoring.splayAngle === 0);
       await page.getByRole('button', { name: 'Reset factors to defaults', exact: true }).click();
       const a = await page.evaluate(() => window.__marina.getState().project.anchoring);
       assert.equal(a.depth, 6);
       assert.equal(a.dragCoefficient, 1.6);
+      assert.equal(a.splayAngle, 45);
       assert.equal(a.anchorType, 'wedge');
       await page.getByRole('combobox', { name: 'Anchor type' }).selectOption('block');
       await page.getByText('Anchoring parameters', { exact: true }).click();

@@ -292,10 +292,16 @@ parameter is shown with its source or marked **assumption**.
      across-pier load several times (DECISIONS I54).
 2. **Current load** on the hulls: `F = ½ · ρ_w · v_c² · C_d · A_underwater`; default
    v_c = 0 (sheltered marina). UFC: above 1 m/s needs a rational analysis → warning.
-3. **Anchor lines**: pairs of chains crossed under the pier at a spacing along it
-   (**assumption**, editable; the crossing practice is described by suppliers but no
-   spacing rule was found). Each line carries `H = F / (number of lines resisting that
-   direction)`.
+3. **Anchor lines** (DECISIONS D25, I60): pairs of chains crossed under the pier at a spacing
+   along it (**assumption**, editable; the crossing practice is described by suppliers but no
+   spacing rule was found), each splayed by θ from square to the pier so that the chains also
+   hold the wind along it. Splayed corner chains are SF Marina's typical layout (Chalmers 2026
+   Fig. 4, θ = 12° in its reference case); the default **θ = 45°** is the owner's choice, from
+   a dock kit's description (*"ristiin noin 45 asteen kulmassa"*, §9.8; weak source). The
+   shore half of the pier is splayed towards the head, the head half towards the shore. Across
+   the pier the lines of the loaded side share the load, `H = F / pairs / cos θ`; along it the
+   lines splayed against the wind share it, `H = F / lines / sin θ`; each line takes the larger
+   (both directions checked separately, UFC §6-3.4.1.4). Equal sharing is an **assumption**.
 4. **Chain length and catenary**: chain length `L = max(h + 1 m, k · h)` with
    `h` = depth + high water and **`k = 4`**: "A common initial design assumption used by SF
    Marina is that the chain length is approximately four times the HAT water depth"
@@ -344,8 +350,13 @@ parameter is shown with its source or marked **assumption**.
    friction versus embedded or wedge-shaped anchors (§9.5, DECISIONS I49). With the wedge
    anchor type (I59) the same layouts need about 0.6 t per lateral line on clay and 0.46 t on
    sand (0.23 and 0.18 t of anchors per metre of pier, including the axial lines), with chains
-   of about 40 m and 37 m instead of 22 m. The two axial lines per pier head carry the largest
-   loads (up to about 45 kN); their arrangement is still an assumption (I58).
+   of about 40 m and 37 m instead of 22 m. The two axial lines per pier head carried the largest
+   loads (up to about 45 kN; I58). **With splayed lines (D25, θ = 45°)**, on the top alternative
+   of each demo (15 piers, 1 698.5 m of pier): line loads 5.6–17.3 kN (median 8.8 kN, was 6.2 kN
+   with up to 46.3 kN on the head lines); median anchor per line 8.3 t as blocks on clay, 4.4 t
+   on sand, 0.9 t as wedges on clay and 0.7 t on sand; anchors per metre of pier 1.55, 0.83,
+   0.17 and 0.13 t (before: 1.61, 0.86, 0.18, 0.13 t); wedge chains about 44 m (clay) and 40 m
+   (sand). The total hardly changes; the peak loads at the heads are spread over all lines.
 7. **Ice**: pontoons that stay in the water over winter (owner decision D17) get a warning:
    ice loads are not calculated. Suppliers allow freezing but not moving ice.
 8. **Water level**: high and low water relative to the design depth are parameters. For
@@ -458,8 +469,14 @@ anchors should be used with caution."*
   load calculation (wind on pontoon, vessels and structures).
 - §3.3: chain length about 4 × HAT depth (SF Marina's initial assumption). §3.7: the load
   perpendicular to the pontoon governs; only the anchors on the loaded side are active.
-  Fig. 4: typical SF Marina layout, four chains from the pontoon corners, splayed outwards by
-  an angle θ (12° in the reference case).
+  Fig. 4 (*"Example of typical SF Marina anchor chain layout"*): four chains from the pontoon
+  corners, each splayed outwards (away from the pontoon's middle) by the plan angle θ measured
+  from square to the pontoon; *"The anchor layout angle … describes the plan-view angle between
+  the pontoon and the anchor position."* The model distributes a perpendicular load with
+  `T = (H_pre + T_env) / cos θ` (eq. 22); θ = 12° in the reference case (§7.3, Fig. 16). The
+  thesis does not treat loads along the pontoon.
+- §3.4 and Fig. 2: *"Standard 1.5 tonne SF Marina anchor"* is *"often labelled as a Pearl
+  Harbor type deadweight anchor"*, whose geometry makes it dig into the seabed.
 - §3.8: anchors of about 3 t or less preferred for small installations (raft installation);
   several smaller anchors rather than one large; penetration *"often as approximately one
   third of the anchor height"* after air jetting, not measured.
@@ -506,7 +523,16 @@ list ([anchoring](https://savorak.fi/tuoteosasto/ankkurointi/),
 [weights](https://savorak.fi/tuotteet/betonipaino-300kg/),
 [chain](https://savorak.fi/tuotteet/kettinki-20mm-kuumasinkitty/)).
 
-### 9.8 Still not readable
+### 9.8 K-Rauta: Savorak painoankkurointipaketti 24 × 25 kg (search excerpt)
+
+Retailer's description of a cottage-dock weight anchoring kit (24 weights of 25 kg, 2 × 15 m of
+13 mm chain), as returned by a web search on 2026-11-14 (page not opened; k-rauta.fi is not
+reachable from this session): the outer end of the dock is anchored with two 15 m chains
+*"jotka vedetään pohjapainoihin ristiin noin 45 asteen kulmassa"*
+([product page](https://www.k-rauta.fi/tuote/savorak-painoankkurointipaketti-24-x-25-kg/6438606010163)).
+Used only as the source of the default splay angle (D25); a light kit, not a marina pier.
+
+### 9.9 Still not readable
 
 www.theseus.fi answers with a Cloudflare browser check; the NAVFAC handbook on apps.dtic.mil
 is refused by the server ("The request is blocked."); shipmin.gov.in was not tried again.

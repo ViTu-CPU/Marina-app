@@ -102,6 +102,17 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parsed.ok && parsed.project.anchoring.profileHeightRatio).toBe(0.25);
   });
 
+  it('files from before splayed chains open with the default splay angle; it must lie in 0–80° (D25, I61)', () => {
+    const parsed = parseProject(fileWith((p) => delete (p.anchoring as Record<string, unknown>).splayAngle));
+    expect(parsed.ok && parsed.project.anchoring.splayAngle).toBe(45);
+    const kept = parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).splayAngle = 0)));
+    expect(kept.ok && kept.project.anchoring.splayAngle).toBe(0);
+    for (const v of [-5, 85]) {
+      const bad = parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).splayAngle = v)));
+      expect(bad.ok).toBe(false);
+    }
+  });
+
   it('a failed open keeps the current project and leaves a notice', () => {
     const store = createAppStore();
     store.getState().loadDemo('rectBasin');

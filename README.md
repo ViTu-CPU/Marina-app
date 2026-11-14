@@ -170,9 +170,10 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   Wind loads follow UFC 4-152-07 and the defaults have public sources where one was found
   (docs/RESEARCH.md §5, §9). Plain concrete blocks hold by friction and come out heavier
   than suppliers' standard packages; the wedge (Pearl Harbor type) option uses published
-  working capacities and needs longer chains. The two axial lines at a pier head carry the
-  largest loads (docs/DECISIONS.md I49, I54–I59). Nothing is checked against RIL 201-3-2013
-  or AS 3962.
+  working capacities and needs longer chains. The chains of a pier are splayed towards its
+  ends (default 45°, a weak source) so that they also hold the wind along the pier; how
+  real installations take that load is not documented publicly (docs/DECISIONS.md I49,
+  I54–I61, D25). Nothing is checked against RIL 201-3-2013 or AS 3962.
 - Costs come from public list prices and stated assumptions (labour output, work-boat
   rate, Marinetek prices); they are a feasibility-stage estimate, not a quote.
 - No environmental constraints.

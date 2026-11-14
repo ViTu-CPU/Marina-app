@@ -15,12 +15,16 @@
  *     pier face counts where no boat of the windward row stands in front of it (DBW 2005,
  *     commentary to C2.4.1). The larger of the two directions is used for both sides.
  *  2. Wind along the pier: the boats are hit broadside (length × profile height); per row,
- *     the first boat in full and the others with the leeward factor, plus the pier's end
- *     area.
- *  3. Lateral lines: pairs of chains crossed under the pier at a spacing along it; the
- *     lines of one side carry the load from that side. Axial lines: two at the head,
- *     anchored seawards at ±30°; loads towards the sea are assumed taken by the shore
- *     abutment.
+ *     the first boat from the windward end in full and the others with the leeward factor,
+ *     plus the pier's end area. Computed for wind from the sea and from the shore.
+ *  3. Lines (DECISIONS D25, I60): pairs of chains crossed under the pier at a spacing along
+ *     it, each splayed by the angle θ from square to the pier (Chalmers 2026 Fig. 4). The
+ *     stations in the shore half are splayed towards the head and hold wind from the sea;
+ *     those in the head half towards the shore and hold wind from the shore. Each direction
+ *     is checked separately (UFC §6-3.4.1.4): across, the lines of one side share the load,
+ *     H = F / pairs / cos θ; along, the lines splayed against it share it,
+ *     H = F / lines / sin θ. A line takes the larger. Access pontoons keep square lines; the
+ *     load along them is left to the wall.
  *  4. Each line: chain length L = max(h + 1 m, factor × h), h = depth at high water.
  *     Catenary with a = H / w (w = submerged weight per metre). If L is at least the length
  *     that hangs when the chain touches the bottom tangentially, s = √(h² + 2 h a), the
@@ -70,6 +74,11 @@ export interface AnchoringParams {
   pontoonFreeboard: number;
   /** Spacing of crossed line pairs along a pier, m. */
   lineSpacing: number;
+  /**
+   * Plan angle of the chains of a main pier from square to the pier, degrees (0–80). The
+   * splayed chains also hold the wind along the pier (D25); 0 leaves that load unheld.
+   */
+  splayAngle: number;
   chainSafetyFactor: number;
   /** Loss of chain diameter over the design life (corrosion and wear), mm. */
   corrosionAllowance: number;
@@ -101,7 +110,12 @@ export interface AnchoringParams {
  *    installations (Chalmers 2026 §3.8).
  *  - concreteDensity 2400 kg/m³: "about 150 pounds per cubic foot" (DBW 2005, App. A p. 90).
  *  - friction sand 0.6: smooth concrete on quartz sand (Sound & Sea Technology 2009, Table 33).
- *  - anchorType 'block': the concrete anchors of the price list are plain blocks.
+ *  - anchorType 'block': the concrete anchors of the price list are plain blocks; kept as the
+ *    default by the owner (D26).
+ *  - splayAngle 45°: owner's choice (D25). Splayed corner chains are SF Marina's typical layout
+ *    (Chalmers 2026 Fig. 4; 12° in its reference case); 45° is from a dock anchoring kit's
+ *    description, "ristiin noin 45 asteen kulmassa" (K-Rauta, Savorak painoankkurointipaketti,
+ *    search excerpt 2026-11-14) — a weak source.
  *  - Assumptions without a source: depth and water levels (site data), pontoonFreeboard,
  *    lineSpacing, slidingSafetyFactor, friction for clay and rock.
  */
@@ -117,6 +131,7 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   profileHeightRatio: 0.15,
   pontoonFreeboard: 0.5,
   lineSpacing: 12,
+  splayAngle: 45,
   chainSafetyFactor: 3,
   corrosionAllowance: 0,
   slidingSafetyFactor: 1.5,
@@ -144,14 +159,20 @@ export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
 });
 
 const G = 9.81;
-/** Angle of the two axial lines at a pier head from the pier axis, degrees. */
-const AXIAL_ANGLE = 30;
+/** Largest splay angle accepted, degrees. */
+export const MAX_SPLAY_ANGLE = 80;
 
 export interface AnchorLine {
   id: string;
   /** Pier or access pontoon the line holds. */
   holdsId: string;
-  kind: 'lateral' | 'axial';
+  /**
+   * Which end of the pier the anchor lies towards: 'head' lines hold wind from the sea,
+   * 'shore' lines wind from the shore; 'none' for square lines (access pontoons, θ = 0).
+   */
+  splay: 'head' | 'shore' | 'none';
+  /** Which wind direction sizes the line: across or along the pier. */
+  governs: 'across' | 'along';
   /** Where the chain is fixed to the pontoon. */
   fix: Vec2;
   /** Position of the anchor on the seabed (plan view). */
@@ -178,8 +199,8 @@ export interface AnchorLine {
 
 export interface AnchoringResult {
   lines: AnchorLine[];
-  /** Per pier / access pontoon: design wind loads, kN. */
-  loads: { id: string; lateralKn: number; axialKn: number }[];
+  /** Per pier / access pontoon: design wind loads across (larger side) and along the pier, kN. */
+  loads: { id: string; lateralKn: number; axialFromSeaKn: number; axialFromShoreKn: number }[];
   issues: Issue[];
 }
 
@@ -396,46 +417,53 @@ interface Held {
   width: number;
   /** Lateral wind load (larger of the two sides), N. */
   lateral: number;
-  /** Wind load along the axis, N; 0 for access pontoons (held by the wall). */
-  axial: number;
+  /** Wind load along the axis from the sea (towards the shore) and from the shore, N. */
+  axialFromSea: number;
+  axialFromShore: number;
+  /** Main piers are splayed; access pontoons keep square lines (load along them: the wall). */
+  splayed: boolean;
 }
 
 /**
  * Wind loads on a main pier and its boats, N (UFC 4-152-07 C1 §6-3.4.1.4 and Fig. 6-5).
  * The boats lie square to the pier: wind across the pier meets them bow-on (beam ×
- * profile height), wind along the pier broadside (length × profile height).
+ * profile height), wind along the pier broadside (length × profile height). Along the pier,
+ * per row the first boat from the windward end takes the full load and the others the
+ * leeward factor; computed for wind from the sea (first boat at the head) and from the shore.
  */
 function pierLoads(pier: MainPier, layout: AnchoringInput['layout'], classes: BoatClass[], p: AnchoringParams, freeboard: number) {
   const q = 0.5 * p.airDensity * p.windSpeed ** 2;
   const byId = new Map(classes.map((c) => [c.id, c]));
   const { length, along } = pierAxis(pier);
-  /** Per side: bow areas, sum of beams (the pier face they hide), and the broadside row area. */
+  /** Per side: bow areas and sum of beams (the pier face they hide). */
   const bow = { left: 0, right: 0 };
   const beams = { left: 0, right: 0 };
-  let axialArea = pier.width * freeboard;
+  const endArea = pier.width * freeboard;
+  let fromSea = endArea;
+  let fromShore = endArea;
   for (const side of ['left', 'right'] as const) {
     const boats = layout.berths
       .filter((b) => b.pierId === pier.id && b.side === side && !b.removed)
       .map((b) => ({ b, c: byId.get(b.boatClassId) }))
       .filter((x): x is { b: (typeof x)['b']; c: BoatClass } => x.c !== undefined)
-      // Wind from the sea along the axis meets the boat nearest the head first; that is the
-      // direction the axial lines at the head hold.
-      .sort((x, y) => {
-        const sx = (x.b.slot[0]!.x - pier.start.x) * along.x + (x.b.slot[0]!.y - pier.start.y) * along.y;
-        const sy = (y.b.slot[0]!.x - pier.start.x) * along.x + (y.b.slot[0]!.y - pier.start.y) * along.y;
-        return sy - sx;
-      });
-    boats.forEach(({ c }, i) => {
-      const height = p.profileHeightRatio * c.length;
-      bow[side] += c.beam * height;
+      .map(({ b, c }) => ({ c, s: (b.slot[0]!.x - pier.start.x) * along.x + (b.slot[0]!.y - pier.start.y) * along.y }))
+      // Ordered from the head towards the shore (ties by class id, for determinism).
+      .sort((x, y) => y.s - x.s || (x.c.id < y.c.id ? -1 : x.c.id > y.c.id ? 1 : 0));
+    const broadside = boats.map(({ c }) => c.length * p.profileHeightRatio * c.length);
+    boats.forEach(({ c }) => {
+      bow[side] += c.beam * p.profileHeightRatio * c.length;
       beams[side] += c.beam;
-      axialArea += (i === 0 ? 1 : p.leewardFactor) * c.length * height;
+    });
+    broadside.forEach((a, i) => {
+      fromSea += (i === 0 ? 1 : p.leewardFactor) * a;
+      fromShore += (i === broadside.length - 1 ? 1 : p.leewardFactor) * a;
     });
   }
   const across = (windward: 'left' | 'right', leeward: 'left' | 'right') =>
     bow[windward] + p.leewardFactor * bow[leeward] + Math.max(0, length - beams[windward]) * freeboard;
   const lateralArea = Math.max(across('left', 'right'), across('right', 'left'));
-  return { lateral: q * p.dragCoefficient * lateralArea, axial: q * p.dragCoefficient * axialArea };
+  const k = q * p.dragCoefficient;
+  return { lateral: k * lateralArea, axialFromSea: k * fromSea, axialFromShore: k * fromShore };
 }
 
 /** Anchoring plan of a layout. Deterministic; positions in plan view. */
@@ -448,34 +476,64 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     issues.push({ severity: 'warning', code, message, ...(elementId ? { elementId } : {}) });
 
   const held: Held[] = [
-    ...layout.piers.map((pier) => ({ id: pier.id, start: pier.start, end: pier.end, width: pier.width, ...pierLoads(pier, layout, classes, p, freeboard) })),
+    ...layout.piers.map((pier) => ({
+      id: pier.id,
+      start: pier.start,
+      end: pier.end,
+      width: pier.width,
+      splayed: true,
+      ...pierLoads(pier, layout, classes, p, freeboard),
+    })),
     ...accessPontoonsOf(site).map((a) => ({
       id: a.id,
       start: a.start,
       end: a.end,
       width: a.width,
       lateral: q * p.dragCoefficient * distance(a.start, a.end) * freeboard,
-      axial: 0,
+      axialFromSea: 0,
+      axialFromShore: 0,
+      splayed: false,
     })),
   ];
 
   const hHigh = p.depth + p.highWater;
+  const theta = (Math.min(MAX_SPLAY_ANGLE, Math.max(0, p.splayAngle)) * Math.PI) / 180;
   const lines: AnchorLine[] = [];
   const loads: AnchoringResult['loads'] = [];
+  const unheld: string[] = [];
   for (const item of held) {
     const { length, along, left } = pierAxis({ ...item, locked: false, origin: 'manual' });
     if (!(length > 0)) continue;
-    loads.push({ id: item.id, lateralKn: item.lateral / 1000, axialKn: item.axial / 1000 });
+    loads.push({ id: item.id, lateralKn: item.lateral / 1000, axialFromSeaKn: item.axialFromSea / 1000, axialFromShoreKn: item.axialFromShore / 1000 });
     const pairs = Math.max(2, Math.ceil(length / p.lineSpacing) + 1);
-    const lateralH = item.lateral / pairs;
     const at = (t: number, lateral: number) => add(add(item.start, scale(along, t)), scale(left, lateral));
+    const angle = item.splayed ? theta : 0;
+    const stations = Array.from({ length: pairs }, (_, i) => Math.min(length - 0.5, Math.max(0.5, (i * length) / (pairs - 1))));
+    /** Stations in the shore half (and the middle one) are splayed towards the head (I60). */
+    const splayOf = (t: number): AnchorLine['splay'] => (angle === 0 ? 'none' : t <= length / 2 + 1e-9 ? 'head' : 'shore');
+    const count = { head: 0, shore: 0, none: 0 };
+    for (const t of stations) count[splayOf(t)] += 2;
+    // Across: the `pairs` lines of one side share the load. Along: the lines splayed against
+    // the wind share it (wind from the sea pushes the pier shorewards: the 'head' lines hold).
+    const acrossH = item.lateral / pairs / Math.cos(angle);
+    const alongH = (splay: AnchorLine['splay']): number => {
+      if (splay === 'none') return 0;
+      const force = splay === 'head' ? item.axialFromSea : item.axialFromShore;
+      return force > 0 ? force / count[splay] / Math.sin(angle) : 0;
+    };
+    if (item.splayed && Math.max(item.axialFromSea, item.axialFromShore) > 0 && (angle === 0 || count.head === 0 || count.shore === 0)) {
+      unheld.push(item.id);
+    }
 
-    const addLine = (kind: AnchorLine['kind'], fix: Vec2, direction: Vec2, H: number, offset: number, n: number) => {
+    const addLine = (fix: Vec2, direction: Vec2, splay: AnchorLine['splay'], offset: number, n: number) => {
+      const alongLoad = alongH(splay);
+      const H = Math.max(acrossH, alongLoad);
+      const governs: AnchorLine['governs'] = alongLoad > acrossH ? 'along' : 'across';
       const chain = chooseChain(H, hHigh, p, priceList, vatPct);
       // Without a chain the uplift is not known; it is left out and the line is flagged.
       const uplift = chain?.uplift ?? 0;
-      const angle = upliftAngle(H, uplift);
-      const wedgeMass = usesWedge(p) && chain ? requiredWedgeMass(H, angle, p) : null;
+      const upAngle = upliftAngle(H, uplift);
+      const wedgeMass = usesWedge(p) && chain ? requiredWedgeMass(H, upAngle, p) : null;
       const mass = wedgeMass ?? requiredAnchorMass(H, uplift, p);
       const anchor = chooseAnchor(mass, priceList, vatPct, p.maxAnchorMass);
       const length = chain?.length ?? chainLengthFor(hHigh, p);
@@ -483,15 +541,16 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       lines.push({
         id: `${item.id}-A${n}`,
         holdsId: item.id,
-        kind,
+        splay,
+        governs,
         fix,
         // A crossed chain passes under the pontoon: the anchor is `span` from the fixing
         // point, on the far side.
-        anchor: add(fix, scale(direction, Math.max(span, offset + 1))),
+        anchor: add(fix, scale(direction, Math.max(span, (offset + 1) / Math.cos(angle)))),
         horizontalKn: H / 1000,
         topTensionKn: (chain?.topTension ?? H) / 1000,
         upliftKn: uplift / 1000,
-        upliftAngleDeg: angle,
+        upliftAngleDeg: upAngle,
         anchorType: wedgeMass === null ? 'block' : 'wedge',
         chainLength: length,
         chainId: chain?.product.id ?? null,
@@ -510,20 +569,20 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     };
 
     let n = 0;
-    for (let i = 0; i < pairs; i++) {
-      const t = Math.min(length - 0.5, Math.max(0.5, (i * length) / (pairs - 1)));
+    for (const t of stations) {
+      const splay = splayOf(t);
+      const towards = scale(along, splay === 'shore' ? -Math.sin(angle) : Math.sin(angle));
       // Fixed on the left edge, anchored on the right (holds against wind from the right) and vice versa.
-      addLine('lateral', at(t, item.width / 2), scale(left, -1), lateralH, item.width, ++n);
-      addLine('lateral', at(t, -item.width / 2), left, lateralH, item.width, ++n);
+      addLine(at(t, item.width / 2), add(scale(left, -Math.cos(angle)), towards), splay, item.width, ++n);
+      addLine(at(t, -item.width / 2), add(scale(left, Math.cos(angle)), towards), splay, item.width, ++n);
     }
-    if (item.axial > 0) {
-      const H = item.axial / 2 / Math.cos((AXIAL_ANGLE * Math.PI) / 180);
-      const rad = (AXIAL_ANGLE * Math.PI) / 180;
-      for (const sign of [1, -1]) {
-        const dir = add(scale(along, Math.cos(rad)), scale(left, sign * Math.sin(rad)));
-        addLine('axial', at(length, (sign * item.width) / 2), dir, H, 0, ++n);
-      }
-    }
+  }
+
+  if (unheld.length > 0) {
+    warn(
+      'ALONG_PIER_LOAD_NOT_HELD',
+      `The wind along ${unheld.length === 1 ? 'pier' : 'piers'} ${unheld.join(', ')} is not held by any chain (splay angle 0° or too few chain pairs); it needs other restraint.`,
+    );
   }
 
   // Anchors must lie in the water area (and not under an obstacle).

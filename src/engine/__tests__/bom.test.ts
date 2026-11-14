@@ -150,7 +150,8 @@ describe('cost estimate, hand-calculated', () => {
   const line = (id: string): AnchorLine => ({
     id,
     holdsId: 'P1',
-    kind: 'lateral',
+    splay: 'none',
+    governs: 'across',
     fix: { x: 0, y: 0 },
     anchor: { x: 10, y: 0 },
     horizontalKn: 5,

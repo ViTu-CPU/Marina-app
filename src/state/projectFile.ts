@@ -1,7 +1,7 @@
 /**
  * JSON project file: export and import with structural validation (SPEC §2, persistence).
  */
-import { DEFAULT_ANCHORING, type AnchoringParams, type Seabed } from '../engine/anchoring';
+import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type Seabed } from '../engine/anchoring';
 import { PRODUCT_CATEGORIES, PRODUCT_UNITS, type PriceList, type Product } from '../engine/catalog';
 import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import {
@@ -296,6 +296,7 @@ function anchoring(v: unknown): AnchoringParams {
     profileHeightRatio: pick('profileHeightRatio'),
     pontoonFreeboard: pick('pontoonFreeboard'),
     lineSpacing: pick('lineSpacing'),
+    splayAngle: pick('splayAngle'),
     chainSafetyFactor: pick('chainSafetyFactor'),
     corrosionAllowance: pick('corrosionAllowance'),
     slidingSafetyFactor: pick('slidingSafetyFactor'),
@@ -309,6 +310,7 @@ function anchoring(v: unknown): AnchoringParams {
   };
   if (result.depth <= 0) fail('anchoring.depth must be positive');
   if (result.lineSpacing <= 0) fail('anchoring.lineSpacing must be positive');
+  if (result.splayAngle < 0 || result.splayAngle > MAX_SPLAY_ANGLE) fail(`anchoring.splayAngle must be between 0 and ${MAX_SPLAY_ANGLE}`);
   if (result.maxAnchorMass <= 0) fail('anchoring.maxAnchorMass must be positive');
   if (Object.values(result.friction).some((x) => x <= 0)) fail('anchoring.friction values must be positive');
   return result;
