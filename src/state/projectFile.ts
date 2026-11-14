@@ -301,12 +301,14 @@ function anchoring(v: unknown): AnchoringParams {
     slidingSafetyFactor: pick('slidingSafetyFactor'),
     friction: { clay: mu('clay'), sand: mu('sand'), rock: mu('rock') },
     chainLengthFactor: pick('chainLengthFactor'),
+    maxAnchorMass: pick('maxAnchorMass'),
     waterDensity: pick('waterDensity'),
     concreteDensity: pick('concreteDensity'),
     steelDensity: pick('steelDensity'),
   };
   if (result.depth <= 0) fail('anchoring.depth must be positive');
   if (result.lineSpacing <= 0) fail('anchoring.lineSpacing must be positive');
+  if (result.maxAnchorMass <= 0) fail('anchoring.maxAnchorMass must be positive');
   if (Object.values(result.friction).some((x) => x <= 0)) fail('anchoring.friction values must be positive');
   return result;
 }

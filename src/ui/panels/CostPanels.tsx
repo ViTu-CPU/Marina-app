@@ -2,7 +2,7 @@
  * Panels of the anchoring plan and the cost estimate (D23, D24).
  */
 import { useRef } from 'react';
-import type { AnchoringParams, Seabed } from '../../engine/anchoring';
+import { resetAnchoringFactors, type AnchoringParams, type Seabed } from '../../engine/anchoring';
 import { BOM_GROUPS, seriesNames, type BomGroup } from '../../engine/bom';
 import type { Layout } from '../../engine/model';
 import { parsePriceListFile, priceListToXlsx } from '../../catalog/priceList';
@@ -75,7 +75,9 @@ export function AnchoringSection() {
       <AnchoringField name="chainSafetyFactor" min={1} max={10} step={0.1} />
       <AnchoringField name="corrosionAllowance" min={0} max={10} step={0.5} />
       <AnchoringField name="slidingSafetyFactor" min={1} max={5} step={0.1} />
+      <AnchoringField name="maxAnchorMass" min={100} max={50000} step={100} />
       <AnchoringField name="pontoonFreeboard" min={0.1} max={3} step={0.05} />
+      <Button onClick={() => state().setAnchoring(resetAnchoringFactors(state().project.anchoring))}>{t('anchoring.resetFactors')}</Button>
       <p className="text-xs text-slate-500">{t('anchoring.note')}</p>
     </Section>
   );

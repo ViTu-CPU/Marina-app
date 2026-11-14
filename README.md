@@ -166,8 +166,11 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   turning-basin check.
 - One design water depth per project (no soundings). The anchoring plan covers wind only:
   no waves, currents, ice or berthing loads, no structural check of pontoons and fixings.
-  With the default assumptions its anchors are much heavier than suppliers' standard
-  packages (docs/DECISIONS.md I49). Nothing is checked against RIL 201-3-2013 or AS 3962.
+  Wind loads follow UFC 4-152-07 and the defaults have public sources where one was found
+  (docs/RESEARCH.md §5, §9); anchors are plain concrete blocks holding by friction, so they
+  still come out heavier than suppliers' standard packages, and the two axial lines at a pier
+  head carry the largest loads (docs/DECISIONS.md I49, I54–I58). Nothing is checked against
+  RIL 201-3-2013 or AS 3962.
 - Costs come from public list prices and stated assumptions (labour output, work-boat
   rate, Marinetek prices); they are a feasibility-stage estimate, not a quote.
 - No environmental constraints.

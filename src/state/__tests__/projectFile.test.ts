@@ -86,6 +86,18 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parsed.ok && parsed.project.params.shoreOffset).toBe(0);
   });
 
+  it('files from before the largest anchor piece open with the default 3 000 kg; other anchoring values are kept (I57)', () => {
+    const parsed = parseProject(
+      fileWith((p) => {
+        const a = p.anchoring as Record<string, unknown>;
+        delete a.maxAnchorMass;
+        a.profileHeightRatio = 0.25;
+      }),
+    );
+    expect(parsed.ok && parsed.project.anchoring.maxAnchorMass).toBe(3000);
+    expect(parsed.ok && parsed.project.anchoring.profileHeightRatio).toBe(0.25);
+  });
+
   it('a failed open keeps the current project and leaves a notice', () => {
     const store = createAppStore();
     store.getState().loadDemo('rectBasin');

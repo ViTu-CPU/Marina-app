@@ -7,12 +7,16 @@
  * ice, currents, berthing loads, dynamic effects and the structural capacity of the
  * pontoons and their fixings are not calculated.
  *
- * Method, per pier:
+ * Method, per pier (wind loads after UFC 4-152-07 Change 1, 2012, §6-3.4.1 and Fig. 6-5;
+ * docs/RESEARCH.md §5, DECISIONS I54):
  *  1. Wind across the pier: q · Cd · (A_windward + leeward factor · A_leeward + A_pontoon),
- *     q = ½ ρ_air v². Boat lateral area = length × profile height (profile height = ratio
- *     × length). The larger of the two directions is used for both sides.
- *  2. Wind along the pier: per row, the first boat in full and the others with the
- *     leeward factor (bow area = beam × profile height), plus the pier's end area.
+ *     q = ½ ρ_air v². The boats lie square to the pier, so this wind meets them bow- or
+ *     stern-on: area = beam × profile height (profile height = ratio × boat length). The
+ *     pier face counts where no boat of the windward row stands in front of it (DBW 2005,
+ *     commentary to C2.4.1). The larger of the two directions is used for both sides.
+ *  2. Wind along the pier: the boats are hit broadside (length × profile height); per row,
+ *     the first boat in full and the others with the leeward factor, plus the pier's end
+ *     area.
  *  3. Lateral lines: pairs of chains crossed under the pier at a spacing along it; the
  *     lines of one side carry the load from that side. Axial lines: two at the head,
  *     anchored seawards at ±30°; loads towards the sea are assumed taken by the shore
@@ -26,8 +30,10 @@
  *  5. Chain: the cheapest chain of the price list with a published breaking load such that
  *     MBL · ((d − c)/d)² ≥ SF · T (c = corrosion allowance on the diameter).
  *  6. Anchor: submerged weight ≥ SF_slide · (H / μ + V); mass = that / (g (1 − ρ_w/ρ_c)).
- *     The cheapest concrete anchor of the price list at least that heavy; if none is,
- *     several of the heaviest.
+ *     The cheapest concrete anchor of the price list at least that heavy and not heavier
+ *     than the largest piece to be handled; otherwise several of the heaviest such piece.
+ *     Friction only: the extra holding of an anchor embedded in the seabed is not counted
+ *     (it depends on penetration, which is not known at this stage; Chalmers 2026 §7.5).
  */
 import { unitPriceVat0, type PriceList, type Product } from './catalog';
 import { add, distance, pointInRing, scale } from './geometry';
@@ -51,7 +57,7 @@ export interface AnchoringParams {
   dragCoefficient: number;
   /** Wind on the boats of the leeward row (and on shielded boats), as a fraction. */
   leewardFactor: number;
-  /** Boat profile height above water = ratio × boat length. */
+  /** Boat profile height above water = ratio × boat (berth) length. */
   profileHeightRatio: number;
   /** Pontoon height above water used for its wind area when the product gives none, m. */
   pontoonFreeboard: number;
@@ -65,12 +71,30 @@ export interface AnchoringParams {
   friction: Record<Seabed, number>;
   /** Chain length as a multiple of the water depth at high water (at least depth + 1 m). */
   chainLengthFactor: number;
+  /** Heaviest single concrete anchor to be handled, kg; heavier needs give several anchors. */
+  maxAnchorMass: number;
   waterDensity: number;
   concreteDensity: number;
   steelDensity: number;
 }
 
-/** Defaults; sources and assumptions in docs/RESEARCH.md §5 and DECISIONS I47. */
+/**
+ * Defaults. Sources (docs/RESEARCH.md §5, DECISIONS I47, I54–I57):
+ *  - windSpeed 22 m/s: Finnish sea areas v_b,0 (YM 2007, search excerpt), used as the steady
+ *    design wind like the 10-minute reference wind in Chalmers 2026 §2.6. To be verified.
+ *  - dragCoefficient 1.6: UFC 4-152-07 C1 Fig. 6-4 gives p = V²/240 psf (V in mph), i.e.
+ *    1.0 Pa per (m/s)², = ½ · 1.25 · v² · 1.6.
+ *  - profileHeightRatio 0.15 and leewardFactor 0.2: UFC 4-152-07 C1 §6-3.4.1.3–4.
+ *  - chainLengthFactor 4: "approximately four times the HAT water depth", SF Marina's initial
+ *    design assumption (Chalmers 2026 §3.3).
+ *  - chainSafetyFactor 3.0 on the new chain's breaking load: UFC 4-159-03 (2020) Table 3-7;
+ *    hence no corrosion allowance by default.
+ *  - maxAnchorMass 3000 kg: SF Marina prefers anchors of about 3 t or less for smaller
+ *    installations (Chalmers 2026 §3.8).
+ *  - concreteDensity 2400 kg/m³: "about 150 pounds per cubic foot" (DBW 2005, App. A p. 90).
+ *  - Assumptions without a source: depth and water levels (site data), pontoonFreeboard,
+ *    lineSpacing, slidingSafetyFactor, friction for clay and rock.
+ */
 export const DEFAULT_ANCHORING: AnchoringParams = {
   depth: 4,
   highWater: 1.5,
@@ -78,20 +102,34 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   seabed: 'clay',
   windSpeed: 22,
   airDensity: 1.25,
-  dragCoefficient: 1.2,
+  dragCoefficient: 1.6,
   leewardFactor: 0.2,
-  profileHeightRatio: 0.25,
+  profileHeightRatio: 0.15,
   pontoonFreeboard: 0.5,
   lineSpacing: 12,
   chainSafetyFactor: 3,
-  corrosionAllowance: 2,
+  corrosionAllowance: 0,
   slidingSafetyFactor: 1.5,
   friction: { sand: 0.6, clay: 0.3, rock: 0.5 },
-  chainLengthFactor: 3,
+  chainLengthFactor: 4,
+  maxAnchorMass: 3000,
   waterDensity: 1000,
   concreteDensity: 2400,
   steelDensity: 7850,
 };
+
+/**
+ * The method's defaults with the site values of `p` kept (depth, water levels, seabed and
+ * design wind): "Reset factors to defaults" (DECISIONS U19).
+ */
+export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
+  ...structuredClone(DEFAULT_ANCHORING),
+  depth: p.depth,
+  highWater: p.highWater,
+  lowWater: p.lowWater,
+  seabed: p.seabed,
+  windSpeed: p.windSpeed,
+});
 
 const G = 9.81;
 /** Angle of the two axial lines at a pier head from the pier axis, degrees. */
@@ -204,11 +242,16 @@ export function requiredAnchorMass(H: number, V: number, p: AnchoringParams): nu
   return submerged / (G * (1 - p.waterDensity / p.concreteDensity));
 }
 
-/** The cheapest single anchor at least `mass` kg, else the heaviest one several times. */
-export function chooseAnchor(mass: number, list: PriceList, vatPct: number): { product: Product; count: number } | null {
-  const anchors = list.products.filter(
+/**
+ * The cheapest single anchor of at least `mass` kg, else the heaviest one several times.
+ * Only anchors up to `maxPiece` kg are considered (all when none is that light).
+ */
+export function chooseAnchor(mass: number, list: PriceList, vatPct: number, maxPiece = Infinity): { product: Product; count: number } | null {
+  const priced = list.products.filter(
     (x) => x.category === 'anchor' && x.anchorMassKg !== null && x.anchorMassKg > 0 && unitPriceVat0(x, vatPct) !== null,
   );
+  const handleable = priced.filter((x) => x.anchorMassKg! <= maxPiece);
+  const anchors = handleable.length > 0 ? handleable : priced;
   if (anchors.length === 0) return null;
   const heavyEnough = anchors.filter((x) => x.anchorMassKg! >= mass);
   if (heavyEnough.length > 0) {
@@ -233,19 +276,26 @@ interface Held {
   axial: number;
 }
 
-/** Wind loads on a main pier and its boats, N. */
+/**
+ * Wind loads on a main pier and its boats, N (UFC 4-152-07 C1 §6-3.4.1.4 and Fig. 6-5).
+ * The boats lie square to the pier: wind across the pier meets them bow-on (beam ×
+ * profile height), wind along the pier broadside (length × profile height).
+ */
 function pierLoads(pier: MainPier, layout: AnchoringInput['layout'], classes: BoatClass[], p: AnchoringParams, freeboard: number) {
   const q = 0.5 * p.airDensity * p.windSpeed ** 2;
   const byId = new Map(classes.map((c) => [c.id, c]));
   const { length, along } = pierAxis(pier);
-  const area = { left: 0, right: 0 };
+  /** Per side: bow areas, sum of beams (the pier face they hide), and the broadside row area. */
+  const bow = { left: 0, right: 0 };
+  const beams = { left: 0, right: 0 };
   let axialArea = pier.width * freeboard;
   for (const side of ['left', 'right'] as const) {
     const boats = layout.berths
       .filter((b) => b.pierId === pier.id && b.side === side && !b.removed)
       .map((b) => ({ b, c: byId.get(b.boatClassId) }))
       .filter((x): x is { b: (typeof x)['b']; c: BoatClass } => x.c !== undefined)
-      // Along the axis the boat farthest out meets the wind first (either way the sum is the same shape).
+      // Wind from the sea along the axis meets the boat nearest the head first; that is the
+      // direction the axial lines at the head hold.
       .sort((x, y) => {
         const sx = (x.b.slot[0]!.x - pier.start.x) * along.x + (x.b.slot[0]!.y - pier.start.y) * along.y;
         const sy = (y.b.slot[0]!.x - pier.start.x) * along.x + (y.b.slot[0]!.y - pier.start.y) * along.y;
@@ -253,12 +303,14 @@ function pierLoads(pier: MainPier, layout: AnchoringInput['layout'], classes: Bo
       });
     boats.forEach(({ c }, i) => {
       const height = p.profileHeightRatio * c.length;
-      area[side] += c.length * height;
-      axialArea += (i === 0 ? 1 : p.leewardFactor) * c.beam * height;
+      bow[side] += c.beam * height;
+      beams[side] += c.beam;
+      axialArea += (i === 0 ? 1 : p.leewardFactor) * c.length * height;
     });
   }
-  const pontoon = length * freeboard;
-  const lateralArea = Math.max(area.left + p.leewardFactor * area.right, area.right + p.leewardFactor * area.left) + pontoon;
+  const across = (windward: 'left' | 'right', leeward: 'left' | 'right') =>
+    bow[windward] + p.leewardFactor * bow[leeward] + Math.max(0, length - beams[windward]) * freeboard;
+  const lateralArea = Math.max(across('left', 'right'), across('right', 'left'));
   return { lateral: q * p.dragCoefficient * lateralArea, axial: q * p.dragCoefficient * axialArea };
 }
 
@@ -299,7 +351,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       // Without a chain the uplift is not known; it is left out and the line is flagged.
       const uplift = chain?.uplift ?? 0;
       const mass = requiredAnchorMass(H, uplift, p);
-      const anchor = chooseAnchor(mass, priceList, vatPct);
+      const anchor = chooseAnchor(mass, priceList, vatPct, p.maxAnchorMass);
       const length = chain?.length ?? chainLengthFor(hHigh, p);
       const span = chain ? chain.span : Math.sqrt(length * length - hHigh * hHigh);
       lines.push({
@@ -320,7 +372,13 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
         anchorCount: anchor?.count ?? 0,
       });
       if (!chain) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(H / 1000).toFixed(1)} kN with the safety factor; line ${item.id}-A${n} has no chain.`, item.id);
-      if (anchor && anchor.count > 1) warn('SEVERAL_ANCHORS', `Line ${item.id}-A${n} needs ${Math.round(mass)} kg: ${anchor.count} anchors of the heaviest size.`, item.id);
+      if (anchor && anchor.count > 1) {
+        warn(
+          'SEVERAL_ANCHORS',
+          `Line ${item.id}-A${n} needs ${Math.round(mass)} kg: ${anchor.count} anchors of ${anchor.product.anchorMassKg} kg. Several anchors on one line do not necessarily hold as much as one anchor of the same total mass.`,
+          item.id,
+        );
+      }
     };
 
     let n = 0;

@@ -2,7 +2,8 @@
 
 Background research for the product catalogue, the bill of materials (BOM), the anchoring
 layer and the cost estimate. Collected 2026-11-14 from **public sources only** (owner
-decision D15). Every number below is copied from the source named next to it; where a
+decision D15); the sources that could not be read in the first session were read in the
+second session the same day (§9). Every number below is copied from the source named next to it; where a
 value is an assumption of this project and not from a source, it says so.
 
 > This research does not make the tool a design tool. Outputs stay a *preliminary
@@ -18,9 +19,12 @@ value is an assumption of this project and not from a source, it says so.
 | **RIL 201-3-2013** *Suunnitteluperusteet ja rakenteiden kuormat. Vesirakenteet* | Finnish Association of Civil Engineers' guideline on design bases and loads for water structures; 75 pages, Finnish. Part of the Eurocode-based RIL 201 series. | **Paid, not available.** 70 € in RIL's 2026 price list ([RIL hinnasto 2026](https://ril.fi/wp-content/uploads/2026/01/Hinnasto_2026_-numerojarjestys.pdf); [Ellibs record](https://www.ellibslibrary.com/en/book/9789517585798)). No public summary of its numeric content was found. |
 | **AS 3962:2020** *Marina design* (supersedes AS 3962-2001 *Guidelines for design of marinas*) | Australian standard for marinas for vessels up to 50 m: fixed berths, floating pontoon systems, wave attenuators. | **Paid, not available** ([Standards Australia](https://store.standards.org.au/product/as-3962-2020)). Copies of the 2001 and 2020 editions circulate on file-sharing and personal sites; they carry licence headers and appear to be unauthorised, so they were **not used**. |
 | Indian Ministry of Ports, Shipping and Waterways, *Guidelines for Floating Jetties / Platforms for Marinas* | Public government guideline that refers to AS 3962:2020. | Public PDF ([shipmin.gov.in](https://shipmin.gov.in/sites/default/files/finalversinGuidelines.pdf)); only search excerpts could be read from this session (see §8). |
-| UFC 4-152-07 *Design: Small Craft Berthing Facilities* (US DoD, 2009, Change 1 2012) | Public-domain design criteria for small-craft marinas incl. floating docks. | Public ([WBDG](https://www.wbdg.org/api/documents/media/b9ae892c-c693-4b3e-b059-461b381480dd/file)); only search excerpts could be read (see §8). |
-| California DBW *Layout and Design Guidelines for Marina Berthing Facilities* (2005) | Public US marina layout and design guideline. | Public ([parks.ca.gov](https://demo2.parks.ca.gov/pages/28702/files/Guide05.pdf)); could not be read from this session (§8). |
-| Chalmers bachelor's thesis (2026), *Development of a Mooring Calculation Model for Pontoons: Preliminary Dimensioning of Mooring Chains and Concrete Anchors* (Aliprantis, Jarlgren; for SF Marina) | Open-access thesis that builds exactly the kind of preliminary chain/anchor sizing model needed here. | [odr.chalmers.se](https://odr.chalmers.se/items/45ca2ffd-b68f-4e8e-ae23-56df9091c482/full); could not be read from this session (§8). |
+| UFC 4-152-07 *Design: Small Craft Berthing Facilities* (US DoD, 2009, Change 1 2012) | Public-domain design criteria for small-craft marinas incl. floating docks. | **Read** (Change 1, [WBDG file](https://www.wbdg.org/api/documents/media/b60e64cd-d255-4e98-9463-9658a772eabe/file), 2026-11-14), §9.1. WBDG lists a revision dated 2026-09-30 that moves the load calculation to a separate UFS 4-152-07 (not read; per WBDG's change summary). |
+| UFC 4-159-03 *Moorings* (US DoD, 2020) | Mooring design criteria (ships and fleet moorings). | **Read** ([WBDG file](https://www.wbdg.org/api/documents/media/83e8fe52-bb53-46af-9fde-fdb51092c4c0/file), 2026-11-14), §9.2. |
+| California DBW *Layout and Design Guidelines for Marina Berthing Facilities* (2005) | Public US marina layout and design guideline. | **Read** ([parks.ca.gov](https://demo2.parks.ca.gov/pages/28702/files/Guide05.pdf), 2026-11-14), §9.3. |
+| Chalmers bachelor's thesis (2026), *Development of a Mooring Calculation Model for Pontoons: Preliminary Dimensioning of Mooring Chains and Concrete Anchors* (Aliprantis, Jarlgren; for SF Marina) | Open-access thesis that builds exactly the kind of preliminary chain/anchor sizing model needed here. | **Read** ([record](https://odr.chalmers.se/items/45ca2ffd-b68f-4e8e-ae23-56df9091c482/full), [PDF](https://odr.chalmers.se/server/api/core/bitstreams/8823a8b8-5646-4f38-a096-53286caf0a8b/content), 2026-11-14), §9.4. A bachelor's thesis: practice figures are SF Marina staff's statements quoted in it. |
+| Sound & Sea Technology, *Advanced Anchoring and Mooring Study* (2009, for Oregon Wave Energy Trust) | Public study with design procedures for deadweight, drag, pile and plate anchors (Appendix A). | **Read** ([Tethys/PNNL](https://tethys.pnnl.gov/sites/default/files/publications/Advanced-Anchor-and-Mooring-Study.pdf), 2026-11-14), §9.5. |
+| NAVFAC *Handbook for Marine Geotechnical Engineering* (SP-2209-OCN, 2012) | Referred to by UFC 4-159-03 for deadweight anchors ("Use carefully … Section 4.6"). | Not read: the DTIC server ([ADA556807](https://apps.dtic.mil/sti/pdfs/ADA556807.pdf)) answered "The request is blocked." |
 | Finnish wind-load national choices for SFS-EN 1991-1-4 (YM decree 7/16) | National annex values (basic wind velocity). | [Finlex](https://www.finlex.fi/fi/viranomaiset/maarayskokoelmat/ymparistoministerio/2016/42812); only the predecessor's value was seen in a search excerpt: *"Merialueet: avomeri, harva ulkosaaristo v<sub>b,0</sub> = 22 m/s"* ([YM 2007 eurokoodiasetus](https://ym.fi/documents/1410903/155128351/eurokoodiasetus+15102007.pdf)). |
 
 **What the public material does say about the method** (search excerpts, to be confirmed
@@ -211,11 +215,16 @@ No public rate was found for a work boat or barge with crane, or for installatio
 such, for the user to replace with quotes.
 
 **Benchmarks for checking the total (not used in the calculation):**
-- Vaasa: average cost of breakwaters and piers in harbour investments 2011–2014
-  **733 € / jm**; one pier roughly 50 000 €; removing piers about 100 € / jm
-  ([Vaasan kaupunki, Pienvenesatamatoiminnan selvitys 2020](https://www.vaasa.fi/app/uploads/2020/10/7d1d27ad-vaasan-kaupungin-pienvenesatamatoiminnan-jarjestamista-koskeva-selvitys-2020.pdf.pdf);
-  search excerpt, the PDF itself could not be read — §8). Price level 2011–2014, not
-  indexed.
+- Vaasa: *"Karkeasti voi arvioida, että yksi laituri maksaa noin 50 000 €. Vuosina 2011 –
+  2014 toteutuneiden Vaasan kaupungin venesatamainvestointien aallonmurtajien ja laitureiden
+  kustannuksien keskiarvo on 733 € / jm. Vastaavasti laitureiden hävityskustannukset ovat n.
+  100 € / jm. (Järvinen 2015)."* And: the Gerby harbour extension of 2014 cost 568 000 €,
+  *"siellä on venepaikkoja nyt 195 kpl. Yhden paikan hinnaksi tuli 2 900 €"* (total divided
+  by all berths after the extension). VAT status not stated; price level 2011–2014, not
+  indexed (the report notes the civil-engineering cost index fell 5.3 % 2015–6/2020)
+  ([Vaasan kaupunki, Pienvenesatamatoiminnan selvitys 2020](https://www.vaasa.fi/app/uploads/2020/10/7d1d27ad-vaasan-kaupungin-pienvenesatamatoiminnan-jarjestamista-koskeva-selvitys-2020.pdf.pdf),
+  read 2026-11-14). The figure 733 €/jm comes from a VAMK thesis (Petri Järvinen 2015,
+  *Vaasan kaupungin pienvenesatamien inventointi ja kehittäminen*) that was not read.
 - Helsinki procurements (VAT 0 %): pier renewals 2018, 1 277 500 €
   ([päätös](https://paatokset.hel.fi/fi/asia/hel-2018-010117/765c6ca3-7fb5-4f18-9436-6bfda174539c));
   Pyysaari pontoon renewal 2019, 61 800 €
@@ -256,14 +265,31 @@ the estimate as a range and compares it with the €/jm benchmark above.
 The physics below is standard mechanics; the *values* of the factors are parameters. Each
 parameter is shown with its source or marked **assumption**.
 
-1. **Wind load on a pier** (perpendicular to its axis):
-   `F = q · C_d · (A_windward + 0.2 · A_leeward + A_pontoon)`,
-   `q = ½ · ρ_air · v²`, ρ_air = 1.25 kg/m³ (recommended value in EN 1991-1-4 §4.5;
-   not re-read in this session).
-   The 0.2 shielding factor for the leeward row is from UFC 4-152-07 (above).
-   Boat lateral area = length × windage height of the class (**assumption**, editable per
-   class). C_d = 1.2 (**assumption**). Design wind v: default 22 m/s (Finnish sea areas
-   v<sub>b,0</sub>, YM 2007; **assumption** that it applies as the steady design wind).
+1. **Wind load on a pier** (UFC 4-152-07 C1 §6-3.4.1 and the sample calculation in its
+   Fig. 6-5; DECISIONS I54). The boats of finger berths lie square to the pier, so
+   - wind **across** the pier meets them **bow-on**:
+     `F = q · C_d · (Σ_windward B·h + 0.2 · Σ_leeward B·h + f · max(0, L − Σ_windward B))`,
+     where the last term is the pier face (freeboard f) not hidden by the windward boats
+     (DBW 2005, commentary to C2.4.1: the dock face behind an upwind boat is in its "wind
+     shadow"; Fig. 6-5 of the UFC leaves the headwalk face out of the perpendicular case);
+   - wind **along** the pier meets them **broadside**: per row the first boat in full and
+     the others at 20 %, `L_boat · h`, plus the pier's end area (UFC Fig. 6-5: "40' Boats
+     Unshielded: 1 each … 40' Boats Shielded: 2 each … 3 PSF … Headwalk").
+   - Profile height `h = 0.15 × berth length` (UFC §6-3.4.1.3: "generally taken as 15% of the
+     berth length"); the tool uses the boat length of the class (in Fig. 6-5 40 ft boats lie in
+     40 ft berths). 100 % occupancy (§6-3.4.1.4).
+   - Pressure: `q · C_d = ½ · ρ_air · v² · C_d` with ρ_air = 1.25 kg/m³ and **C_d = 1.6**. UFC
+     Fig. 6-4 ("Wind Load on Small Craft") converts the steady wind to pressure; read from the
+     figure's vector data it is p = V²/240 psf with V in mph (15.0 psf at 60 mph, 60.0 psf at
+     120 mph), i.e. 0.998 Pa per (m/s)², which equals ½ · 1.25 · v² · 1.6. The DBW minimum
+     "not less than 15#/ft²" (718 Pa) is the same curve at 60 mph (26.8 m/s).
+   - Design wind v: default 22 m/s (Finnish sea areas v<sub>b,0</sub>, YM 2007 search excerpt).
+     The UFC asks for a steady wind "neglecting gusts"; Chalmers 2026 likewise used the
+     10-minute mean reference wind at 10 m as the design wind. The value itself still needs
+     checking against the current national annex.
+   - *Earlier version (I47):* boats were loaded broadside by wind across the pier and bow-on by
+     wind along it, with profile height 0.25 × length and C_d = 1.2. That overstated the
+     across-pier load several times (DECISIONS I54).
 2. **Current load** on the hulls: `F = ½ · ρ_w · v_c² · C_d · A_underwater`; default
    v_c = 0 (sheltered marina). UFC: above 1 m/s needs a rational analysis → warning.
 3. **Anchor lines**: pairs of chains crossed under the pier at a spacing along it
@@ -271,8 +297,12 @@ parameter is shown with its source or marked **assumption**.
    spacing rule was found). Each line carries `H = F / (number of lines resisting that
    direction)`.
 4. **Chain length and catenary**: chain length `L = max(h + 1 m, k · h)` with
-   `h` = depth + high water and `k = 3` (**assumption**: suppliers give 2 × and 5 × depth
-   (Top Marine, conflicting) and 3 × depth for buoys in open water (Suomen Laiturikauppa)).
+   `h` = depth + high water and **`k = 4`**: "A common initial design assumption used by SF
+   Marina is that the chain length is approximately four times the HAT water depth"
+   (Chalmers 2026 §3.3, quoting SF Marina). For comparison: Top Marine 2 × and 5 × depth
+   (conflicting), Suomen Laiturikauppa 3 × depth for buoys in open water, DBW 5:1 scope as an
+   example for buoy moorings (C8.4.1). The catenary equations agree with Chalmers §4.3
+   (after Ma et al. 2019).
    With `a = H / w`, `w = m·g·(1 − ρ_w/ρ_steel)`: if `L ≥ √(h² + 2·h·a)` part of the chain
    lies on the bottom and the anchor gets no uplift; otherwise the chain hangs between
    both ends: span `X = 2a · asinh(√(L² − h²) / 2a)`, uplift at the anchor
@@ -280,22 +310,34 @@ parameter is shown with its source or marked **assumption**.
    (A first version required the chain to lie on the bottom at the design load; that gave
    chains of about 80 m for a 30 m pier and was dropped, DECISIONS I48.)
 5. **Chain choice**: smallest catalogue chain with breaking load
-   `MBL · ((d − c)/d)² ≥ SF · T`, where c = corrosion/wear allowance on the diameter
-   (**assumption**, default 2 mm) and SF = 3.0 (**assumption**; offshore class rules use
-   1.67 intact, a vendor quotes 2.0 for recreational marinas — neither is a marina
-   standard, so a conservative value is the default).
+   `MBL · ((d − c)/d)² ≥ SF · T`. **SF = 3.0** on the new chain's breaking load: UFC 4-159-03
+   (2020) Table 3-7, chain "for relatively straight lengths" 3.0 ("around bends" 4.0), "These
+   factors of safety are for the new chain break strength". Because the factor is defined on
+   the new chain, the corrosion/wear allowance c is **0 mm** by default (was 2 mm,
+   assumption); it stays a parameter. Chalmers 2026 found the chain not governing (safety
+   factor 7.7 in its reference case) and SF Marina's drawings using chains about 48 % larger
+   than strength alone needs, for damping and robustness (§7.6).
 6. **Concrete block**: submerged weight `W_sub ≥ SF_slide · (H / μ + V)`, mass
-   `M = W_sub / (g · (1 − ρ_w/ρ_c))`, ρ_c = 2 400 kg/m³ (**assumption**, normal-weight
-   reinforced concrete). μ by seabed (**assumptions**, with the only public values found):
-   sand 0.6 (0.63 used in [Banuelos-Garcia et al. 2022](https://tethys-engineering.pnnl.gov/sites/default/files/publications/Banuelos-Garcia-et-al-2022.pdf)),
-   clay 0.3, rock 0.5; SF_slide = 1.5. The cheapest catalogue block with mass ≥ M is chosen,
-   otherwise several of the heaviest.
-9. **Comparison with practice.** With these defaults the anchors come out several tonnes
-   per line, far heavier than suppliers' standard packages (2 × 1 000 kg and 16 mm chain
-   per 8–12 m concrete pontoon, 2 × 2 000–3 000 kg and 20 mm chain for heavy pontoons, Top
-   Marine), whose design loads are not published. The likely reasons (holding of blocks
-   embedded in clay, shelter, partial occupancy) cannot be quantified from public sources,
-   so the defaults are not tuned; the tool shows the comparison (DECISIONS I49).
+   `M = W_sub / (g · (1 − ρ_w/ρ_c))`, ρ_c = 2 400 kg/m³ ("Concrete weighs about 150 pounds per
+   cubic foot out of water, but only about 90 pounds under water", DBW 2005 App. A p. 90;
+   150 lb/ft³ = 2 403 kg/m³). μ by seabed: **sand 0.60** = smooth concrete on quartz sand,
+   rough concrete 0.69 (Sound & Sea Technology 2009, Table 33; 0.63 was used in
+   [Banuelos-Garcia et al. 2022](https://tethys-engineering.pnnl.gov/sites/default/files/publications/Banuelos-Garcia-et-al-2022.pdf));
+   clay 0.3 and rock 0.5 remain **assumptions** (see §9.5 for the clay method);
+   SF_slide = 1.5 (**assumption**; Sound & Sea Technology's anchor tables use FS = 1.5).
+   The cheapest catalogue block with mass ≥ M and not heavier than the largest piece to be
+   handled (default **3 000 kg**: "SF Marina commonly prefers anchors with a mass of
+   approximately three tonnes or less", Chalmers 2026 §3.8) is chosen, otherwise several of
+   that size. Chalmers notes that several anchors on one line do not necessarily hold as much
+   as one anchor of the same mass.
+9. **Comparison with practice.** Suppliers' standard packages: 2 × 1 000 kg and 16 mm chain
+   per 8–12 m concrete pontoon, 2 × 2 000–3 000 kg and 20 mm chain for heavy pontoons (Top
+   Marine); SF Marina's drawings: 2, 3, 6 and 10 t anchors, most often 2–3 t (Chalmers 2026
+   §7.6, 174 anchor legs). With the first defaults (I47) the demo layouts needed about 21 t
+   per lateral line on clay (4.5 t of anchors per metre of pier); with the UFC wind geometry
+   and the sourced defaults (I54–I56) about 5.6 t per lateral line on clay and 3.0 t on sand
+   (1.8 t/m and 1.2 t/m). What remains is mainly the anchor model: a plain block holding by
+   friction versus embedded or wedge-shaped anchors (§9.5, DECISIONS I49).
 7. **Ice**: pontoons that stay in the water over winter (owner decision D17) get a warning:
    ice loads are not calculated. Suppliers allow freezing but not moving ice.
 8. **Water level**: high and low water relative to the design depth are parameters. For
@@ -325,12 +367,138 @@ Editing that file updates the prices in the tool; see `docs/DECISIONS.md` and th
 
 ---
 
-## 8. Sources that could not be read in this session
+## 8. Sources that could not be read in the first session
 
-The session's network allowlist blocked: odr.chalmers.se (Chalmers thesis),
+*Superseded by §9: in the second session (2026-11-14) all of these except shipmin.gov.in,
+www.theseus.fi and the NauticExpo files were read.* The first session's network allowlist
+blocked: odr.chalmers.se (Chalmers thesis),
 demo2.parks.ca.gov (California DBW guide), www.wbdg.org (UFC 4-152-07), shipmin.gov.in,
 www.theseus.fi, www.vaasa.fi, savorak.fi, www.nauticexpo.com; pdf.nauticexpo.com returned
 HTTP 403. Where a fact above comes from one of these, it was taken from a search-engine
 excerpt and is marked "search excerpt" or attributed accordingly. Reading the Chalmers
 thesis and UFC 4-152-07 in full is the first recommended follow-up: they would replace
 several **assumptions** in §5 with sourced values.
+
+---
+
+## 9. Sources read in the second session (2026-11-14)
+
+All read on 2026-11-14. Quotations are verbatim.
+
+### 9.1 UFC 4-152-07 Change 1 (2012), §6-3.4 Environmental loads
+
+- §6-3.4.1: *"Wind load is based on a wind velocity pressure for steady conditions (neglecting
+  gusts) acting on the above water profile of the berthed vessels and dock system"*.
+- §6-3.4.1.2 and Fig. 6-4: velocity pressure from a curve; extracted from the PDF's vector
+  data: p = V²/240 psf (V in mph) within 1 % from 30 to 120 mph (§5 item 1).
+- §6-3.4.1.3: *"Determine the average profile height for the berthed vessels, generally taken
+  as 15% of the berth length, but other rational method based on the berthed vessel
+  dimensions may be used."*
+- §6-3.4.1.4: *"Compute the wind load, checking both parallel and perpendicular directions to
+  the main axis of the pier or dock. … Assume 100% berth occupancy. … the full wind load
+  applied to the windward (unshielded) vessels, and 20% of the full wind load applied to all
+  leeward (shielded) vessels."*
+- Fig. 6-5 (sample, design wind load 15 psf, 40 ft boats, profile height 6.0 ft):
+  perpendicular wind *"3 Each x 19' Beam x 6.0' Height x 15 PSF = 5,130 Lbs"* (fingers
+  computed but not added to the total); parallel wind *"1 Each x 40' x 6.0' Height x 15 PSF =
+  3,600 Lbs"* unshielded, *"2 Each x 40' x 6.0' Height x 3 PSF = 1,440 Lbs"* shielded,
+  headwalk end *"1 Each x 6' x 1.5' Height x 15 PSF = 135 Lbs"*. This fixes which boat area
+  goes with which wind direction (DECISIONS I54).
+- *"Individual fingers, however, should be designed to accommodate the full wind load on the
+  berthed craft since the presence of a shielding boat cannot be assured."* (Not used: the
+  tool does not size fingers.)
+- §6-3.4.3: current over 3 ft/s (1 m/s) needs a rational method. §6-3.4.8: *"Anchor loads for
+  floating docks are generally determined by the horizontal live loads … Inadequate anchorage
+  is probably the most frequent cause of failure in floating dock systems."* No anchor sizing
+  rule; refers to ASCE Manual 50.
+- §6-3.5.1.1 (berthing, not used): docking weight W = 12 L² lb (L in ft); approach velocity
+  0.3 m/s for L < 18 m, 0.2 m/s above.
+
+### 9.2 UFC 4-159-03 Moorings (2020), Table 3-7 *Minimum Quasi-Static Factors of Safety*
+
+Chain 3.0 *"For relatively straight lengths"*, 4.0 *"For chain around bends"*, *"These factors
+of safety are for the new chain break strength"*. Deadweight anchors: *"Use carefully (see NCEL
+Handbook for Marine Geotechnical Engineering, 1985, Section 4.6)"*; Table 6-1: *"Very low
+efficiency. Full-scale tests (NCEL, Fleet Mooring Test Program – Pearl Harbor) show
+anchor-holding capacity dramatically decreases after anchor starts dragging … Deadweight
+anchors should be used with caution."*
+
+### 9.3 California DBW, *Layout and Design Guidelines for Marina Berthing Facilities* (2005)
+
+- C2.4.1: *"Wind loads (WinL) on the projected vertical surfaces of docks and berthed boats
+  should be not less than 15#/ft², applied above the water surface."* Commentary: a dock face
+  behind an upwind boat is in its wind shadow; a boat downwind of a dock is shadowed only up
+  to the dock's freeboard; profile heights must be estimated per boat type (no number).
+- C8.4.1: scope = rode length ÷ depth at maximum high water, *"a mooring with a 5:1 scope"*
+  as the example (buoy moorings).
+- App. A p. 90: concrete anchor blocks *"are only about 60% effective as dead weight anchor
+  blocks. Concrete weighs about 150 pounds per cubic foot out of water, but only about 90
+  pounds under water"*; pyramid blocks *"plow into the bottom when dragged"* and *"mud in"*
+  with time.
+- Layout values for later use (not applied in this step): Table B-2 minimum fairway width
+  **1.75 L<sub>b</sub>** (longest berth perpendicular to the fairway) without side-ties,
+  1.50 L<sub>bb</sub> with side-ties (the tool's default fairway factor is 1.5, an
+  assumption); Table B-1 interior channel at least 75 ft; App. Table App-1 finger length ÷
+  width ratios.
+
+### 9.4 Chalmers 2026 (Aliprantis & Jarlgren, for SF Marina)
+
+- Method: quasi-static catenary (Ma et al. 2019), pretension from an allowed displacement
+  envelope, chain check `T_max ≤ MBL` with the safety factor as output, anchor capacity of a
+  Pearl Harbor type concrete anchor from capacity tables (Lin & Nakamura 1993), validated
+  against PLAXIS 2D (6.7 % lower on average). Loads are an input from SF Marina's separate
+  load calculation (wind on pontoon, vessels and structures).
+- §3.3: chain length about 4 × HAT depth (SF Marina's initial assumption). §3.7: the load
+  perpendicular to the pontoon governs; only the anchors on the loaded side are active.
+  Fig. 4: typical SF Marina layout, four chains from the pontoon corners, splayed outwards by
+  an angle θ (12° in the reference case).
+- §3.8: anchors of about 3 t or less preferred for small installations (raft installation);
+  several smaller anchors rather than one large; penetration *"often as approximately one
+  third of the anchor height"* after air jetting, not measured.
+- §7.3–7.5 reference case (Sjumansholmen ferry berth): 200 kN berthing load, depth 3.00 m +
+  1.45 m high water, 30 mm chain, 3 t anchors; maximum chain tension 108.7 kN; anchor safety
+  factor 1.00 at about 0.17 m penetration, 2.00 at about 0.40 m.
+- §7.6: 174 anchor legs from five SF Marina projects: same anchor weight in 72.4 % of legs;
+  drawings use 2, 3, 6 and 10 t anchors; drawing chains about 48 % larger than the prototype's.
+- Soil parameter values of the capacity tables are not printed in the thesis.
+
+### 9.5 Sound & Sea Technology 2009, Appendix A-1 *Deadweight Anchors*
+
+- Cohesionless soil: `F_h = (W − F_v) · tan φ`, Table 33 *Friction Coefficients for Anchor
+  Materials on Granular Soils*: quartz sand 0.60 (smooth concrete), 0.69 (rough concrete);
+  coralline, oolitic and foram sands 0.58–0.74.
+- Cohesive soil: `F_h = S_uz·A + [2·S_ua·z + γ_b·½·z²]·B`, with the anchor settling until
+  `S_uz = W / (N_c·A)`, N_c ≈ 5.7, `S_ua = 0.5·S_uz`, `z = S_uz / G_su`, G_su ≈ 12 psf/ft
+  (1.9 kPa/m) for sediment whose strength grows from zero at the surface. The first term alone
+  is W/5.7 (equivalent friction 0.18). With the published plan sizes of Savorak's 1 000 kg and
+  3 000 kg blocks (§9.7) and an *assumed* buoyant unit weight of 4–6 kN/m³ the whole formula
+  gives an equivalent friction of about 0.28–0.39, so the tool's clay default 0.3 is of the
+  right order for plain blocks on soft clay. Not used directly: it needs block dimensions and
+  γ_b.
+- Tables 35–36, *Enhanced Pearl Harbor Anchor* (concrete wedge with steel plates), working
+  horizontal capacity with FS = 1.5: soft clay/mud 2.0 kips per US ton of weight in air
+  (1 t → 2.0 kips … 60 t → 120 kips, *"Keep chain angle less than 5 to 6 degrees"*); sand
+  3.87 kips per US ton at 0° up angle, 2.65 at 6°. I.e. a working capacity of about 1.0 × the
+  anchor's weight in air in mud, against about 0.12 × for a plain block with μ = 0.3 and
+  FS 1.5. This is the main quantified reason for the gap to practice (§5 item 9).
+
+### 9.6 Vaasa 2020
+
+See §3 (733 €/jm, about 50 000 € per pier, 2 900 € per berth at Gerby 2014).
+
+### 9.7 Savorak (savorak.fi)
+
+Concrete weights (*"Raudoitettu. Päällä nostokahvat ja pohjassa urat."*), € as listed, VAT
+status not stated on the product page: 300 kg 126; 600 kg 205; 800 kg 270; 1 000 kg 310
+(1 190 × 1 190 × 320 mm); 1 500 kg 435; 2 000 kg 550; 2 400 kg 660; 3 000 kg 790
+(1 190 × 2 390 × 460 mm). Chain *"DIN 763 (5685C)"* hot-dip galvanised, breaking strength
+10 mm n. 4 t … 22 mm n. 19 t (same figures as Laatulaituri), sold in 7.5/15/30 m lengths
+(e.g. 20 mm 30 m 1 200 €). Packages up to *"koneasennus 2 x 2000 kg"*. Not yet in the price
+list ([anchoring](https://savorak.fi/tuoteosasto/ankkurointi/),
+[weights](https://savorak.fi/tuotteet/betonipaino-300kg/),
+[chain](https://savorak.fi/tuotteet/kettinki-20mm-kuumasinkitty/)).
+
+### 9.8 Still not readable
+
+www.theseus.fi answers with a Cloudflare browser check; the NAVFAC handbook on apps.dtic.mil
+is refused by the server ("The request is blocked."); shipmin.gov.in was not tried again.

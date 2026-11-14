@@ -7,6 +7,7 @@ import {
   chooseChain,
   DEFAULT_ANCHORING,
   requiredAnchorMass,
+  resetAnchoringFactors,
   type AnchoringParams,
 } from '../anchoring';
 import type { PriceList, Product } from '../catalog';
@@ -90,8 +91,24 @@ describe('chain line (catenary)', () => {
     expect(below.topTension).toBeCloseTo(above.topTension, 1);
   });
 
+  it('resetting the factors keeps the site values (U19)', () => {
+    const own: AnchoringParams = {
+      ...DEFAULT_ANCHORING,
+      depth: 7,
+      highWater: 1.2,
+      lowWater: 0.6,
+      seabed: 'sand',
+      windSpeed: 25,
+      dragCoefficient: 1.2,
+      profileHeightRatio: 0.25,
+      friction: { clay: 0.2, sand: 0.5, rock: 0.4 },
+    };
+    expect(resetAnchoringFactors(own)).toEqual({ ...DEFAULT_ANCHORING, depth: 7, highWater: 1.2, lowWater: 0.6, seabed: 'sand', windSpeed: 25 });
+  });
+
   it('chain length: factor × depth, at least depth + 1 m', () => {
-    expect(chainLengthFor(5.5, DEFAULT_ANCHORING)).toBeCloseTo(16.5, 9);
+    // Default factor 4 (SF Marina's initial assumption, Chalmers 2026 §3.3).
+    expect(chainLengthFor(5.5, DEFAULT_ANCHORING)).toBeCloseTo(22, 9);
     expect(chainLengthFor(5.5, { ...DEFAULT_ANCHORING, chainLengthFactor: 1 })).toBeCloseTo(6.5, 9);
   });
 });
@@ -106,17 +123,28 @@ describe('anchor mass and product choice', () => {
     expect(requiredAnchorMass(10000, 0, { ...DEFAULT_ANCHORING, seabed: 'sand' })).toBeCloseTo(4368.7, 1);
   });
 
-  it('the cheapest chain that holds the load with the safety factor and corrosion allowance', () => {
-    // h = 5.5 m, L = 16.5 m. 13 mm: 61.8 kN · (11/13)² = 44.2 kN effective. For H = 10 kN
-    // the top tension is about 10.8 kN → 3 · 10.8 = 32.4 kN ≤ 44.2 → 13 mm (cheaper) is chosen.
-    const small = chooseChain(10000, 5.5, DEFAULT_ANCHORING, LIST, 25.5)!;
+  it('the cheapest chain that holds the load with the safety factor (new breaking load, UFC 4-159-03)', () => {
+    // h = 5.5 m, L = 22 m. 13 mm holds a top tension up to 61.8 / 3 = 20.6 kN.
+    const small = chooseChain(15000, 5.5, DEFAULT_ANCHORING, LIST, 25.5)!;
     expect(small.product.id).toBe('c13');
-    expect(small.length).toBeCloseTo(16.5, 9);
+    expect(small.length).toBeCloseTo(22, 9);
+    expect(3 * small.topTension).toBeLessThanOrEqual(61.8e3);
+    // H = 25 kN: 3 · ≥25 kN > 61.8 kN, 16 mm (98.1 kN) holds.
+    expect(chooseChain(25000, 5.5, DEFAULT_ANCHORING, LIST, 25.5)!.product.id).toBe('c16');
+    // Nothing holds 35 kN: 3 · 35 kN > 98.1 kN.
+    expect(chooseChain(35000, 5.5, DEFAULT_ANCHORING, LIST, 25.5)).toBeNull();
+  });
+
+  it('a corrosion allowance reduces the breaking load by ((d − c)/d)²', () => {
+    // c = 2 mm, L = 16.5 m: 13 mm gives 61.8 kN · (11/13)² = 44.2 kN. For H = 10 kN the top
+    // tension is about 10.8 kN → 3 · 10.8 = 32.4 kN ≤ 44.2 → 13 mm; for H = 15 kN 16 mm.
+    const p = { ...DEFAULT_ANCHORING, corrosionAllowance: 2, chainLengthFactor: 3 };
+    const small = chooseChain(10000, 5.5, p, LIST, 25.5)!;
+    expect(small.product.id).toBe('c13');
     expect(3 * small.topTension).toBeLessThanOrEqual(61.8e3 * (11 / 13) ** 2);
-    // For H = 15 kN the 13 mm chain is too weak (3 · ≥15 kN > 44.2 kN): 16 mm.
-    expect(chooseChain(15000, 5.5, DEFAULT_ANCHORING, LIST, 25.5)!.product.id).toBe('c16');
-    // Nothing holds 30 kN: 16 mm gives 98.1 · (14/16)² = 75.1 kN < 3 · 30 kN.
-    expect(chooseChain(30000, 5.5, DEFAULT_ANCHORING, LIST, 25.5)).toBeNull();
+    expect(chooseChain(15000, 5.5, p, LIST, 25.5)!.product.id).toBe('c16');
+    // 16 mm gives 98.1 · (14/16)² = 75.1 kN < 3 · 30 kN.
+    expect(chooseChain(30000, 5.5, p, LIST, 25.5)).toBeNull();
   });
 
   it('a chain without a published breaking load is never chosen', () => {
@@ -129,17 +157,30 @@ describe('anchor mass and product choice', () => {
     expect(chooseAnchor(1500, LIST, 25.5)!.product.id).toBe('a2000');
     expect(chooseAnchor(8737, LIST, 25.5)).toEqual({ product: LIST.products[5], count: 3 });
   });
+
+  it('anchors heavier than the largest piece to be handled are not used (Chalmers 2026 §3.8)', () => {
+    // 2 500 kg with at most 2 000 kg pieces: two 2 000 kg anchors instead of one 3 000 kg.
+    expect(chooseAnchor(2500, LIST, 25.5, 2000)).toEqual({ product: LIST.products[4], count: 2 });
+    expect(chooseAnchor(2500, LIST, 25.5, 3000)).toEqual({ product: LIST.products[5], count: 1 });
+    // A limit below every anchor falls back to the whole list.
+    expect(chooseAnchor(900, LIST, 25.5, 100)).toEqual({ product: LIST.products[3], count: 1 });
+  });
 });
 
 describe('anchoring plan of a pier', () => {
   /**
-   * Pier 30 m × 3 m, freeboard 0.5 m, four 10 m × 3.5 m boats on its left side.
-   * q = ½ · 1.25 · 22² = 302.5 Pa; Cd = 1.2; boat profile 0.25 · 10 = 2.5 m → 25 m² each.
-   * Across: max(100 + 0.2 · 0, 0 + 0.2 · 100) + 30 · 0.5 = 115 m² → 302.5 · 1.2 · 115 = 41 745 N.
-   * Along: pier end 3 · 0.5 = 1.5 m² + first boat 3.5 · 2.5 = 8.75 m² + 3 · 0.2 · 8.75
-   *        = 15.5 m² → 5 626.5 N.
-   * Pairs: max(2, ⌈30/12⌉ + 1) = 4 → 8 lateral lines of 41 745 / 4 = 10 436 N.
-   * Axial: 2 lines of 5 626.5 / 2 / cos 30° = 3 248 N.
+   * Pier 30 m × 3 m, freeboard 0.5 m, four 10 m × 3.5 m boats on its left side
+   * (UFC 4-152-07 C1 §6-3.4.1 and Fig. 6-5).
+   * q = ½ · 1.25 · 22² = 302.5 Pa; Cd = 1.6 → 484 Pa; profile height 0.15 · 10 = 1.5 m.
+   * Across (boats bow-on, 3.5 · 1.5 = 5.25 m² each, 21 m² per row; the boats hide 4 · 3.5 = 14 m
+   * of the pier face):
+   *   wind from the left:  21 + 0.2 · 0 + (30 − 14) · 0.5 = 29 m²
+   *   wind from the right: 0 + 0.2 · 21 + 30 · 0.5        = 19.2 m²
+   *   → 484 · 29 = 14 036 N.
+   * Along (boats broadside, 10 · 1.5 = 15 m²): pier end 3 · 0.5 = 1.5 m² + first boat 15 m²
+   *   + 3 · 0.2 · 15 = 9 m² → 25.5 m² → 12 342 N.
+   * Pairs: max(2, ⌈30/12⌉ + 1) = 4 → 8 lateral lines of 14 036 / 4 = 3 509 N.
+   * Axial: 2 lines of 12 342 / 2 / cos 30° = 7 125.6 N.
    */
   const pier: MainPier = { id: 'P1', start: { x: 0, y: 0 }, end: { x: 0, y: 30 }, width: 3, locked: false, origin: 'manual' };
   const boat: BoatClass = { id: 'b10', name: '10 m', length: 10, beam: 3.5, color: '#000', share: 1, count: 0 };
@@ -165,8 +206,8 @@ describe('anchoring plan of a pier', () => {
 
   it('wind loads', () => {
     expect(plan.loads).toHaveLength(1);
-    expect(plan.loads[0]!.lateralKn).toBeCloseTo(41.745, 6);
-    expect(plan.loads[0]!.axialKn).toBeCloseTo(5.6265, 6);
+    expect(plan.loads[0]!.lateralKn).toBeCloseTo(14.036, 6);
+    expect(plan.loads[0]!.axialKn).toBeCloseTo(12.342, 6);
   });
 
   it('8 crossed lateral lines and 2 axial lines with the hand-calculated loads', () => {
@@ -174,8 +215,8 @@ describe('anchoring plan of a pier', () => {
     const axial = plan.lines.filter((l) => l.kind === 'axial');
     expect(lateral).toHaveLength(8);
     expect(axial).toHaveLength(2);
-    for (const l of lateral) expect(l.horizontalKn).toBeCloseTo(10.43625, 6);
-    for (const l of axial) expect(l.horizontalKn).toBeCloseTo(5.6265 / 2 / Math.cos(Math.PI / 6), 6);
+    for (const l of lateral) expect(l.horizontalKn).toBeCloseTo(3.509, 6);
+    for (const l of axial) expect(l.horizontalKn).toBeCloseTo(12.342 / 2 / Math.cos(Math.PI / 6), 6);
     // Each line is fixed on one edge and anchored beyond the other: chains cross under the pier.
     for (const l of lateral) {
       expect(Math.sign(l.fix.x)).toBe(-Math.sign(l.anchor.x));
@@ -188,11 +229,24 @@ describe('anchoring plan of a pier', () => {
   it('chain and anchor per line', () => {
     const line = plan.lines[0]!;
     expect(line.chainId).toBe('c13');
-    expect(line.chainLength).toBeCloseTo(3 * (4 + 1.5), 9);
-    expect(line.requiredAnchorKg).toBeCloseTo(requiredAnchorMass(10436.25, line.upliftKn * 1000, params), 6);
-    // About 4.4 t without uplift on sand: two 3 000 kg anchors (the heaviest in the list).
-    expect(line.anchorId).toBe('a3000');
-    expect(line.anchorCount).toBe(2);
+    expect(line.chainLength).toBeCloseTo(4 * (4 + 1.5), 9);
+    // 22 m of 13 mm chain in 5.5 m of water: a = 3 509 / 26.55 = 132 m needs 38.5 m to touch the
+    // bottom, so the chain hangs and lifts the anchor.
+    const hanging = chainLine(5.5, 22, 3509, 3.1 * 9.81 * (1 - 1000 / 7850));
+    expect(hanging.touchesBottom).toBe(false);
+    expect(line.upliftKn).toBeCloseTo(hanging.uplift / 1000, 9);
+    expect(line.requiredAnchorKg).toBeCloseTo(requiredAnchorMass(3509, hanging.uplift, params), 6);
+    // On sand 1.5 · (3 509 / 0.6 + V) / (9.81 · 0.583) = 1 533 kg + uplift → one 2 000 kg anchor.
+    expect(line.requiredAnchorKg).toBeGreaterThan(1533);
+    expect(line.requiredAnchorKg).toBeLessThan(2000);
+    expect(line.anchorId).toBe('a2000');
+    expect(line.anchorCount).toBe(1);
+    // The axial lines hold 7 126 N: 1.5 · 7 126 / 0.6 / 5.72 = 3 113 kg + uplift, more than the
+    // heaviest anchor (3 000 kg) → two 3 000 kg anchors.
+    const axial = plan.lines.find((l) => l.kind === 'axial')!;
+    expect(axial.requiredAnchorKg).toBeGreaterThan(3113);
+    expect(axial.anchorId).toBe('a3000');
+    expect(axial.anchorCount).toBe(2);
     expect(plan.issues.some((i) => i.code === 'SEVERAL_ANCHORS')).toBe(true);
     expect(plan.issues.some((i) => i.code === 'ANCHORING_NOT_A_DESIGN')).toBe(true);
   });
@@ -207,11 +261,11 @@ describe('anchoring plan of a pier', () => {
       vatPct: 25.5,
       pierFreeboard: 0.5,
     });
-    // 100 m · 0.5 m · 302.5 Pa · 1.2 = 18 150 N; ⌈100/12⌉ + 1 = 10 pairs → 20 lines; the 10
-    // lines of one side carry the load from that side: 1 815 N each.
-    expect(withAccess.loads[0]!.lateralKn).toBeCloseTo(18.15, 6);
+    // 100 m · 0.5 m · 484 Pa = 24 200 N; ⌈100/12⌉ + 1 = 10 pairs → 20 lines; the 10 lines of
+    // one side carry the load from that side: 2 420 N each.
+    expect(withAccess.loads[0]!.lateralKn).toBeCloseTo(24.2, 6);
     expect(withAccess.lines).toHaveLength(20);
-    expect(withAccess.lines[0]!.horizontalKn).toBeCloseTo(1.815, 6);
+    expect(withAccess.lines[0]!.horizontalKn).toBeCloseTo(2.42, 6);
     expect(withAccess.issues.some((i) => i.code === 'ACCESS_PONTOON_WALL_FIXING')).toBe(true);
   });
 
