@@ -7,11 +7,13 @@ import type { BoatClass, Params, Site } from '../model';
 import { fingerPierPattern } from '../patterns';
 import { prepareSite } from '../site';
 
+/** The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27). */
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5 };
 const OPEN_BASIN: Site = { ...RECT_BASIN_SITE, obstacles: [] };
 
 const only = (id: string): BoatClass[] => DEFAULT_BOAT_CLASSES.filter((c) => c.id === id).map((c) => ({ ...c, share: 1 }));
 
-function context(site: Site, classes: BoatClass[], params: Params = DEFAULT_PARAMS): FillContext {
+function context(site: Site, classes: BoatClass[], params: Params = PARAMS): FillContext {
   const design = rowDesign(classes, params, fingerPierPattern);
   if (!design) throw new Error('no active boat classes');
   return { prepared: prepareSite(site, params), classes, params, pattern: fingerPierPattern, design };
@@ -25,15 +27,21 @@ const count = (berths: { side: string; boatClassId: string }[], side: string, cl
 
 describe('rowDesign (SPEC §5.3, uniform pitch by the longest class — DECISIONS D2)', () => {
   it('default mix: 12 m boats set the module', () => {
-    const d = rowDesign(DEFAULT_BOAT_CLASSES, DEFAULT_PARAMS, fingerPierPattern)!;
+    const d = rowDesign(DEFAULT_BOAT_CLASSES, PARAMS, fingerPierPattern)!;
     expect(d.rowDepth).toBe(12.5); // 12.0 + 0.5
     expect(d.fairwayWidth).toBe(18); // max(8, 1.5 × 12)
     expect(d.pitch).toBe(46); // 3.0 + 2 × 12.5 + 18
     expect(d.minBayFootprint).toBeCloseTo(4.1, 12); // 0.8 + 2.5 + 0.8
   });
 
+  it('with the default fairway factor 1.75 (D27) the 12 m boats need a 21 m fairway', () => {
+    const d = rowDesign(DEFAULT_BOAT_CLASSES, DEFAULT_PARAMS, fingerPierPattern)!;
+    expect(d.fairwayWidth).toBe(21); // max(8, 1.75 × 12)
+    expect(d.pitch).toBe(49); // 3.0 + 2 × 12.5 + 21
+  });
+
   it('5 m boats only: the minimum fairway width governs', () => {
-    const d = rowDesign(only('c5'), DEFAULT_PARAMS, fingerPierPattern)!;
+    const d = rowDesign(only('c5'), PARAMS, fingerPierPattern)!;
     expect(d.rowDepth).toBe(5.5);
     expect(d.fairwayWidth).toBe(8); // max(8, 1.5 × 5 = 7.5)
     expect(d.pitch).toBe(22); // 3.0 + 2 × 5.5 + 8
@@ -41,8 +49,8 @@ describe('rowDesign (SPEC §5.3, uniform pitch by the longest class — DECISION
 
   it('classes with zero share are ignored; none active gives null', () => {
     const classes = DEFAULT_BOAT_CLASSES.map((c) => ({ ...c, share: c.id === 'c12' ? 0 : c.share }));
-    expect(rowDesign(classes, DEFAULT_PARAMS, fingerPierPattern)!.rowDepth).toBe(9.5);
-    expect(rowDesign(classes.map((c) => ({ ...c, share: 0 })), DEFAULT_PARAMS, fingerPierPattern)).toBeNull();
+    expect(rowDesign(classes, PARAMS, fingerPierPattern)!.rowDepth).toBe(9.5);
+    expect(rowDesign(classes.map((c) => ({ ...c, share: 0 })), PARAMS, fingerPierPattern)).toBeNull();
   });
 });
 
@@ -64,7 +72,7 @@ describe('fillPier, hand-calculated berth counts (SPEC §10)', () => {
     // Slot 2.5 + 0.5 = 3.0 m. Bay = 0.8 + 3.0 = 3.8 m.
     // 15 × 3.8 + 0.8 = 57.8 ≤ 60; 16 × 3.8 + 0.8 = 61.6 > 60.
     const classes = only('c7');
-    const params: Params = { ...DEFAULT_PARAMS, boatsPerBay: 1 };
+    const params: Params = { ...PARAMS, boatsPerBay: 1 };
     const fill = fillPier(pierAt(110, 60), context(OPEN_BASIN, classes, params), newMixState(classes));
     expect(count(fill.berths, 'left')).toBe(15);
     expect(count(fill.berths, 'right')).toBe(15);
@@ -74,7 +82,7 @@ describe('fillPier, hand-calculated berth counts (SPEC §10)', () => {
   it('case 3: shoreOffset 10 m leaves 50 m → 8 bays, 16 per side, 32 in total', () => {
     // 8 × 5.8 + 0.8 = 47.2 ≤ 50; 9 × 5.8 + 0.8 = 53.0 > 50. Left over 50 − 46.4 = 3.6 < 4.1.
     const classes = only('c5');
-    const params: Params = { ...DEFAULT_PARAMS, shoreOffset: 10 };
+    const params: Params = { ...PARAMS, shoreOffset: 10 };
     const fill = fillPier(pierAt(110, 60), context(OPEN_BASIN, classes, params), newMixState(classes));
     expect(fill.berths).toHaveLength(32);
     // The first finger starts 10 m from the shore.

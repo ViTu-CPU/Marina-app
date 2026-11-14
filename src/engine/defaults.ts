@@ -4,7 +4,10 @@ import type { BoatClass, CostSettings, ObjectiveSettings, Params } from './model
  * Default dock and fairway parameters (SPEC §4).
  *
  * These are ASSUMPTIONS for a feasibility-level study, not values taken from any
- * standard or guideline. They must be reviewed by a qualified marina engineer.
+ * standard. They must be reviewed by a qualified marina engineer. Only `fairwayFactor`
+ * follows a published guideline: 1.75 L_b, the minimum fairway width without side-ties in
+ * California DBW, Layout and Design Guidelines for Marina Berthing Facilities (2005),
+ * Table B-2 (DECISIONS D27). SPEC §4 had 1.5.
  */
 export const DEFAULT_PARAMS: Params = {
   mainPierWidth: 3.0,
@@ -13,7 +16,7 @@ export const DEFAULT_PARAMS: Params = {
   boatsPerBay: 2,
   beamClearance: 0.5,
   lengthClearance: 0.5,
-  fairwayFactor: 1.5,
+  fairwayFactor: 1.75,
   fairwayMin: 8.0,
   obstacleClearance: 2.0,
   maxMainPierLength: 150,

@@ -7,6 +7,8 @@ import { rowFrame, toLocalRect } from '../rows';
 import { prepareSite } from '../site';
 import { IssueCode } from '../validate';
 
+/** The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27). */
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5 };
 /**
  * A 100 m × 80 m basin, shore along the south edge, entrance along the north edge.
  * One pier is drawn by hand from (50, 0) to (50, 60), width 3 m; its left side faces west.
@@ -18,7 +20,7 @@ const site: Site = {
   obstacles: [],
   zones: [],
 };
-const ctx: EditContext = { prepared: prepareSite(site, DEFAULT_PARAMS), classes: DEFAULT_BOAT_CLASSES, params: DEFAULT_PARAMS };
+const ctx: EditContext = { prepared: prepareSite(site, PARAMS), classes: DEFAULT_BOAT_CLASSES, params: PARAMS };
 const empty: Layout = evaluateLayout(
   { id: 'L1', name: 'Manual', strategy: 'manual', piers: [], fingers: [], berths: [], modified: false },
   ctx.prepared,

@@ -6,6 +6,8 @@ import type { AccessPontoon, BoatClass, Site } from '../model';
 import { connectionLines, prepareSite } from '../site';
 import { IssueCode } from '../validate';
 
+/** The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27). */
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5 };
 const FIVE_M_ONLY: BoatClass[] = DEFAULT_BOAT_CLASSES.map((c) => ({ ...c, share: c.id === 'c5' ? 1 : 0 }));
 
 /** The 60 m × 80 m basin of the hand-calculated generator test, with an access pontoon. */
@@ -31,7 +33,7 @@ describe('access pontoon in front of a high quay wall (D21)', () => {
    */
   const pontoon: AccessPontoon = { id: 'access-1', start: { x: 0, y: 2.5 }, end: { x: 60, y: 2.5 }, width: 3 };
   const site = basin([pontoon]);
-  const result = generateLayouts({ site, boatClasses: FIVE_M_ONLY, params: DEFAULT_PARAMS, objective: DEFAULT_OBJECTIVE });
+  const result = generateLayouts({ site, boatClasses: FIVE_M_ONLY, params: PARAMS, objective: DEFAULT_OBJECTIVE });
   const a = result.layouts.find((l) => l.strategy === 'A');
 
   it('piers start at the outer edge of the pontoon', () => {
@@ -67,12 +69,12 @@ describe('access pontoon in front of a high quay wall (D21)', () => {
 
   it('a pontoon more than 12 m from the shore is flagged (gangway length)', () => {
     const far = basin([{ ...pontoon, start: { x: 0, y: 21.5 }, end: { x: 60, y: 21.5 } }]);
-    const prepared = prepareSite(far, DEFAULT_PARAMS);
+    const prepared = prepareSite(far, PARAMS);
     const evaluated = evaluateLayout(
       { id: 'L', name: 'L', strategy: 'manual', piers: [], fingers: [], berths: [], modified: false },
       prepared,
       FIVE_M_ONLY,
-      DEFAULT_PARAMS,
+      PARAMS,
     );
     const issue = evaluated.issues.find((i) => i.code === IssueCode.ACCESS_PONTOON_FAR_FROM_SHORE);
     expect(issue?.elementId).toBe('access-1');
@@ -80,7 +82,7 @@ describe('access pontoon in front of a high quay wall (D21)', () => {
   });
 
   it('a pier that overlaps the pontoon is an error', () => {
-    const prepared = prepareSite(site, DEFAULT_PARAMS);
+    const prepared = prepareSite(site, PARAMS);
     const evaluated = evaluateLayout(
       {
         id: 'L',
@@ -93,14 +95,14 @@ describe('access pontoon in front of a high quay wall (D21)', () => {
       },
       prepared,
       FIVE_M_ONLY,
-      DEFAULT_PARAMS,
+      PARAMS,
     );
     expect(evaluated.issues.some((i) => i.code === IssueCode.OVERLAP)).toBe(true);
     expect(evaluated.feasibility).toBe('geometricFail');
   });
 
   it('without access pontoons nothing changes', () => {
-    const plain = generateLayouts({ site: basin([]), boatClasses: FIVE_M_ONLY, params: DEFAULT_PARAMS, objective: DEFAULT_OBJECTIVE });
+    const plain = generateLayouts({ site: basin([]), boatClasses: FIVE_M_ONLY, params: PARAMS, objective: DEFAULT_OBJECTIVE });
     const pa = plain.layouts.find((l) => l.strategy === 'A')!;
     expect(pa.stats.totalBerths).toBe(96);
     expect(pa.stats.accessPontoonLength).toBe(0);

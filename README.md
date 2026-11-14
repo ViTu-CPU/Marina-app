@@ -131,8 +131,10 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 
 ## Assumptions behind the default parameters
 
-These defaults are **assumptions for a first study, not values taken from any standard or
-guideline**. Replace them with values appropriate for the site and the applicable rules.
+These defaults are **assumptions for a first study, not values taken from any standard**;
+only the fairway factor follows a published guideline (California DBW 2005, a US guideline,
+not a Finnish rule). Replace them with values appropriate for the site and the applicable
+rules.
 
 | Parameter | Default | Meaning |
 |---|---|---|
@@ -142,7 +144,7 @@ guideline**. Replace them with values appropriate for the site and the applicabl
 | Boats per bay | 2 | two boats between a pair of fingers |
 | Beam clearance | 0.5 m | total extra width per boat |
 | Length clearance | 0.5 m | extra slot length |
-| Fairway width ÷ boat length | 1.5 | fairway = max(minimum, 1.5 × longest boat) |
+| Fairway width ÷ boat length | 1.75 | fairway = max(minimum, 1.75 × longest boat); 1.75 L<sub>b</sub> is the minimum fairway width without side-ties in California DBW 2005 Table B-2, where L<sub>b</sub> is the longest berth (docs/DECISIONS.md D27) |
 | Minimum fairway width | 8.0 m | |
 | Obstacle clearance | 2.0 m | structures and boats keep this far from obstacles |
 | Max main pier length | 150 m | |

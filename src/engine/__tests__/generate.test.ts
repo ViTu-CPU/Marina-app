@@ -21,10 +21,12 @@ import type { BoatClass, Layout, Site } from '../model';
 import { pierPolygon, prepareSite } from '../site';
 import { IssueCode } from '../validate';
 
+/** The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27). */
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5 };
 const inputFor = (site: Site, over: Partial<GenerateInput> = {}): GenerateInput => ({
   site,
   boatClasses: DEFAULT_BOAT_CLASSES,
-  params: DEFAULT_PARAMS,
+  params: PARAMS,
   objective: DEFAULT_OBJECTIVE,
   ...over,
 });
@@ -41,14 +43,14 @@ describe('candidate orientations (SPEC §5.2)', () => {
   });
 
   it("'auto' tests the shore-perpendicular, the longest edges and a 5° sweep, without duplicates", () => {
-    const { all, shorePerpendicular } = candidateOrientations(RECT_BASIN_SITE, DEFAULT_PARAMS);
+    const { all, shorePerpendicular } = candidateOrientations(RECT_BASIN_SITE, PARAMS);
     expect(shorePerpendicular).toBe(0);
     expect(all).toHaveLength(36); // 0, 5, …, 175; the special directions coincide with them
     expect(new Set(all).size).toBe(36);
   });
 
   it('a fixed orientation is the only candidate', () => {
-    const { all } = candidateOrientations(RECT_BASIN_SITE, { ...DEFAULT_PARAMS, orientation: 200 });
+    const { all } = candidateOrientations(RECT_BASIN_SITE, { ...PARAMS, orientation: 200 });
     expect(all).toEqual([20]); // pier axes are the same 180° apart
   });
 });
@@ -220,10 +222,10 @@ describe('generateLayouts on the demo projects (SPEC §10)', () => {
         }
       });
 
-      it('property: the class mix is close to the target and stats agree with the elements', () => {
-        const best = result.layouts[0]!;
-        expect(best.stats.mixDeviation).toBeLessThan(0.05);
+      it('property: the class mix is close to the target (A–D) and stats agree with the elements', () => {
+        // Strategy E may leave out a class that fits nowhere (I25); its mix is tested separately.
         for (const layout of result.layouts) {
+          if (layout.strategy !== 'E') expect(layout.stats.mixDeviation).toBeLessThan(0.05);
           expect(layout.stats.totalBerths).toBe(layout.berths.length);
           expect(Object.values(layout.stats.berthsByClass).reduce((a, b) => a + b, 0)).toBe(layout.berths.length);
           const ids = [...layout.piers, ...layout.fingers, ...layout.berths].map((e) => e.id);
@@ -405,7 +407,7 @@ describe('berths that cannot be reached from the entrance', () => {
   });
 
   it('the count survives a manual edit', () => {
-    const ctx = { prepared: prepareSite(site, DEFAULT_PARAMS), classes: DEFAULT_BOAT_CLASSES, params: DEFAULT_PARAMS };
+    const ctx = { prepared: prepareSite(site, PARAMS), classes: DEFAULT_BOAT_CLASSES, params: PARAMS };
     const edited = setBerthRemoved(a, a.berths[0]!.id, true, ctx);
     expect(edited.unreachableRemoved).toBe(a.unreachableRemoved);
     expect(edited.stats.unreachableRemoved).toBe(a.unreachableRemoved);
@@ -417,7 +419,7 @@ describe('berths that cannot be reached from the entrance', () => {
 
 describe('generateLayouts options', () => {
   it('a fixed orientation is respected by the parallel-pier strategies', () => {
-    const result = generateLayouts(inputFor(IRREGULAR_BAY_SITE, { params: { ...DEFAULT_PARAMS, orientation: 90 } }));
+    const result = generateLayouts(inputFor(IRREGULAR_BAY_SITE, { params: { ...PARAMS, orientation: 90 } }));
     const parallel = result.layouts.filter((l) => l.strategy !== 'D');
     expect(parallel.length).toBeGreaterThan(0);
     for (const layout of parallel) {

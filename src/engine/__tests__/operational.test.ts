@@ -10,8 +10,10 @@ import { layoutRows } from '../rows';
 import { prepareSite } from '../site';
 import { IssueCode, validateLayout, type LayoutElements } from '../validate';
 
+/** The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27). */
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5 };
 const classes = DEFAULT_BOAT_CLASSES;
-const params = DEFAULT_PARAMS;
+const params = PARAMS;
 const OPEN_BASIN: Site = { ...RECT_BASIN_SITE, obstacles: [] };
 
 const pier = (id: string, x: number, y0: number, y1: number): MainPier => ({
