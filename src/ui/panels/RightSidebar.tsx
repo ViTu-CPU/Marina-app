@@ -8,6 +8,7 @@ import { appStore, useAppStore } from '../../state/store';
 import { comparisonRows } from '../compare';
 import { formatCount, formatLength } from '../format';
 import { useT } from '../useT';
+import { AnchoringAndCost } from './CostPanels';
 import { Button, NumberField, Section } from './fields';
 
 const state = () => appStore.getState();
@@ -328,6 +329,7 @@ export function RightSidebar() {
       {layout && <SelectionPanel layout={layout} />}
       <Comparison />
       {layout && <Issues layout={layout} />}
+      {layout && <AnchoringAndCost layout={layout} />}
     </aside>
   );
 }

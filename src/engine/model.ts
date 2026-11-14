@@ -10,6 +10,9 @@
  * docs/DECISIONS.md.
  */
 
+import type { AnchoringParams } from './anchoring';
+import type { PriceList } from './catalog';
+
 export interface Vec2 {
   x: number;
   y: number;
@@ -282,6 +285,21 @@ export interface MapBackground {
   opacity: number;
 }
 
+/**
+ * Extension (D24): product choices and the price list for the bill of materials and the
+ * cost estimate. A series is a group of size alternatives in the price list (I48).
+ */
+export interface CostSettings {
+  /** Imported price list, or null for the built-in data/hinnasto.xlsx. */
+  priceList: PriceList | null;
+  /** Series used for the main piers and access pontoons; '' = chosen automatically. */
+  pontoonSeries: string;
+  /** Series used for the fingers; '' = chosen automatically. */
+  fingerSeries: string;
+  /** Series used for the gangways from the shore; '' = chosen automatically. */
+  gangwaySeries: string;
+}
+
 export const PROJECT_SCHEMA_VERSION = 1;
 
 /** The complete saved state of one study: what goes into the JSON project file. */
@@ -297,6 +315,10 @@ export interface Project {
   background: BackgroundImage | null;
   /** Extension: online map under the drawing, or null. */
   map: MapBackground | null;
+  /** Extension (D23): parameters of the preliminary anchoring plan. */
+  anchoring: AnchoringParams;
+  /** Extension (D24): product choices and price list. */
+  cost: CostSettings;
   /**
    * Fingerprint of the inputs (site, boat classes, parameters) the layouts were generated
    * from, or null when there are no generated layouts. Used for the "Regenerate" hint.

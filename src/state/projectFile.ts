@@ -1,13 +1,16 @@
 /**
  * JSON project file: export and import with structural validation (SPEC §2, persistence).
  */
-import { DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
+import { DEFAULT_ANCHORING, type AnchoringParams, type Seabed } from '../engine/anchoring';
+import { PRODUCT_CATEGORIES, PRODUCT_UNITS, type PriceList, type Product } from '../engine/catalog';
+import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import {
   PROJECT_SCHEMA_VERSION,
   type AccessPontoon,
   type BackgroundImage,
   type Berth,
   type BoatClass,
+  type CostSettings,
   type Finger,
   type Layout,
   type MainPier,
@@ -272,6 +275,105 @@ function mapBackground(v: unknown): MapBackground | null {
   return { provider: oneOf(o.provider, ['osm'] as const, 'map.provider'), lat, lon, opacity: Math.min(1, Math.max(0, opacity)) };
 }
 
+/** Extension (D23). Missing values take their defaults, so older files stay readable. */
+function anchoring(v: unknown): AnchoringParams {
+  if (v === undefined) return structuredClone(DEFAULT_ANCHORING);
+  const o = obj(v, 'anchoring');
+  const d = DEFAULT_ANCHORING;
+  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction'>): number =>
+    o[key] === undefined ? d[key] : num(o[key], `anchoring.${key}`);
+  const f = o.friction === undefined ? {} : obj(o.friction, 'anchoring.friction');
+  const mu = (k: Seabed) => (f[k] === undefined ? d.friction[k] : num(f[k], `anchoring.friction.${k}`));
+  const result: AnchoringParams = {
+    depth: pick('depth'),
+    highWater: pick('highWater'),
+    lowWater: pick('lowWater'),
+    seabed: o.seabed === undefined ? d.seabed : oneOf(o.seabed, ['clay', 'sand', 'rock'] as const, 'anchoring.seabed'),
+    windSpeed: pick('windSpeed'),
+    airDensity: pick('airDensity'),
+    dragCoefficient: pick('dragCoefficient'),
+    leewardFactor: pick('leewardFactor'),
+    profileHeightRatio: pick('profileHeightRatio'),
+    pontoonFreeboard: pick('pontoonFreeboard'),
+    lineSpacing: pick('lineSpacing'),
+    chainSafetyFactor: pick('chainSafetyFactor'),
+    corrosionAllowance: pick('corrosionAllowance'),
+    slidingSafetyFactor: pick('slidingSafetyFactor'),
+    friction: { clay: mu('clay'), sand: mu('sand'), rock: mu('rock') },
+    chainLengthFactor: pick('chainLengthFactor'),
+    waterDensity: pick('waterDensity'),
+    concreteDensity: pick('concreteDensity'),
+    steelDensity: pick('steelDensity'),
+  };
+  if (result.depth <= 0) fail('anchoring.depth must be positive');
+  if (result.lineSpacing <= 0) fail('anchoring.lineSpacing must be positive');
+  if (Object.values(result.friction).some((x) => x <= 0)) fail('anchoring.friction values must be positive');
+  return result;
+}
+
+/** An imported price list kept in the project (D24). */
+function priceList(v: unknown): PriceList | null {
+  if (v === undefined || v === null) return null;
+  const o = obj(v, 'cost.priceList');
+  const optNum = (x: unknown, path: string): number | null => (x === null || x === undefined ? null : num(x, path));
+  const products = arr(o.products, 'cost.priceList.products').map((item, i): Product => {
+    const p = `cost.priceList.products[${i}]`;
+    const e = obj(item, p);
+    const text = (k: string) => (e[k] === undefined ? '' : str(e[k], `${p}.${k}`));
+    return {
+      id: str(e.id, `${p}.id`),
+      category: oneOf(e.category, PRODUCT_CATEGORIES, `${p}.category`),
+      supplier: text('supplier'),
+      series: text('series'),
+      name: str(e.name, `${p}.name`),
+      code: text('code'),
+      unit: oneOf(e.unit, PRODUCT_UNITS, `${p}.unit`),
+      price: optNum(e.price, `${p}.price`),
+      priceIncludesVat: e.priceIncludesVat === undefined ? false : bool(e.priceIncludesVat, `${p}.priceIncludesVat`),
+      marginPct: optNum(e.marginPct, `${p}.marginPct`) ?? 0,
+      lengthM: optNum(e.lengthM, `${p}.lengthM`),
+      widthM: optNum(e.widthM, `${p}.widthM`),
+      weightKg: optNum(e.weightKg, `${p}.weightKg`),
+      capacityKg: optNum(e.capacityKg, `${p}.capacityKg`),
+      freeboardM: optNum(e.freeboardM, `${p}.freeboardM`),
+      chainDiameterMm: optNum(e.chainDiameterMm, `${p}.chainDiameterMm`),
+      chainGrade: text('chainGrade'),
+      breakingLoadKn: optNum(e.breakingLoadKn, `${p}.breakingLoadKn`),
+      massKgPerM: optNum(e.massKgPerM, `${p}.massKgPerM`),
+      anchorMassKg: optNum(e.anchorMassKg, `${p}.anchorMassKg`),
+      shackleMm: optNum(e.shackleMm, `${p}.shackleMm`),
+      sourceUrl: text('sourceUrl'),
+      sourceDate: text('sourceDate'),
+      note: text('note'),
+    };
+  });
+  const parameters = arr(o.parameters, 'cost.priceList.parameters').map((item, i) => {
+    const p = `cost.priceList.parameters[${i}]`;
+    const e = obj(item, p);
+    return {
+      key: str(e.key, `${p}.key`),
+      value: num(e.value, `${p}.value`),
+      unit: e.unit === undefined ? '' : str(e.unit, `${p}.unit`),
+      description: e.description === undefined ? '' : str(e.description, `${p}.description`),
+      source: e.source === undefined ? '' : str(e.source, `${p}.source`),
+    };
+  });
+  return { title: str(o.title, 'cost.priceList.title'), products, parameters };
+}
+
+/** Extension (D24). */
+function costSettings(v: unknown): CostSettings {
+  if (v === undefined) return { ...DEFAULT_COST };
+  const o = obj(v, 'cost');
+  const series = (k: 'pontoonSeries' | 'fingerSeries' | 'gangwaySeries') => (o[k] === undefined ? '' : str(o[k], `cost.${k}`));
+  return {
+    priceList: priceList(o.priceList),
+    pontoonSeries: series('pontoonSeries'),
+    fingerSeries: series('fingerSeries'),
+    gangwaySeries: series('gangwaySeries'),
+  };
+}
+
 /** Read a project from the text of a project file. Never throws. */
 export function parseProject(text: string): ParseResult {
   let raw: unknown;
@@ -300,6 +402,8 @@ export function parseProject(text: string): ParseResult {
       preferredLayoutId: preferred !== null && layouts.some((l) => l.id === preferred) ? preferred : null,
       background: background(p.background),
       map: mapBackground(p.map),
+      anchoring: anchoring(p.anchoring),
+      cost: costSettings(p.cost),
       generatedFrom: typeof p.generatedFrom === 'string' ? p.generatedFrom : null,
     };
     return { ok: true, project };

@@ -270,23 +270,32 @@ parameter is shown with its source or marked **assumption**.
    (**assumption**, editable; the crossing practice is described by suppliers but no
    spacing rule was found). Each line carries `H = F / (number of lines resisting that
    direction)`.
-4. **Chain catenary** (chain lying tangent to the bottom at touchdown):
-   suspended length `s = √(h² + 2·h·a)`, `a = H / w`, horizontal span
-   `x = a · acosh(1 + h / a)`, top tension `T = H + w · h`, with
-   `w = m·g·(1 − ρ_w/ρ_steel)` and `h` = depth + high-water level + freeboard to the
-   fixing point. Total chain = s + bottom length on the seabed (**assumption**, default
-   20 % of s, minimum 2 m) so the pull at the block stays horizontal. The length is
-   checked again at low water so the chain does not lift the block.
+4. **Chain length and catenary**: chain length `L = max(h + 1 m, k · h)` with
+   `h` = depth + high water and `k = 3` (**assumption**: suppliers give 2 × and 5 × depth
+   (Top Marine, conflicting) and 3 × depth for buoys in open water (Suomen Laiturikauppa)).
+   With `a = H / w`, `w = m·g·(1 − ρ_w/ρ_steel)`: if `L ≥ √(h² + 2·h·a)` part of the chain
+   lies on the bottom and the anchor gets no uplift; otherwise the chain hangs between
+   both ends: span `X = 2a · asinh(√(L² − h²) / 2a)`, uplift at the anchor
+   `V = H · sinh(atanh(h/L) − X/2a)`, tension at the pontoon `T = √(H² + (V + wL)²)`.
+   (A first version required the chain to lie on the bottom at the design load; that gave
+   chains of about 80 m for a 30 m pier and was dropped, DECISIONS I48.)
 5. **Chain choice**: smallest catalogue chain with breaking load
    `MBL · ((d − c)/d)² ≥ SF · T`, where c = corrosion/wear allowance on the diameter
    (**assumption**, default 2 mm) and SF = 3.0 (**assumption**; offshore class rules use
    1.67 intact, a vendor quotes 2.0 for recreational marinas — neither is a marina
    standard, so a conservative value is the default).
-6. **Concrete block**: submerged weight `W_sub ≥ SF_slide · H / μ`, mass
+6. **Concrete block**: submerged weight `W_sub ≥ SF_slide · (H / μ + V)`, mass
    `M = W_sub / (g · (1 − ρ_w/ρ_c))`, ρ_c = 2 400 kg/m³ (**assumption**, normal-weight
    reinforced concrete). μ by seabed (**assumptions**, with the only public values found):
    sand 0.6 (0.63 used in [Banuelos-Garcia et al. 2022](https://tethys-engineering.pnnl.gov/sites/default/files/publications/Banuelos-Garcia-et-al-2022.pdf)),
-   clay 0.3, rock 0.5; SF_slide = 1.5. The smallest catalogue block with mass ≥ M is chosen.
+   clay 0.3, rock 0.5; SF_slide = 1.5. The cheapest catalogue block with mass ≥ M is chosen,
+   otherwise several of the heaviest.
+9. **Comparison with practice.** With these defaults the anchors come out several tonnes
+   per line, far heavier than suppliers' standard packages (2 × 1 000 kg and 16 mm chain
+   per 8–12 m concrete pontoon, 2 × 2 000–3 000 kg and 20 mm chain for heavy pontoons, Top
+   Marine), whose design loads are not published. The likely reasons (holding of blocks
+   embedded in clay, shelter, partial occupancy) cannot be quantified from public sources,
+   so the defaults are not tuned; the tool shows the comparison (DECISIONS I49).
 7. **Ice**: pontoons that stay in the water over winter (owner decision D17) get a warning:
    ice loads are not calculated. Suppliers allow freezing but not moving ice.
 8. **Water level**: high and low water relative to the design depth are parameters. For

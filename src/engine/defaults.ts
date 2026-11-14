@@ -1,4 +1,4 @@
-import type { BoatClass, ObjectiveSettings, Params } from './model';
+import type { BoatClass, CostSettings, ObjectiveSettings, Params } from './model';
 
 /**
  * Default dock and fairway parameters (SPEC §4).
@@ -38,3 +38,6 @@ export const DEFAULT_OBJECTIVE: ObjectiveSettings = {
 
 /** Number of alternatives returned by the generator (SPEC §5.8). */
 export const DEFAULT_TOP_N = 5;
+
+/** Default product choices (D24): everything chosen automatically from the built-in price list. */
+export const DEFAULT_COST: CostSettings = { priceList: null, pontoonSeries: '', fingerSeries: '', gangwaySeries: '' };

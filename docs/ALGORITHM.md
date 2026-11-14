@@ -99,6 +99,21 @@ Built from the actual rows, so they also follow manual edits: a strip of the req
 width in front of every row and one across every pier head, united, clipped to the
 navigable region, minus piers and row blocks.
 
+## Anchoring plan and cost estimate (`anchoring.ts`, `bom.ts`)
+
+Derived from a layout, the site and the price list (DECISIONS D23, D24, I47–I53):
+
+1. Wind load per pier: windward row in full, leeward row 20 %, plus the pontoon freeboard
+   area; along the axis the first boat of each row in full.
+2. Crossed chain pairs every `lineSpacing` m (each side's lines carry the load from that
+   side), two axial lines at the head.
+3. Each line: chain length `k × depth at high water`, catenary with uplift at the anchor;
+   cheapest chain with breaking load × ((d − c)/d)² ≥ SF × tension; cheapest anchor with
+   submerged weight ≥ SF × (H/μ + uplift).
+4. Bill of materials: cheapest module combination per pier, fingers by length, gangways per
+   shore connection, chain, anchors, shackles, springs, anodes per line, fittings per berth
+   and pier; labour and plant from output rates; overheads, contingency, VAT, range.
+
 ## 5. Validation (`validate.ts`)
 
 **Geometric — errors, any one gives `geometricFail`:**

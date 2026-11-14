@@ -110,6 +110,18 @@ fairway in front of every berth, connection to the entrance, pier connected to t
   shore end; change a berth's boat class; change a pier's length; delete a pier; draw a new
   pier and fill it. Fills never take the fairway that existing berths need.
 
+**Anchoring and cost (preliminary)**
+- Anchoring plan for one design depth, shown as a map layer: crossed chain pairs and
+  concrete anchors per pier and access pontoon, chain and anchor chosen from the price list
+  by breaking load and required mass. All factors are editable; a quantity estimate, not a
+  mooring design.
+- Bill of materials and cost estimate: pontoon modules, fingers, gangways, anchoring
+  hardware, fittings, labour and plant, with site overheads, contingency, VAT 25.5 % on the
+  total and a range. Every line shows its basis and source. Export as Excel.
+- Price list `data/hinnasto.xlsx` (A-Laiturit, Top Marine, Suomen Laatulaituri, Marinetek
+  estimate, labour and plant rates), editable in Excel; import an edited copy in the app or
+  replace the file and rebuild. See [docs/RESEARCH.md](docs/RESEARCH.md).
+
 **Files**
 - Autosave in the browser; project file export/import (JSON).
 - PNG export of the canvas and CSV export of the comparison and the berth list. Both
@@ -152,8 +164,13 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   layouts, not provably optimal ones.
 - Fairway width is a single rule (factor × boat length, with a minimum). There is no
   turning-basin check.
-- **No depth data**, wind, waves, currents, ice, mooring loads, costs or environmental
-  constraints.
+- One design water depth per project (no soundings). The anchoring plan covers wind only:
+  no waves, currents, ice or berthing loads, no structural check of pontoons and fixings.
+  With the default assumptions its anchors are much heavier than suppliers' standard
+  packages (docs/DECISIONS.md I49). Nothing is checked against RIL 201-3-2013 or AS 3962.
+- Costs come from public list prices and stated assumptions (labour output, work-boat
+  rate, Marinetek prices); they are a feasibility-stage estimate, not a quote.
+- No environmental constraints.
 - The water area is one simple polygon. Islands are entered as obstacles.
 - Coordinates are local metres. The OpenStreetMap background is a drawn map, not an aerial
   photo, needs an internet connection, and has no place-name search. Its tiles come from

@@ -59,3 +59,20 @@ export const loadImage = (url: string): Promise<HTMLImageElement> =>
     image.onerror = () => reject(new Error('The image could not be read.'));
     image.src = url;
   });
+
+/** Save bytes (e.g. an .xlsx workbook) as a file. */
+export function downloadBytes(filename: string, bytes: Uint8Array, mimeType: string): void {
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mimeType }));
+  downloadUrl(filename, url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export const readFileAsBytes = (file: File): Promise<Uint8Array> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.readAsArrayBuffer(file);
+  });
+
+export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

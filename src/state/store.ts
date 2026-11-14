@@ -7,7 +7,9 @@
  */
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import { DEFAULT_BOAT_CLASSES, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
+import { DEFAULT_ANCHORING, type AnchoringParams } from '../engine/anchoring';
+import type { PriceList } from '../engine/catalog';
+import { DEFAULT_BOAT_CLASSES, DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import { DEMO_PROJECTS, type DemoEntry } from '../engine/demos';
 import {
   addPier,
@@ -28,6 +30,7 @@ import {
   PROJECT_SCHEMA_VERSION,
   type BackgroundImage,
   type BoatClass,
+  type CostSettings,
   type Layout,
   type MapBackground,
   type ObjectiveSettings,
@@ -73,6 +76,7 @@ export const LAYER_IDS = [
   'fingers',
   'slots',
   'boats',
+  'anchoring',
   'issues',
 ] as const;
 export type LayerId = (typeof LAYER_IDS)[number];
@@ -104,6 +108,8 @@ export function emptyProject(): Project {
     preferredLayoutId: null,
     background: null,
     map: null,
+    anchoring: structuredClone(DEFAULT_ANCHORING),
+    cost: { ...DEFAULT_COST },
     generatedFrom: null,
   };
 }
@@ -156,6 +162,12 @@ export interface AppState {
   diagnostics: Diagnostic[];
   /** Message for the user from the last file or storage operation, if it failed. */
   notice: string | null;
+  /**
+   * The built-in price list (data/hinnasto.xlsx), loaded when the app starts (D24); null
+   * while loading or when it could not be read (`priceListError`).
+   */
+  builtInPriceList: PriceList | null;
+  priceListError: string | null;
   view: View;
   /** Size of the canvas in pixels. */
   viewport: Size;
@@ -186,6 +198,11 @@ export interface AppState {
   setObjective: (patch: Partial<ObjectiveSettings>, options?: CommitOptions) => void;
   setBackground: (background: BackgroundImage | null, options?: CommitOptions) => void;
   setMap: (map: MapBackground | null, options?: CommitOptions) => void;
+  /** D23: parameters of the anchoring plan. */
+  setAnchoring: (patch: Partial<AnchoringParams>, options?: CommitOptions) => void;
+  /** D24: product choices; `priceList` replaces the built-in list (null restores it). */
+  setCost: (patch: Partial<CostSettings>, options?: CommitOptions) => void;
+  setBuiltInPriceList: (list: PriceList | null, error?: string | null) => void;
 
   generate: () => void;
   selectLayout: (id: string | null) => void;
@@ -297,6 +314,8 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       obstacleKind: 'rock',
       zoneKind: 'noNavigation',
       layers: Object.fromEntries(LAYER_IDS.map((id) => [id, true])) as Record<LayerId, boolean>,
+      builtInPriceList: null,
+      priceListError: null,
 
       commit: (recipe, options) => {
         const state = get();
@@ -359,6 +378,9 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
         }, options),
       setBackground: (background, options) => get().commit((p) => ({ ...p, background }), options),
       setMap: (map, options) => get().commit((p) => ({ ...p, map }), options),
+      setAnchoring: (patch, options) => get().commit((p) => ({ ...p, anchoring: { ...p.anchoring, ...patch } }), options),
+      setCost: (patch, options) => get().commit((p) => ({ ...p, cost: { ...p.cost, ...patch } }), options),
+      setBuiltInPriceList: (builtInPriceList, priceListError = null) => set({ builtInPriceList, priceListError }),
 
       generate: () => {
         const { project } = get();

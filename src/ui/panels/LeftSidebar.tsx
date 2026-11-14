@@ -11,6 +11,7 @@ import { formatCount, formatLength, formatPercent } from '../format';
 import { calibrateBackground, placeBackground } from '../tools/background';
 import { deleteSiteObject, hasEntrance } from '../tools/sitePaths';
 import { useT } from '../useT';
+import { AnchoringSection } from './CostPanels';
 import { Button, NumberField, Section } from './fields';
 
 const state = () => appStore.getState();
@@ -601,6 +602,7 @@ export function LeftSidebar() {
       <DockSection />
       <FairwaySection />
       <ObjectiveSection />
+      <AnchoringSection />
       <LayersSection />
     </aside>
   );

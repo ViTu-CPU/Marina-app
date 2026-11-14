@@ -20,6 +20,7 @@ import { loadImage, registerStage } from '../export/download';
 import { formatLength } from '../format';
 import { deleteVertex, hasEntrance, insertVertex, moveVertex, normalizeSite, sitePaths } from '../tools/sitePaths';
 import { siteSnapTargets, snapPoint } from '../tools/snap';
+import { useCostModel } from '../costModel';
 import { useT } from '../useT';
 import { MapTiles } from './MapTiles';
 import { hatchPatterns } from './patterns';
@@ -31,6 +32,8 @@ const COLORS = {
   shoreline: '#15803d',
   entrance: '#f59e0b',
   access: '#6b7280',
+  chain: '#92400e',
+  anchor: '#78350f',
   obstacle: '#1f2937',
   zoneEdge: '#dc2626',
   pier: '#374151',
@@ -121,6 +124,38 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
     </>
   );
 });
+
+/** D23: chains (lines) and concrete anchors (squares, about 1.2 m) of the anchoring plan. */
+function AnchorShapes() {
+  const model = useCostModel();
+  if (!model) return null;
+  return (
+    <>
+      {model.anchoring.lines.map((l) => (
+        <Line
+          key={`${l.id}-chain`}
+          points={flat([l.fix, l.anchor])}
+          stroke={l.chainId ? COLORS.chain : COLORS.issue}
+          strokeWidth={1}
+          dash={[3, 2]}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      ))}
+      {model.anchoring.lines.map((l) => (
+        <Rect
+          key={`${l.id}-anchor`}
+          x={l.anchor.x - 0.6}
+          y={l.anchor.y - 0.6}
+          width={1.2}
+          height={1.2}
+          fill={l.anchorCount > 1 ? COLORS.issue : COLORS.anchor}
+          listening={false}
+        />
+      ))}
+    </>
+  );
+}
 
 interface LayoutShapesProps {
   layout: Layout;
@@ -574,6 +609,7 @@ export function MarinaCanvas() {
             {layout && (
               <LayoutShapes layout={layout} classes={project.boatClasses} layers={layers} selection={selection} patternScale={patternScale} />
             )}
+            {layout && layers.anchoring && <AnchorShapes />}
           </Group>
         </Layer>
 

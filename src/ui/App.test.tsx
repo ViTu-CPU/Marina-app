@@ -149,6 +149,30 @@ describe('app shell (SPEC §8)', () => {
     expect(appStore.getState().selection).toBeNull();
   });
 
+  it('shows the anchoring plan and the cost estimate once the price list is loaded (D23, D24)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { parsePriceListFile } = await import('../catalog/priceList');
+    const parsed = parsePriceListFile(readFileSync('data/hinnasto.xlsx'), 'hinnasto.xlsx');
+    renderShell();
+    act(() => {
+      appStore.getState().loadDemo('rectBasin');
+      appStore.getState().generate();
+    });
+    expect(screen.getAllByText('Loading the price list …').length).toBeGreaterThan(0);
+    act(() => appStore.getState().setBuiltInPriceList(parsed.ok ? parsed.priceList : null));
+    expect(screen.getByText('Total VAT 0 %')).toBeTruthy();
+    expect(screen.getByText('Anchor lines')).toBeTruthy();
+    // Choosing another pontoon series changes the project's choice (one undo step).
+    fireEvent.change(screen.getByLabelText('Pontoons'), { target: { value: 'A-Laiturit MX 3 m' } });
+    expect(appStore.getState().project.cost.pontoonSeries).toBe('A-Laiturit MX 3 m');
+    act(() => appStore.getState().undo());
+    expect(appStore.getState().project.cost.pontoonSeries).toBe('');
+    // Anchoring parameters are part of the project (the section is collapsed but in the DOM).
+    fireEvent.change(screen.getByLabelText('Design water depth (m)'), { target: { value: '6' } });
+    expect(appStore.getState().project.anchoring.depth).toBe(6);
+    act(() => appStore.getState().setBuiltInPriceList(null));
+  });
+
   it('removing a berth from the selection panel marks the layout as manually edited', () => {
     renderShell();
     act(() => {

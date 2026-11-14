@@ -329,6 +329,31 @@ async function waitForServer() {
       await page.screenshot({ path: path.join(outDir, 'add-pier.png') });
     });
 
+    await step('anchoring plan and cost estimate from the built-in price list; BOM and price list export (D23, D24)', async () => {
+      await page.getByRole('combobox', { name: 'Load example' }).selectOption('rectBasin');
+      await page.getByRole('button', { name: 'Generate', exact: true }).click();
+      // The built-in price list is loaded at start-up.
+      await page.waitForFunction(() => window.__marina.getState().builtInPriceList !== null, null, { timeout: 10000 });
+      const total = page.getByText('Total VAT 0 %', { exact: true });
+      await total.scrollIntoViewIfNeeded();
+      assert.ok(await total.isVisible());
+      assert.ok(await page.getByText('Anchor lines', { exact: true }).isVisible());
+      const bom = await download('Export bill of materials (.xlsx)');
+      assert.match(path.basename(bom), /^Rectangular-basin-L\d+-bom\.xlsx$/);
+      assert.ok(fs.statSync(bom).size > 2000);
+      assert.equal(fs.readFileSync(bom).subarray(0, 2).toString(), 'PK'); // a zip container
+      const list = await download('Download price list (.xlsx)');
+      assert.ok(fs.statSync(list).size > 10000);
+      // Importing the downloaded list keeps the totals.
+      const before = await page.getByText('Total VAT 0 %', { exact: true }).locator('xpath=following-sibling::span').textContent();
+      await page.getByTestId('import-price-list').setInputFiles(list);
+      await page.getByText('(imported)').first().waitFor();
+      const after = await page.getByText('Total VAT 0 %', { exact: true }).locator('xpath=following-sibling::span').textContent();
+      assert.equal(after, before);
+      await page.getByRole('button', { name: 'Use built-in', exact: true }).click();
+      await page.screenshot({ path: path.join(outDir, 'cost.png') });
+    });
+
     await step('language toggle', async () => {
       await page.getByRole('button', { name: 'FI', exact: true }).click();
       assert.equal(await page.getByRole('heading', { level: 1 }).textContent(), 'Venesataman asettelusuunnittelu');
