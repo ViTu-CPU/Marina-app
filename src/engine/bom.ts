@@ -287,6 +287,8 @@ export function costEstimate(input: CostInput): CostEstimate {
 
   // --- Anchoring -----------------------------------------------------------------------
   const lineCount = anchoring.lines.length;
+  const seabedLines = anchoring.lines.filter((l) => l.fixing === 'seabed').length;
+  const wallLines = lineCount - seabedLines;
   const smallest = (category: Product['category'], size: (p: Product) => number | null, min: number) => {
     const candidates = list.products.filter((p) => p.category === category && size(p) !== null && priced(p, vat) !== null);
     const enough = candidates.filter((p) => size(p)! >= min).sort((a, b) => size(a)! - size(b)! || priced(a, vat)! - priced(b, vat)!);
@@ -308,6 +310,14 @@ export function costEstimate(input: CostInput): CostEstimate {
     if (anode) addQty('anchoring', anode, par('anodes_per_anchor_line', 1), line.id);
   }
   if (missingChain > 0) notes.push(`${missingChain} anchor lines have no chain strong enough in the price list; their chain is not priced.`);
+  // Shore chains (D28): one fixing in the wall each; its capacity is not checked.
+  if (wallLines > 0) {
+    const fixing = list.products
+      .filter((p) => p.category === 'wall_fixing' && priced(p, vat) !== null)
+      .sort((a, b) => priced(a, vat)! - priced(b, vat)! || (a.id < b.id ? -1 : 1))[0];
+    if (fixing) addQty('anchoring', fixing, wallLines, `${wallLines} shore chains`);
+    else notes.push('No wall fixing in the price list: the wall fixings of the shore chains are not priced.');
+  }
 
   // --- Fittings --------------------------------------------------------------------------
   const berths = layout.berths.filter((b) => !b.removed).length;
@@ -362,9 +372,10 @@ export function costEstimate(input: CostInput): CostEstimate {
     addQty('plant', crane, moduleCount * par('crane_h_per_pontoon', 1), `lifting: ${moduleCount} pontoons × ${par('crane_h_per_pontoon', 1)} h`);
     addQty('plant', crane, moduleCount * par('transport_h_per_pontoon', 2), `transport: ${moduleCount} pontoons × ${par('transport_h_per_pontoon', 2)} h`);
   }
-  if (boat && lineCount > 0) {
-    const days = Math.ceil((lineCount / 10) * par('boat_days_per_10_anchor_lines', 1));
-    addQty('plant', boat, days, `${lineCount} anchor lines`);
+  // The work boat carries and lowers the anchors: lines to the seabed only.
+  if (boat && seabedLines > 0) {
+    const days = Math.ceil((seabedLines / 10) * par('boat_days_per_10_anchor_lines', 1));
+    addQty('plant', boat, days, `${seabedLines} anchor lines to the seabed`);
   }
 
   // --- Lines and totals ----------------------------------------------------------------------

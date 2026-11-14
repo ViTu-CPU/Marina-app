@@ -23,8 +23,12 @@
  *     those in the head half towards the shore and hold wind from the shore. Each direction
  *     is checked separately (UFC §6-3.4.1.4): across, the lines of one side share the load,
  *     H = F / pairs / cos θ; along, the lines splayed against it share it,
- *     H = F / lines / sin θ. A line takes the larger. Access pontoons keep square lines; the
- *     load along them is left to the wall.
+ *     H = F / lines / sin θ. A line takes the larger.
+ *  3b. Access pontoons in front of the shore (D28, I64–I66): square lines on the water side
+ *     only (they hold the wind towards the wall). The wind pushing the pontoon off the wall is
+ *     shared by tributary length between two shore chains at its gangway (crossed at θ, to
+ *     fixings in the wall) and the piers attached to it, which add their share to the load
+ *     their shore-ward lines hold. The wind along the wall goes to the shore chains.
  *  4. Each line: chain length L = max(h + 1 m, factor × h), h = depth at high water.
  *     Catenary with a = H / w (w = submerged weight per metre). If L is at least the length
  *     that hangs when the chain touches the bottom tangentially, s = √(h² + 2 h a), the
@@ -40,10 +44,10 @@
  *     (it depends on penetration, which is not known at this stage; Chalmers 2026 §7.5).
  */
 import { unitPriceVat0, type PriceList, type Product } from './catalog';
-import { add, distance, pointInRing, scale } from './geometry';
+import { add, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
 import type { BoatClass, Issue, Layout, MainPier, Site, Vec2 } from './model';
 import { pierAxis } from './rows';
-import { accessPontoonsOf } from './site';
+import { accessPontoonsOf, SHORE_TOLERANCE } from './site';
 
 export type Seabed = 'clay' | 'sand' | 'rock';
 
@@ -113,9 +117,9 @@ export interface AnchoringParams {
  *  - anchorType 'block': the concrete anchors of the price list are plain blocks; kept as the
  *    default by the owner (D26).
  *  - splayAngle 45°: owner's choice (D25). Splayed corner chains are SF Marina's typical layout
- *    (Chalmers 2026 Fig. 4; 12° in its reference case); 45° is from a dock anchoring kit's
- *    description, "ristiin noin 45 asteen kulmassa" (K-Rauta, Savorak painoankkurointipaketti,
- *    search excerpt 2026-11-14) — a weak source.
+ *    (Chalmers 2026 Fig. 4; 12° in its reference case); 45° is from Savorak's instructions for
+ *    a cottage-dock kit, "ristiin pohjapainoihin, 45 asteen kulmassa" (savorak.fi, read
+ *    2026-11-14) — a light dock, so a weak source for a marina pier.
  *  - Assumptions without a source: depth and water levels (site data), pontoonFreeboard,
  *    lineSpacing, slidingSafetyFactor, friction for clay and rock.
  */
@@ -173,9 +177,14 @@ export interface AnchorLine {
   splay: 'head' | 'shore' | 'none';
   /** Which wind direction sizes the line: across or along the pier. */
   governs: 'across' | 'along';
+  /**
+   * 'seabed': chain to a concrete anchor. 'wall': shore chain from an access pontoon to a
+   * fixing in the quay wall at its gangway (D28); no anchor.
+   */
+  fixing: 'seabed' | 'wall';
   /** Where the chain is fixed to the pontoon. */
   fix: Vec2;
-  /** Position of the anchor on the seabed (plan view). */
+  /** Position of the anchor on the seabed, or of the wall fixing (plan view). */
   anchor: Vec2;
   /** Design horizontal load of the line, kN. */
   horizontalKn: number;
@@ -188,8 +197,8 @@ export interface AnchorLine {
   upliftKn: number;
   /** Angle of the chain at the anchor above the horizontal, degrees. */
   upliftAngleDeg: number;
-  /** How the anchor was sized: 'wedge' only where the wedge tables apply (not on rock). */
-  anchorType: AnchorType;
+  /** How the anchor was sized: 'wedge' only where the wedge tables apply (not on rock); null for wall lines. */
+  anchorType: AnchorType | null;
   /** Required anchor mass in air, kg. */
   requiredAnchorKg: number;
   anchorId: string | null;
@@ -422,6 +431,59 @@ interface Held {
   axialFromShore: number;
   /** Main piers are splayed; access pontoons keep square lines (load along them: the wall). */
   splayed: boolean;
+  /**
+   * Access pontoon in front of the shore: the side facing it. Its lines are only those
+   * anchored on the water side; shore chains and attached piers hold it off the wall (D28).
+   */
+  wallSide?: 'left' | 'right';
+}
+
+/** Where an access pontoon is held off the wall: its gangway or a pier attached to it. */
+interface Restraint {
+  /** 'gangway' or the id of the attached pier. */
+  id: string;
+  /** Position along the access pontoon's axis, m. */
+  t: number;
+}
+
+/**
+ * Tributary length of each restraint along a pontoon `length` m long: from half-way to the
+ * previous one to half-way to the next (the ends of the pontoon at the ends), m. Same order
+ * as `points`.
+ */
+export function tributaryLengths(points: readonly number[], length: number): number[] {
+  const order = points.map((t, i) => ({ t: Math.min(length, Math.max(0, t)), i })).sort((a, b) => a.t - b.t || a.i - b.i);
+  const result = new Array<number>(points.length).fill(0);
+  order.forEach((o, k) => {
+    const lo = k === 0 ? 0 : (order[k - 1]!.t + o.t) / 2;
+    const hi = k === order.length - 1 ? length : (o.t + order[k + 1]!.t) / 2;
+    result[o.i] = hi - lo;
+  });
+  return result;
+}
+
+/**
+ * A shore chain (D28): from the access pontoon to a fixing in the wall at the design water
+ * level, `plan` m apart in plan. Its length leaves slack for the water-level range
+ * (`plan` + high water + low water, assumption). Under load it straightens; at the extreme
+ * water level the slope gives the tension T = H · L / √(L² − Δz²), Δz = the larger of high
+ * and low water. The cheapest chain of the list with MBL · ((d − c)/d)² ≥ SF · T.
+ */
+export function chooseShoreChain(H: number, plan: number, p: AnchoringParams, list: PriceList, vatPct: number): { product: Product | null; length: number; tension: number } {
+  const length = plan + p.highWater + p.lowWater;
+  const dz = Math.max(p.highWater, p.lowWater);
+  const tension = length > dz ? (H * length) / Math.sqrt(length * length - dz * dz) : H;
+  let best: { product: Product; cost: number } | null = null;
+  for (const product of list.products) {
+    if (product.category !== 'chain' || product.breakingLoadKn === null) continue;
+    const price = unitPriceVat0(product, vatPct);
+    const d = product.chainDiameterMm;
+    if (price === null || d === null || d <= p.corrosionAllowance) continue;
+    if (product.breakingLoadKn * 1000 * ((d - p.corrosionAllowance) / d) ** 2 < p.chainSafetyFactor * tension) continue;
+    const cost = price * length;
+    if (!best || cost < best.cost - 1e-9 || (Math.abs(cost - best.cost) < 1e-9 && d < (best.product.chainDiameterMm ?? Infinity))) best = { product, cost };
+  }
+  return { product: best?.product ?? null, length, tension };
 }
 
 /**
@@ -475,32 +537,68 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   const warn = (code: string, message: string, elementId?: string) =>
     issues.push({ severity: 'warning', code, message, ...(elementId ? { elementId } : {}) });
 
-  const held: Held[] = [
-    ...layout.piers.map((pier) => ({
-      id: pier.id,
-      start: pier.start,
-      end: pier.end,
-      width: pier.width,
-      splayed: true,
-      ...pierLoads(pier, layout, classes, p, freeboard),
-    })),
-    ...accessPontoonsOf(site).map((a) => ({
-      id: a.id,
-      start: a.start,
-      end: a.end,
-      width: a.width,
-      lateral: q * p.dragCoefficient * distance(a.start, a.end) * freeboard,
-      axialFromSea: 0,
-      axialFromShore: 0,
-      splayed: false,
-    })),
-  ];
-
+  const k = q * p.dragCoefficient;
   const hHigh = p.depth + p.highWater;
   const theta = (Math.min(MAX_SPLAY_ANGLE, Math.max(0, p.splayAngle)) * Math.PI) / 180;
   const lines: AnchorLine[] = [];
   const loads: AnchoringResult['loads'] = [];
   const unheld: string[] = [];
+
+  const piers: Held[] = layout.piers.map((pier) => ({
+    id: pier.id,
+    start: pier.start,
+    end: pier.end,
+    width: pier.width,
+    splayed: true,
+    ...pierLoads(pier, layout, classes, p, freeboard),
+  }));
+
+  // Access pontoons (D28). In front of the shore, chains only on the water side; the wind
+  // pushing the pontoon off the wall is shared by tributary length between the shore chains
+  // at its gangway (assumed at its middle) and the piers attached to its water-side edge,
+  // whose lines splayed towards the shore take their share. The wind along the wall (the
+  // pontoon's end) goes to the shore chains.
+  const accessItems: Held[] = [];
+  const shoreSets: { item: Held; at: number; plan: number; offshore: number; alongWall: number }[] = [];
+  for (const a of accessPontoonsOf(site)) {
+    const { length, along, left } = pierAxis({ id: a.id, start: a.start, end: a.end, width: a.width, locked: false, origin: 'manual' });
+    const across = k * length * freeboard;
+    const item: Held = { id: a.id, start: a.start, end: a.end, width: a.width, lateral: across, axialFromSea: 0, axialFromShore: 0, splayed: false };
+    accessItems.push(item);
+    if (site.shoreline.length < 2) continue;
+    const mid = add(a.start, scale(along, length / 2));
+    const toLeft = distancePointToPolyline(add(mid, scale(left, a.width / 2)), site.shoreline);
+    const toRight = distancePointToPolyline(add(mid, scale(left, -a.width / 2)), site.shoreline);
+    item.wallSide = toLeft <= toRight ? 'left' : 'right';
+    const gap = Math.min(toLeft, toRight);
+    const waterSign = item.wallSide === 'left' ? -1 : 1;
+    const edge = [add(a.start, scale(left, (waterSign * a.width) / 2)), add(a.end, scale(left, (waterSign * a.width) / 2))];
+    const restraints: Restraint[] = [{ id: 'gangway', t: length / 2 }];
+    for (const pier of piers) {
+      const t = dot(sub(pier.start, a.start), along);
+      if (t >= -SHORE_TOLERANCE && t <= length + SHORE_TOLERANCE && distancePointToPolyline(pier.start, edge) <= SHORE_TOLERANCE) {
+        restraints.push({ id: pier.id, t });
+      }
+    }
+    const shares = tributaryLengths(
+      restraints.map((r) => r.t),
+      length,
+    ).map((l) => (across * l) / length);
+    restraints.forEach((r, i) => {
+      const pier = piers.find((x) => x.id === r.id);
+      if (pier) pier.axialFromShore += shares[i]!;
+    });
+    shoreSets.push({ item, at: length / 2, plan: gap / Math.cos(theta), offshore: shares[0]!, alongWall: k * a.width * freeboard });
+    warn(
+      'ACCESS_PONTOON_SHORE_CHAINS',
+      `Access pontoon ${a.id}: chains on the water side only. Off the wall it is held by 2 shore chains at its gangway (assumed at its middle) and by the piers attached to it, each for the wind on its share of the pontoon's length: ${restraints
+        .map((r, i) => `${r.id === 'gangway' ? 'shore chains' : r.id} ${(shares[i]! / 1000).toFixed(1)} kN`)
+        .join(', ')}. The fixings in the wall and the joints between the pontoons are not checked.`,
+      a.id,
+    );
+  }
+  const held: Held[] = [...piers, ...accessItems];
+
   for (const item of held) {
     const { length, along, left } = pierAxis({ ...item, locked: false, origin: 'manual' });
     if (!(length > 0)) continue;
@@ -543,6 +641,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
         holdsId: item.id,
         splay,
         governs,
+        fixing: 'seabed',
         fix,
         // A crossed chain passes under the pontoon: the anchor is `span` from the fixing
         // point, on the far side.
@@ -572,23 +671,63 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     for (const t of stations) {
       const splay = splayOf(t);
       const towards = scale(along, splay === 'shore' ? -Math.sin(angle) : Math.sin(angle));
-      // Fixed on the left edge, anchored on the right (holds against wind from the right) and vice versa.
-      addLine(at(t, item.width / 2), add(scale(left, -Math.cos(angle)), towards), splay, item.width, ++n);
-      addLine(at(t, -item.width / 2), add(scale(left, Math.cos(angle)), towards), splay, item.width, ++n);
+      // Fixed on the left edge, anchored on the right (holds against wind from the right) and
+      // vice versa. In front of a wall only the line anchored on the water side (D28).
+      if (item.wallSide !== 'right') addLine(at(t, item.width / 2), add(scale(left, -Math.cos(angle)), towards), splay, item.width, ++n);
+      if (item.wallSide !== 'left') addLine(at(t, -item.width / 2), add(scale(left, Math.cos(angle)), towards), splay, item.width, ++n);
+    }
+
+    // Shore chains at the gangway: two, crossed at the splay angle, from the wall-side edge
+    // to the wall. Off the wall they share the load (÷ 2 cos θ); along the wall one holds
+    // each direction (÷ sin θ).
+    const set = shoreSets.find((x) => x.item === item);
+    if (set) {
+      const wallSign = item.wallSide === 'left' ? 1 : -1;
+      const offshoreH = set.offshore / 2 / Math.cos(theta);
+      const alongH = theta > 0 ? set.alongWall / Math.sin(theta) : 0;
+      if (theta === 0 && set.alongWall > 0) unheld.push(item.id);
+      const H = Math.max(offshoreH, alongH);
+      const shore = chooseShoreChain(H, set.plan, p, priceList, vatPct);
+      const half = (set.plan * Math.sin(theta)) / 2;
+      for (const sign of [-1, 1]) {
+        const fix = at(set.at + sign * half, (wallSign * item.width) / 2);
+        const dir = add(scale(left, wallSign * Math.cos(theta)), scale(along, -sign * Math.sin(theta)));
+        const id = `${item.id}-S${sign < 0 ? 1 : 2}`;
+        lines.push({
+          id,
+          holdsId: item.id,
+          splay: 'none',
+          governs: alongH > offshoreH ? 'along' : 'across',
+          fixing: 'wall',
+          fix,
+          anchor: add(fix, scale(dir, set.plan)),
+          horizontalKn: H / 1000,
+          topTensionKn: shore.tension / 1000,
+          upliftKn: 0,
+          upliftAngleDeg: 0,
+          anchorType: null,
+          chainLength: shore.length,
+          chainId: shore.product?.id ?? null,
+          requiredAnchorKg: 0,
+          anchorId: null,
+          anchorCount: 0,
+        });
+        if (!shore.product) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(shore.tension / 1000).toFixed(1)} kN with the safety factor; shore chain ${id} has no chain.`, item.id);
+      }
     }
   }
 
   if (unheld.length > 0) {
     warn(
       'ALONG_PIER_LOAD_NOT_HELD',
-      `The wind along ${unheld.length === 1 ? 'pier' : 'piers'} ${unheld.join(', ')} is not held by any chain (splay angle 0° or too few chain pairs); it needs other restraint.`,
+      `The wind along ${unheld.join(', ')} is not held by any chain (splay angle 0° or too few chain pairs); it needs other restraint.`,
     );
   }
 
   // Anchors must lie in the water area (and not under an obstacle).
   if (site.water.length >= 3) {
     const outside = lines.filter(
-      (l) => !pointInRing(l.anchor, site.water) || site.obstacles.some((o) => pointInRing(l.anchor, o.shape)),
+      (l) => l.fixing === 'seabed' && (!pointInRing(l.anchor, site.water) || site.obstacles.some((o) => pointInRing(l.anchor, o.shape))),
     );
     if (outside.length > 0) {
       warn(
@@ -612,10 +751,11 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     }
   }
 
-  if (site.accessPontoons && accessPontoonsOf(site).length > 0) {
+  for (const item of accessItems.filter((x) => x.wallSide === undefined)) {
     warn(
-      'ACCESS_PONTOON_WALL_FIXING',
-      'Access pontoons are anchored here like piers, loaded by their own wind area only. Next to a quay wall, wall fixings may replace the anchors on the wall side; the loads from the piers attached to them are not included.',
+      'ACCESS_PONTOON_NO_SHORE',
+      `Access pontoon ${item.id}: the site has no shoreline, so it has no shore chains and is anchored on both sides like a pier, by its own wind area only.`,
+      item.id,
     );
   }
   warn(

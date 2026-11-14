@@ -306,7 +306,8 @@ parameter is shown with its source or marked **assumption**.
    spacing rule was found), each splayed by θ from square to the pier so that the chains also
    hold the wind along it. Splayed corner chains are SF Marina's typical layout (Chalmers 2026
    Fig. 4, θ = 12° in its reference case); the default **θ = 45°** is the owner's choice, from
-   a dock kit's description (*"ristiin noin 45 asteen kulmassa"*, §9.8; weak source). The
+   Savorak's instructions for a cottage-dock kit (*"ristiin pohjapainoihin, 45 asteen kulmassa"*,
+   §9.11; weak source). The
    shore half of the pier is splayed towards the head, the head half towards the shore. Across
    the pier the lines of the loaded side share the load, `H = F / pairs / cos θ`; along it the
    lines splayed against the wind share it, `H = F / lines / sin θ`; each line takes the larger
@@ -535,7 +536,7 @@ from the 30 m lengths (10 mm 325 €, 13 mm 510 €, 16 mm 760 €, 20 mm 1 200 
 [weights](https://savorak.fi/tuotteet/betonipaino-300kg/),
 [chain](https://savorak.fi/tuotteet/kettinki-20mm-kuumasinkitty/)).
 
-### 9.8 K-Rauta: Savorak painoankkurointipaketti 24 × 25 kg (search excerpt)
+### 9.8 K-Rauta: Savorak painoankkurointipaketti 24 × 25 kg (search excerpt; now confirmed on savorak.fi, §9.11)
 
 Retailer's description of a cottage-dock weight anchoring kit (24 weights of 25 kg, 2 × 15 m of
 13 mm chain), as returned by a web search on 2026-11-14 (page not opened; k-rauta.fi is not
@@ -568,3 +569,27 @@ In the third session (2026-11-14) theseus.fi still answered HTTP 403.
   the Aith (Shetland) pontoon drawings show a pile-guided pontoon, not chains
   ([details](https://marine.gov.scot/sites/default/files/pontoon_details_collated.pdf)). Neither
   can calibrate the method.
+
+### 9.11 Savorak: shore chains and wall fixings (read 2026-11-14)
+
+- Kit *"Ankkurointipaketti, käsiasennus, mökkisarja, 24 x 25 kg, rantakettingeillä"*
+  ([page](https://savorak.fi/tuotteet/ankkurointipaketti-kasiasennus-mokkisarja-24-x-25-kg/)):
+  *"Laiturin kansiosa kiinnitetään rantaan kettingeillä, jotka ankkuroidaan maapenkkaan,
+  betoniseen maatukeen tai tukevasti asettuviin rantakiviin. Ranta-ankkurointi kahdella
+  kettingillä pitää laiturin paikoillaan mutta sallii sen joustavan liikkeen aallokon mukana."*
+  *"Laiturin ulkopää ankkuroidaan kahdella noin 10–15 metrin pituisella kettingillä ristiin
+  pohjapainoihin, 45 asteen kulmassa."* Shore part: *"2 kpl 7,5 m 10 mm kettinkiä"*. Winter:
+  *"Jos jäät liikkuvat laiturin ympärillä eikä sitä voi nostaa maihin, laituri voidaan siirtää
+  talven ajaksi suojaisempaan paikkaan ja ankkuroida uudelleen."* The kit is for a light dock.
+- The machine-installed kit 2 × 2 000 kg has *"Ketju 20 mm 45 m, ( 2 kpl 15 m, 2 kpl 7,5 m )"*,
+  the same split of anchor and (presumably) shore chains (3 815 €).
+- *"Kalliosilmukka 20 mm, HDG"* 18,50 €: *"Kalliosilmukoita voi käyttää käyttää kettinkien tai
+  veneiden kiinnityspisteenä kalliossa tai betonissa."* Drilled 22 mm hole with a wedge; no
+  capacity published ([page](https://savorak.fi/tuotteet/kalliosilmukka-20-mm-hdg/)). In the price
+  list as category `wall_fixing` (DECISIONS I66).
+- Top Marine on wall and pile fixings ([anchoring](https://topmarinelaiturit.fi/laituritarvikkeet/ankkurointi/)):
+  *"Vinokiinnikkeitä käytetään vähän ja poikkeuksellisissa olosuhteissa, joissa laituri on hyvin
+  lähellä rantaa eikä tilaa kettinkikiinnitykselle ole. Syynä on se, että jään aiheuttamien
+  vaurioiden riski on olemassa talvella"*; pile guides: *"Pohjoismaissa pilarit on purettava joka
+  syksy ja laituri nostettava pois vedestä."* Hence chains, not rails or arms, for pontoons that
+  stay in the water over winter (D17).

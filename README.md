@@ -114,8 +114,10 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 - Anchoring plan for one design depth, shown as a map layer: crossed chain pairs and
   concrete anchors per pier and access pontoon, chain and anchor chosen from the price list
   by breaking load and required mass; anchor type concrete block (friction) or concrete wedge
-  (Pearl Harbor type, published capacities). All factors are editable; a quantity estimate,
-  not a mooring design.
+  (Pearl Harbor type, published capacities). An access pontoon in front of the shore has
+  chains on the water side only and is held off the wall by two shore chains at its gangway
+  and by the piers attached to it. All factors are editable; a quantity estimate, not a
+  mooring design.
 - Bill of materials and cost estimate: pontoon modules, fingers, gangways, anchoring
   hardware, fittings, labour and plant, with site overheads, contingency, VAT 25.5 % on the
   total and a range. Every line shows its basis and source. Export as Excel.

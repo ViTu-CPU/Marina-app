@@ -72,10 +72,11 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
     ]),
   ];
   const lines: CellValue[][] = [
-    ['line', 'holds', 'splay', 'governs', 'horizontal_kn', 'top_tension_kn', 'uplift_kn', 'chain_length_m', 'chain', 'required_anchor_kg', 'anchor', 'anchor_count', 'fix_x', 'fix_y', 'anchor_x', 'anchor_y'],
+    ['line', 'holds', 'fixing', 'splay', 'governs', 'horizontal_kn', 'top_tension_kn', 'uplift_kn', 'chain_length_m', 'chain', 'required_anchor_kg', 'anchor', 'anchor_count', 'fix_x', 'fix_y', 'anchor_x', 'anchor_y'],
     ...anchoring.lines.map((l) => [
       l.id,
       l.holdsId,
+      l.fixing,
       l.splay,
       l.governs,
       r2(l.horizontalKn),

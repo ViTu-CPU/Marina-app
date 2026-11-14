@@ -152,6 +152,7 @@ describe('cost estimate, hand-calculated', () => {
     holdsId: 'P1',
     splay: 'none',
     governs: 'across',
+    fixing: 'seabed',
     fix: { x: 0, y: 0 },
     anchor: { x: 10, y: 0 },
     horizontalKn: 5,
@@ -216,6 +217,22 @@ describe('cost estimate, hand-calculated', () => {
     expect(lineFor('rate-crane').quantity).toBe(9);
     expect(lineFor('rate-work-boat').orderQuantity).toBe(1);
     expect(estimate.plant).toBeCloseTo(900 + 800, 9);
+  });
+
+  it('shore chains (D28): one wall fixing each, no anchor, no work-boat time', () => {
+    const wall = (id: string): AnchorLine => ({ ...line(id), fixing: 'wall', anchorType: null, anchorId: null, anchorCount: 0, requiredAnchorKg: 0, chainLength: 3 });
+    const withWall: AnchoringResult = { lines: [line('A1'), wall('S1'), wall('S2')], loads: [], issues: [] };
+    const list: PriceList = { ...LIST, products: [...LIST.products, product({ id: 'wf', category: 'wall_fixing', price: 18 })] };
+    const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: list, choices, anchoring: withWall });
+    const of = (id: string) => e.lines.find((l) => l.productId === id)!;
+    expect(of('wf').orderQuantity).toBe(2);
+    expect(of('a1000').orderQuantity).toBe(1);
+    // Chain 16.5 + 2 × 3 = 22.5 m; divers on all 3 lines; the boat for the 1 seabed line.
+    expect(of('c13').quantity).toBeCloseTo(22.5, 9);
+    expect(of('rate-diving-team').quantity).toBe(3);
+    expect(of('rate-work-boat').basis).toBe('1 anchor lines to the seabed');
+    const noFixing = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: LIST, choices, anchoring: withWall });
+    expect(noFixing.notes).toContain('No wall fixing in the price list: the wall fixings of the shore chains are not priced.');
   });
 
   it('totals: overheads 10 %, contingency 15 %, VAT 25.5 %, range −30 … +50 %', () => {

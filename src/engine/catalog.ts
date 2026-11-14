@@ -13,6 +13,7 @@ export const PRODUCT_CATEGORIES = [
   'gangway',
   'chain',
   'anchor',
+  'wall_fixing',
   'shackle',
   'spring',
   'anode',

@@ -126,7 +126,12 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
   const { anchoring, priceList } = model;
   const name = (id: string | null) => (id ? (priceList.products.find((p) => p.id === id)?.name ?? id) : t('anchoring.none'));
   const chains = sumBy(anchoring.lines, (l) => name(l.chainId), (l) => l.chainLength);
-  const anchors = sumBy(anchoring.lines, (l) => name(l.anchorId), (l) => l.anchorCount);
+  const anchors = sumBy(
+    anchoring.lines.filter((l) => l.fixing === 'seabed'),
+    (l) => name(l.anchorId),
+    (l) => l.anchorCount,
+  );
+  const wallFixings = anchoring.lines.filter((l) => l.fixing === 'wall').length;
   const maxLine = anchoring.lines.reduce((m, l) => Math.max(m, l.horizontalKn), 0);
   const maxMass = anchoring.lines.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
   return (
@@ -158,6 +163,12 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
             <span className="shrink-0">{formatCount(c, language)}</span>
           </div>
         ))}
+        {wallFixings > 0 && (
+          <div className="flex justify-between gap-2 text-xs">
+            <span className="truncate">{t('anchoring.wallFixings')}</span>
+            <span className="shrink-0">{formatCount(wallFixings, language)}</span>
+          </div>
+        )}
         <ul className="list-disc space-y-0.5 pl-4 text-xs text-amber-800">
           {anchoring.issues.map((i) => (
             <li key={`${i.code}-${i.message}`}>{i.message}</li>

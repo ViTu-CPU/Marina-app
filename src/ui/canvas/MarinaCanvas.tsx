@@ -125,7 +125,10 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
   );
 });
 
-/** D23: chains (lines) and concrete anchors (squares, about 1.2 m) of the anchoring plan. */
+/**
+ * D23: chains (lines) and concrete anchors (squares, about 1.2 m) of the anchoring plan;
+ * shore chains end at a wall fixing (small circle, D28).
+ */
 function AnchorShapes() {
   const model = useCostModel();
   if (!model) return null;
@@ -142,7 +145,14 @@ function AnchorShapes() {
           listening={false}
         />
       ))}
-      {model.anchoring.lines.map((l) => (
+      {model.anchoring.lines
+        .filter((l) => l.fixing === 'wall')
+        .map((l) => (
+          <Circle key={`${l.id}-wall`} x={l.anchor.x} y={l.anchor.y} radius={0.3} fill={COLORS.anchor} listening={false} />
+        ))}
+      {model.anchoring.lines
+        .filter((l) => l.fixing === 'seabed')
+        .map((l) => (
         <Rect
           key={`${l.id}-anchor`}
           x={l.anchor.x - 0.6}

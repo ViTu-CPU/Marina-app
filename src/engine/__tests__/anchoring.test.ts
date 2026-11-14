@@ -9,6 +9,7 @@ import {
   requiredAnchorMass,
   requiredWedgeMass,
   resetAnchoringFactors,
+  tributaryLengths,
   upliftAngle,
   WEDGE_ANGLE_LIMIT,
   wedgeWorkingCapacity,
@@ -268,7 +269,7 @@ describe('anchoring plan of a pier', () => {
       expect(l.horizontalKn).toBeCloseTo(3.509, 6);
       expect(l.anchor.y).toBeCloseTo(l.fix.y, 9);
     }
-    expect(p0.issues.find((i) => i.code === 'ALONG_PIER_LOAD_NOT_HELD')?.message).toMatch(/pier P1 is not held/);
+    expect(p0.issues.find((i) => i.code === 'ALONG_PIER_LOAD_NOT_HELD')?.message).toMatch(/^The wind along P1 is not held/);
     expect(plan.issues.some((i) => i.code === 'ALONG_PIER_LOAD_NOT_HELD')).toBe(false);
   });
 
@@ -298,25 +299,96 @@ describe('anchoring plan of a pier', () => {
     expect(onClay.issues.some((i) => i.code === 'SEVERAL_ANCHORS')).toBe(true);
   });
 
-  it('an access pontoon is anchored by its own wind area', () => {
-    const withAccess = anchoringPlan({
-      layout: { piers: [], berths: [] },
-      site: { ...site, accessPontoons: [{ id: 'access-1', start: { x: -50, y: 2 }, end: { x: 50, y: 2 }, width: 3 }] },
-      classes: [boat],
-      params,
-      priceList: LIST,
-      vatPct: 25.5,
-      pierFreeboard: 0.5,
+  describe('access pontoon in front of the shore (D28)', () => {
+    /**
+     * Access pontoon 100 m × 3 m along the shore (y = 0) with its edge 0.5 m off it.
+     * Wind on it: 100 · 0.5 · 484 = 24 200 N; along the wall (its end) 3 · 0.5 · 484 = 726 N.
+     * Water side: ⌈100/12⌉ + 1 = 10 stations, one line each, 2 420 N, anchored in the water.
+     * Shore chains at the gangway (middle), crossed at 45°: plan length 0.5 / cos 45° = 0.707 m,
+     * chain 0.707 + 1.5 + 0.9 = 3.107 m.
+     */
+    const access = { id: 'access-1', start: { x: -50, y: 2 }, end: { x: 50, y: 2 }, width: 3 };
+    const withAccess = (piers: MainPier[]) =>
+      anchoringPlan({
+        layout: { piers, berths: [] },
+        site: { ...site, accessPontoons: [access] },
+        classes: [boat],
+        params,
+        priceList: LIST,
+        vatPct: 25.5,
+        pierFreeboard: 0.5,
+      });
+
+    it('alone: chains on the water side, the shore chains hold it off the wall', () => {
+      const plan1 = withAccess([]);
+      expect(plan1.loads[0]!.lateralKn).toBeCloseTo(24.2, 6);
+      const seabed = plan1.lines.filter((l) => l.fixing === 'seabed');
+      expect(seabed).toHaveLength(10);
+      for (const l of seabed) {
+        expect(l.horizontalKn).toBeCloseTo(2.42, 6);
+        expect(l.splay).toBe('none');
+        // Fixed on the edge towards the wall (y = 0.5), anchored beyond the far edge.
+        expect(l.fix.y).toBeCloseTo(0.5, 9);
+        expect(l.anchor.y).toBeGreaterThan(3.5);
+      }
+      // Off the wall the whole 24 200 N goes to the 2 shore chains: 24 200 / 2 / cos 45° = 17 112 N
+      // (along the wall 726 / sin 45° = 1 027 N is less). Tension at the extreme water level:
+      // H · 3.107 / √(3.107² − 1.5²) = 1.142 · H = 19 538 N; 3 · 19.5 = 58.6 kN ≤ 61.8 kN → c13.
+      const shore = plan1.lines.filter((l) => l.fixing === 'wall');
+      expect(shore).toHaveLength(2);
+      const L = Math.SQRT1_2 + 1.5 + 0.9;
+      for (const l of shore) {
+        expect(l.horizontalKn).toBeCloseTo(24.2 / 2 / Math.SQRT1_2, 6);
+        expect(l.governs).toBe('across');
+        expect(l.chainLength).toBeCloseTo(L, 9);
+        expect(l.topTensionKn).toBeCloseTo((l.horizontalKn * L) / Math.sqrt(L * L - 2.25), 9);
+        expect(l.chainId).toBe('c13');
+        expect(l.anchorId).toBeNull();
+        expect(l.anchorCount).toBe(0);
+        // Crossed under the gangway: from the edge (y = 0.5) to the wall (y = 0), 0.5 m apart.
+        expect(l.fix.y).toBeCloseTo(0.5, 9);
+        expect(l.anchor.y).toBeCloseTo(0, 9);
+        expect(Math.abs(l.anchor.x - l.fix.x)).toBeCloseTo(0.5, 9);
+        expect(Math.sign(l.anchor.x - l.fix.x)).toBe(-Math.sign(l.fix.x));
+      }
+      expect(plan1.issues.find((i) => i.code === 'ACCESS_PONTOON_SHORE_CHAINS')?.message).toMatch(/shore chains 24\.2 kN\./);
+      expect(plan1.issues.some((i) => i.code === 'ANCHOR_OUTSIDE_WATER')).toBe(false);
+      expect(plan1.issues.some((i) => i.code === 'ALONG_PIER_LOAD_NOT_HELD')).toBe(false);
     });
-    // 100 m · 0.5 m · 484 Pa = 24 200 N; ⌈100/12⌉ + 1 = 10 pairs → 20 lines; the 10 lines of
-    // one side carry the load from that side: 2 420 N each.
-    expect(withAccess.loads[0]!.lateralKn).toBeCloseTo(24.2, 6);
-    expect(withAccess.lines).toHaveLength(20);
-    expect(withAccess.lines[0]!.horizontalKn).toBeCloseTo(2.42, 6);
-    // Square lines: the load along the pontoon is left to the wall.
-    for (const l of withAccess.lines) expect(l.splay).toBe('none');
-    expect(withAccess.issues.some((i) => i.code === 'ALONG_PIER_LOAD_NOT_HELD')).toBe(false);
-    expect(withAccess.issues.some((i) => i.code === 'ACCESS_PONTOON_WALL_FIXING')).toBe(true);
+
+    it('with a pier attached: the load off the wall is shared by tributary length', () => {
+      // Pier from the water-side edge at x = 20 (t = 70 along the pontoon); the gangway at t = 50.
+      // Tributary lengths: gangway 0…60 m, pier 60…100 m → 14 520 N and 9 680 N.
+      const pier2: MainPier = { id: 'P2', start: { x: 20, y: 3.5 }, end: { x: 20, y: 33.5 }, width: 3, locked: false, origin: 'manual' };
+      const plan2 = withAccess([pier2]);
+      // The pier's own wind along it from the shore is its end, 3 · 0.5 · 484 = 726 N.
+      expect(plan2.loads.find((l) => l.id === 'P2')!.axialFromShoreKn).toBeCloseTo(0.726 + 9.68, 6);
+      for (const l of plan2.lines.filter((x) => x.fixing === 'wall')) expect(l.horizontalKn).toBeCloseTo(14.52 / 2 / Math.SQRT1_2, 6);
+      expect(plan2.issues.find((i) => i.code === 'ACCESS_PONTOON_SHORE_CHAINS')?.message).toMatch(/shore chains 14\.5 kN, P2 9\.7 kN\./);
+    });
+
+    it('without a shoreline: anchored on both sides like a pier', () => {
+      const plan3 = anchoringPlan({
+        layout: { piers: [], berths: [] },
+        site: { ...site, shoreline: [], accessPontoons: [access] },
+        classes: [boat],
+        params,
+        priceList: LIST,
+        vatPct: 25.5,
+        pierFreeboard: 0.5,
+      });
+      expect(plan3.lines).toHaveLength(20);
+      expect(plan3.lines.every((l) => l.fixing === 'seabed')).toBe(true);
+      expect(plan3.issues.some((i) => i.code === 'ACCESS_PONTOON_NO_SHORE')).toBe(true);
+    });
+  });
+
+  it('tributary lengths: half-way to the neighbours, the ends to the ends', () => {
+    expect(tributaryLengths([50, 70], 100)).toEqual([60, 40]);
+    expect(tributaryLengths([70, 50], 100)).toEqual([40, 60]);
+    expect(tributaryLengths([30], 60)).toEqual([60]);
+    // Points outside the pontoon count at its ends; coincident points split at that point.
+    expect(tributaryLengths([-5, 5, 5], 10)).toEqual([2.5, 2.5, 5]);
   });
 
   it('anchors outside the water area are reported', () => {
