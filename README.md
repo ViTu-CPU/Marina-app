@@ -113,8 +113,9 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 **Anchoring and cost (preliminary)**
 - Anchoring plan for one design depth, shown as a map layer: crossed chain pairs and
   concrete anchors per pier and access pontoon, chain and anchor chosen from the price list
-  by breaking load and required mass. All factors are editable; a quantity estimate, not a
-  mooring design.
+  by breaking load and required mass; anchor type concrete block (friction) or concrete wedge
+  (Pearl Harbor type, published capacities). All factors are editable; a quantity estimate,
+  not a mooring design.
 - Bill of materials and cost estimate: pontoon modules, fingers, gangways, anchoring
   hardware, fittings, labour and plant, with site overheads, contingency, VAT 25.5 % on the
   total and a range. Every line shows its basis and source. Export as Excel.
@@ -167,10 +168,11 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
 - One design water depth per project (no soundings). The anchoring plan covers wind only:
   no waves, currents, ice or berthing loads, no structural check of pontoons and fixings.
   Wind loads follow UFC 4-152-07 and the defaults have public sources where one was found
-  (docs/RESEARCH.md §5, §9); anchors are plain concrete blocks holding by friction, so they
-  still come out heavier than suppliers' standard packages, and the two axial lines at a pier
-  head carry the largest loads (docs/DECISIONS.md I49, I54–I58). Nothing is checked against
-  RIL 201-3-2013 or AS 3962.
+  (docs/RESEARCH.md §5, §9). Plain concrete blocks hold by friction and come out heavier
+  than suppliers' standard packages; the wedge (Pearl Harbor type) option uses published
+  working capacities and needs longer chains. The two axial lines at a pier head carry the
+  largest loads (docs/DECISIONS.md I49, I54–I59). Nothing is checked against RIL 201-3-2013
+  or AS 3962.
 - Costs come from public list prices and stated assumptions (labour output, work-boat
   rate, Marinetek prices); they are a feasibility-stage estimate, not a quote.
 - No environmental constraints.

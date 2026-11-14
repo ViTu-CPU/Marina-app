@@ -156,6 +156,8 @@ describe('cost estimate, hand-calculated', () => {
     horizontalKn: 5,
     topTensionKn: 5.2,
     upliftKn: 1,
+    upliftAngleDeg: 0,
+    anchorType: 'block',
     chainLength: 16.5,
     chainId: 'c13',
     requiredAnchorKg: 900,

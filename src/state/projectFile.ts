@@ -280,7 +280,7 @@ function anchoring(v: unknown): AnchoringParams {
   if (v === undefined) return structuredClone(DEFAULT_ANCHORING);
   const o = obj(v, 'anchoring');
   const d = DEFAULT_ANCHORING;
-  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction'>): number =>
+  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType'>): number =>
     o[key] === undefined ? d[key] : num(o[key], `anchoring.${key}`);
   const f = o.friction === undefined ? {} : obj(o.friction, 'anchoring.friction');
   const mu = (k: Seabed) => (f[k] === undefined ? d.friction[k] : num(f[k], `anchoring.friction.${k}`));
@@ -302,6 +302,7 @@ function anchoring(v: unknown): AnchoringParams {
     friction: { clay: mu('clay'), sand: mu('sand'), rock: mu('rock') },
     chainLengthFactor: pick('chainLengthFactor'),
     maxAnchorMass: pick('maxAnchorMass'),
+    anchorType: o.anchorType === undefined ? d.anchorType : oneOf(o.anchorType, ['block', 'wedge'] as const, 'anchoring.anchorType'),
     waterDensity: pick('waterDensity'),
     concreteDensity: pick('concreteDensity'),
     steelDensity: pick('steelDensity'),

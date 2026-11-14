@@ -330,6 +330,10 @@ parameter is shown with its source or marked **assumption**.
    approximately three tonnes or less", Chalmers 2026 §3.8) is chosen, otherwise several of
    that size. Chalmers notes that several anchors on one line do not necessarily hold as much
    as one anchor of the same mass.
+   **Wedge anchors** (anchor type "wedge", DECISIONS I59): mass from the working capacities
+   of the Enhanced Pearl Harbor anchor (Sound & Sea Technology 2009 Tables 35–36, §9.5),
+   `SF_slide · H ≤ 1.5 · capacity(mass, seabed, angle)`; the chain is lengthened until the
+   angle at the anchor is within 5° (clay) or 6° (sand). Not for rock.
 9. **Comparison with practice.** Suppliers' standard packages: 2 × 1 000 kg and 16 mm chain
    per 8–12 m concrete pontoon, 2 × 2 000–3 000 kg and 20 mm chain for heavy pontoons (Top
    Marine); SF Marina's drawings: 2, 3, 6 and 10 t anchors, most often 2–3 t (Chalmers 2026
@@ -337,7 +341,11 @@ parameter is shown with its source or marked **assumption**.
    per lateral line on clay (4.5 t of anchors per metre of pier); with the UFC wind geometry
    and the sourced defaults (I54–I56) about 5.6 t per lateral line on clay and 3.0 t on sand
    (1.8 t/m and 1.2 t/m). What remains is mainly the anchor model: a plain block holding by
-   friction versus embedded or wedge-shaped anchors (§9.5, DECISIONS I49).
+   friction versus embedded or wedge-shaped anchors (§9.5, DECISIONS I49). With the wedge
+   anchor type (I59) the same layouts need about 0.6 t per lateral line on clay and 0.46 t on
+   sand (0.23 and 0.18 t of anchors per metre of pier, including the axial lines), with chains
+   of about 40 m and 37 m instead of 22 m. The two axial lines per pier head carry the largest
+   loads (up to about 45 kN); their arrangement is still an assumption (I58).
 7. **Ice**: pontoons that stay in the water over winter (owner decision D17) get a warning:
    ice loads are not calculated. Suppliers allow freezing but not moving ice.
 8. **Water level**: high and low water relative to the design depth are parameters. For

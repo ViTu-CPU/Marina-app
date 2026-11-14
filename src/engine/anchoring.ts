@@ -43,6 +43,13 @@ import { accessPontoonsOf } from './site';
 
 export type Seabed = 'clay' | 'sand' | 'rock';
 
+/**
+ * 'block': plain concrete block holding by friction. 'wedge': Pearl Harbor type concrete
+ * wedge that digs into soft seabeds, sized from Sound & Sea Technology 2009 Tables 35–36
+ * (DECISIONS I59).
+ */
+export type AnchorType = 'block' | 'wedge';
+
 export interface AnchoringParams {
   /** Design water depth at the anchors, m (D16). */
   depth: number;
@@ -73,6 +80,7 @@ export interface AnchoringParams {
   chainLengthFactor: number;
   /** Heaviest single concrete anchor to be handled, kg; heavier needs give several anchors. */
   maxAnchorMass: number;
+  anchorType: AnchorType;
   waterDensity: number;
   concreteDensity: number;
   steelDensity: number;
@@ -92,6 +100,8 @@ export interface AnchoringParams {
  *  - maxAnchorMass 3000 kg: SF Marina prefers anchors of about 3 t or less for smaller
  *    installations (Chalmers 2026 §3.8).
  *  - concreteDensity 2400 kg/m³: "about 150 pounds per cubic foot" (DBW 2005, App. A p. 90).
+ *  - friction sand 0.6: smooth concrete on quartz sand (Sound & Sea Technology 2009, Table 33).
+ *  - anchorType 'block': the concrete anchors of the price list are plain blocks.
  *  - Assumptions without a source: depth and water levels (site data), pontoonFreeboard,
  *    lineSpacing, slidingSafetyFactor, friction for clay and rock.
  */
@@ -113,14 +123,15 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   friction: { sand: 0.6, clay: 0.3, rock: 0.5 },
   chainLengthFactor: 4,
   maxAnchorMass: 3000,
+  anchorType: 'block',
   waterDensity: 1000,
   concreteDensity: 2400,
   steelDensity: 7850,
 };
 
 /**
- * The method's defaults with the site values of `p` kept (depth, water levels, seabed and
- * design wind): "Reset factors to defaults" (DECISIONS U19).
+ * The method's defaults with the site values and the anchor type of `p` kept (depth, water
+ * levels, seabed, design wind): "Reset factors to defaults" (DECISIONS U19).
  */
 export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
   ...structuredClone(DEFAULT_ANCHORING),
@@ -129,6 +140,7 @@ export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
   lowWater: p.lowWater,
   seabed: p.seabed,
   windSpeed: p.windSpeed,
+  anchorType: p.anchorType,
 });
 
 const G = 9.81;
@@ -153,6 +165,10 @@ export interface AnchorLine {
   chainId: string | null;
   /** Uplift at the anchor at the design load, kN (0 when chain lies on the bottom). */
   upliftKn: number;
+  /** Angle of the chain at the anchor above the horizontal, degrees. */
+  upliftAngleDeg: number;
+  /** How the anchor was sized: 'wedge' only where the wedge tables apply (not on rock). */
+  anchorType: AnchorType;
   /** Required anchor mass in air, kg. */
   requiredAnchorKg: number;
   anchorId: string | null;
@@ -216,7 +232,114 @@ interface ChainChoice extends ChainLine {
   length: number;
 }
 
-/** The cheapest chain of the list that holds `H` (N) in water `h` deep (m), or null. */
+/** Angle of the chain at the anchor above the horizontal, degrees. */
+export const upliftAngle = (H: number, V: number): number => (H > 0 ? (Math.atan2(Math.max(0, V), H) * 180) / Math.PI : 0);
+
+// ---------------------------------------------------------------------------
+// Wedge (Pearl Harbor type) anchors: Sound & Sea Technology, Advanced Anchoring and Mooring
+// Study (2009), Appendix A-1, Tables 35 and 36, "Enhanced Pearl Harbor Anchor". Working
+// capacities include FS = 1.5. docs/RESEARCH.md §9.5, DECISIONS I59.
+// ---------------------------------------------------------------------------
+
+const US_TON_KG = 907.18474;
+const KIP_N = 4448.2216;
+/** Table 35, soft clay/mud: working horizontal capacity 2.0 kips per US ton in air, every size. */
+const WEDGE_CLAY_KIPS_PER_TON = 2.0;
+/** Table 36, sand: [in-air weight US tons, working holding kips at 0° up angle, at 6°]. */
+const WEDGE_SAND: readonly (readonly [number, number, number])[] = [
+  [1, 3.87, 2.65],
+  [2, 9.35, 6.3],
+  [5, 23.8, 15.8],
+  [7.5, 33.3, 22.0],
+  [10, 49.5, 32.5],
+  [12.5, 59.3, 38.9],
+  [15, 77.1, 50.4],
+  [20, 102, 66],
+  [30, 163, 106],
+  [45, 236, 151],
+  [60, 331, 211],
+];
+/** The working capacity of the tables includes this factor of safety. */
+const WEDGE_TABLE_FS = 1.5;
+/**
+ * Largest chain angle at the anchor for which the tables apply, degrees: Table 35 "Keep chain
+ * angle less than 5 to 6 degrees" (the lower value is used); Table 36 gives 0° and 6°.
+ */
+export const WEDGE_ANGLE_LIMIT: Record<'clay' | 'sand', number> = { clay: 5, sand: 6 };
+
+/** Table points (mass in kg, working capacity in N) of a wedge anchor at an up angle. */
+function wedgePoints(seabed: 'clay' | 'sand', angleDeg: number): [number, number][] {
+  if (seabed === 'clay') return [[US_TON_KG, WEDGE_CLAY_KIPS_PER_TON * KIP_N]];
+  const t = Math.min(1, Math.max(0, angleDeg / 6));
+  return WEDGE_SAND.map(([tons, at0, at6]) => [tons * US_TON_KG, (at0 + (at6 - at0) * t) * KIP_N]);
+}
+
+/**
+ * Working horizontal capacity (FS 1.5 included) of a wedge anchor of `massKg` in air, N;
+ * null on rock or above the angle limit. Between table rows linear; below the first and
+ * above the last row in proportion to the mass of that row.
+ */
+export function wedgeWorkingCapacity(massKg: number, seabed: Seabed, angleDeg: number): number | null {
+  if (seabed === 'rock' || angleDeg > WEDGE_ANGLE_LIMIT[seabed] + 1e-9) return null;
+  const pts = wedgePoints(seabed, angleDeg);
+  const [m0, c0] = pts[0]!;
+  if (massKg <= m0) return (c0 * massKg) / m0;
+  for (let i = 1; i < pts.length; i++) {
+    const [m1, c1] = pts[i]!;
+    const [ma, ca] = pts[i - 1]!;
+    if (massKg <= m1) return ca + ((c1 - ca) * (massKg - ma)) / (m1 - ma);
+  }
+  const [mn, cn] = pts[pts.length - 1]!;
+  return (cn * massKg) / mn;
+}
+
+/**
+ * In-air mass of a wedge anchor that holds H (N) with the anchor safety factor, kg; null on
+ * rock or above the angle limit. SF_slide · H ≤ working capacity · 1.5 (the tables' FS).
+ */
+export function requiredWedgeMass(H: number, angleDeg: number, p: AnchoringParams): number | null {
+  if (p.seabed === 'rock' || angleDeg > WEDGE_ANGLE_LIMIT[p.seabed] + 1e-9) return null;
+  const needed = (p.slidingSafetyFactor * H) / WEDGE_TABLE_FS;
+  const pts = wedgePoints(p.seabed, angleDeg);
+  const [m0, c0] = pts[0]!;
+  if (needed <= c0) return (needed / c0) * m0;
+  for (let i = 1; i < pts.length; i++) {
+    const [m1, c1] = pts[i]!;
+    const [ma, ca] = pts[i - 1]!;
+    if (needed <= c1) return ma + ((m1 - ma) * (needed - ca)) / (c1 - ca);
+  }
+  const [mn, cn] = pts[pts.length - 1]!;
+  return (needed / cn) * mn;
+}
+
+/** Whether the anchors of this plan are sized as wedges (not on rock: no table). */
+const usesWedge = (p: AnchoringParams): p is AnchoringParams & { seabed: 'clay' | 'sand' } =>
+  p.anchorType === 'wedge' && p.seabed !== 'rock';
+
+/**
+ * Chain length for a wedge anchor: the rule length, or longer until the angle at the anchor
+ * is within the tables' limit (0.1 m steps; at the touching length the angle is 0).
+ */
+function wedgeChainLength(h: number, H: number, w: number, base: number, limitDeg: number): number {
+  const angleAt = (L: number) => {
+    const line = chainLine(h, L, H, w);
+    return upliftAngle(H, line.uplift);
+  };
+  if (angleAt(base) <= limitDeg) return base;
+  let lo = base;
+  let hi = Math.sqrt(h * h + (2 * h * H) / w);
+  for (let i = 0; i < 60 && hi - lo > 0.01; i++) {
+    const mid = (lo + hi) / 2;
+    if (angleAt(mid) <= limitDeg) hi = mid;
+    else lo = mid;
+  }
+  return Math.ceil(hi * 10 - 1e-9) / 10;
+}
+
+/**
+ * The cheapest chain of the list that holds `H` (N) in water `h` deep (m), or null. With wedge
+ * anchors each chain is made long enough for the wedge tables' angle limit.
+ */
 export function chooseChain(H: number, h: number, p: AnchoringParams, list: PriceList, vatPct: number): ChainChoice | null {
   let best: { choice: ChainChoice; cost: number } | null = null;
   for (const product of list.products) {
@@ -224,8 +347,9 @@ export function chooseChain(H: number, h: number, p: AnchoringParams, list: Pric
     const price = unitPriceVat0(product, vatPct);
     const d = product.chainDiameterMm;
     if (price === null || d === null || d <= p.corrosionAllowance) continue;
-    const length = chainLengthFor(h, p);
-    const line = chainLine(h, length, H, submergedWeight(product.massKgPerM, p));
+    const w = submergedWeight(product.massKgPerM, p);
+    const length = usesWedge(p) ? wedgeChainLength(h, H, w, chainLengthFor(h, p), WEDGE_ANGLE_LIMIT[p.seabed]) : chainLengthFor(h, p);
+    const line = chainLine(h, length, H, w);
     const remaining = ((d - p.corrosionAllowance) / d) ** 2;
     if (product.breakingLoadKn * 1000 * remaining < p.chainSafetyFactor * line.topTension) continue;
     const cost = price * length;
@@ -350,7 +474,9 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       const chain = chooseChain(H, hHigh, p, priceList, vatPct);
       // Without a chain the uplift is not known; it is left out and the line is flagged.
       const uplift = chain?.uplift ?? 0;
-      const mass = requiredAnchorMass(H, uplift, p);
+      const angle = upliftAngle(H, uplift);
+      const wedgeMass = usesWedge(p) && chain ? requiredWedgeMass(H, angle, p) : null;
+      const mass = wedgeMass ?? requiredAnchorMass(H, uplift, p);
       const anchor = chooseAnchor(mass, priceList, vatPct, p.maxAnchorMass);
       const length = chain?.length ?? chainLengthFor(hHigh, p);
       const span = chain ? chain.span : Math.sqrt(length * length - hHigh * hHigh);
@@ -365,6 +491,8 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
         horizontalKn: H / 1000,
         topTensionKn: (chain?.topTension ?? H) / 1000,
         upliftKn: uplift / 1000,
+        upliftAngleDeg: angle,
+        anchorType: wedgeMass === null ? 'block' : 'wedge',
         chainLength: length,
         chainId: chain?.product.id ?? null,
         requiredAnchorKg: mass,
@@ -410,6 +538,17 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
           .slice(0, 5)
           .map((l) => l.id)
           .join(', ')}${outside.length > 5 ? ', …' : ''}); those lines need another fixing, e.g. to the shore or with a shorter chain.`,
+      );
+    }
+  }
+
+  if (p.anchorType === 'wedge') {
+    if (p.seabed === 'rock') {
+      warn('WEDGE_NOT_ON_ROCK', 'The wedge anchor tables cover soft clay and sand only; on rock the anchors are sized as plain blocks.');
+    } else {
+      warn(
+        'WEDGE_ANCHORS',
+        `Wedge (Pearl Harbor type) anchors sized from published working capacities (Sound & Sea Technology 2009, Tables 35–36), with chains long enough to keep the angle at the anchor within ${WEDGE_ANGLE_LIMIT[p.seabed]}°. They hold only when placed the right way round and dug in; they are not in the price list and are priced as concrete anchors of the same mass.`,
       );
     }
   }

@@ -2,7 +2,7 @@
  * Panels of the anchoring plan and the cost estimate (D23, D24).
  */
 import { useRef } from 'react';
-import { resetAnchoringFactors, type AnchoringParams, type Seabed } from '../../engine/anchoring';
+import { resetAnchoringFactors, type AnchoringParams, type AnchorType, type Seabed } from '../../engine/anchoring';
 import { BOM_GROUPS, seriesNames, type BomGroup } from '../../engine/bom';
 import type { Layout } from '../../engine/model';
 import { parsePriceListFile, priceListToXlsx } from '../../catalog/priceList';
@@ -16,8 +16,9 @@ import { Button, NumberField, Section } from './fields';
 
 const state = () => appStore.getState();
 const SEABEDS: Seabed[] = ['clay', 'sand', 'rock'];
+const ANCHOR_TYPES: AnchorType[] = ['block', 'wedge'];
 
-type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction'>;
+type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType'>;
 
 function AnchoringField({ name, min, max, step }: { name: NumericAnchoring; min: number; max: number; step?: number }) {
   const t = useT();
@@ -39,6 +40,7 @@ export function AnchoringSection() {
   const t = useT();
   const seabed = useAppStore((s) => s.project.anchoring.seabed);
   const friction = useAppStore((s) => s.project.anchoring.friction);
+  const anchorType = useAppStore((s) => s.project.anchoring.anchorType);
   return (
     <Section title={t('section.anchoring')} defaultOpen={false}>
       <AnchoringField name="depth" min={0.5} max={100} />
@@ -66,6 +68,20 @@ export function AnchoringSection() {
         step={0.05}
         onChange={(v) => state().setAnchoring({ friction: { ...friction, [seabed]: v } }, { coalesce: `anchoring:friction:${seabed}` })}
       />
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('anchoring.anchorType')}
+        <select
+          className="rounded border border-slate-300 px-1 py-0.5 text-sm"
+          value={anchorType}
+          onChange={(e) => state().setAnchoring({ anchorType: e.target.value as AnchorType })}
+        >
+          {ANCHOR_TYPES.map((a) => (
+            <option key={a} value={a}>
+              {t(`anchorType.${a}`)}
+            </option>
+          ))}
+        </select>
+      </label>
       <AnchoringField name="windSpeed" min={0} max={60} step={1} />
       <AnchoringField name="dragCoefficient" min={0.1} max={3} step={0.05} />
       <AnchoringField name="profileHeightRatio" min={0.01} max={1} step={0.01} />

@@ -112,7 +112,8 @@ Derived from a layout, the site and the price list (DECISIONS D23, D24, I47–I5
 3. Each line: chain length `k × depth at high water`, catenary with uplift at the anchor;
    cheapest chain with breaking load × ((d − c)/d)² ≥ SF × tension; cheapest anchor with
    submerged weight ≥ SF × (H/μ + uplift), no heavier than the largest piece to be handled
-   (several pieces otherwise).
+   (several pieces otherwise). With wedge anchors (I59): mass from the published working
+   capacities, chain lengthened until the angle at the anchor is within the tables' limit.
 4. Bill of materials: cheapest module combination per pier, fingers by length, gangways per
    shore connection, chain, anchors, shackles, springs, anodes per line, fittings per berth
    and pier; labour and plant from output rates; overheads, contingency, VAT, range.

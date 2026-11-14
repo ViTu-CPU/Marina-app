@@ -7,7 +7,11 @@ import {
   chooseChain,
   DEFAULT_ANCHORING,
   requiredAnchorMass,
+  requiredWedgeMass,
   resetAnchoringFactors,
+  upliftAngle,
+  WEDGE_ANGLE_LIMIT,
+  wedgeWorkingCapacity,
   type AnchoringParams,
 } from '../anchoring';
 import type { PriceList, Product } from '../catalog';
@@ -281,5 +285,80 @@ describe('anchoring plan of a pier', () => {
   it('is deterministic', () => {
     const again = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
     expect(again).toEqual(plan);
+  });
+  it('wedge anchors on clay: chains lengthened to the 5° limit, mass from Table 35', () => {
+    const clay: AnchoringParams = { ...DEFAULT_ANCHORING, seabed: 'clay', anchorType: 'wedge' };
+    const wedge = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params: clay, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+    const w13 = 3.1 * 9.81 * (1 - 1000 / 7850);
+    for (const l of wedge.lines) {
+      expect(l.anchorType).toBe('wedge');
+      expect(l.upliftAngleDeg).toBeLessThanOrEqual(5 + 1e-9);
+      // SF 1.5 equals the tables' FS: mass = H / (2.0 kips per US ton) = H / 9.80665 N/kg.
+      expect(l.requiredAnchorKg).toBeCloseTo((l.horizontalKn * 1000) / 9.80665, 2);
+    }
+    // The 22 m rule length leaves the 13 mm chain at about 10° (above the limit), so it is
+    // lengthened to the shortest 0.1 m step within 5°.
+    const lateral = wedge.lines.find((l) => l.kind === 'lateral')!;
+    expect(lateral.chainId).toBe('c13');
+    expect(upliftAngle(3509, chainLine(5.5, 22, 3509, w13).uplift)).toBeGreaterThan(5);
+    expect(lateral.chainLength).toBeGreaterThan(22);
+    expect(upliftAngle(3509, chainLine(5.5, lateral.chainLength - 0.1, 3509, w13).uplift)).toBeGreaterThan(5);
+    // 3 509 N → 357.8 kg: the 1 000 kg anchor, the lightest in the list.
+    expect(lateral.requiredAnchorKg).toBeCloseTo(357.8, 1);
+    expect(lateral.anchorId).toBe('a1000');
+    expect(wedge.issues.some((i) => i.code === 'WEDGE_ANCHORS')).toBe(true);
+  });
+
+  it('wedge anchors are not sized on rock: plain blocks and a warning', () => {
+    const rock: AnchoringParams = { ...DEFAULT_ANCHORING, seabed: 'rock', anchorType: 'wedge' };
+    const onRock = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params: rock, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+    const line = onRock.lines[0]!;
+    expect(line.anchorType).toBe('block');
+    expect(line.chainLength).toBeCloseTo(22, 9);
+    expect(line.requiredAnchorKg).toBeCloseTo(requiredAnchorMass(3509, line.upliftKn * 1000, rock), 6);
+    expect(onRock.issues.some((i) => i.code === 'WEDGE_NOT_ON_ROCK')).toBe(true);
+  });
+});
+
+describe('wedge (Pearl Harbor type) anchor tables, Sound & Sea Technology 2009', () => {
+  const TON = 907.18474;
+  const KIP = 4448.2216;
+
+  it('soft clay/mud (Table 35): 2.0 kips working capacity per US ton, every size', () => {
+    expect(wedgeWorkingCapacity(TON, 'clay', 0)).toBeCloseTo(2 * KIP, 6);
+    expect(wedgeWorkingCapacity(60 * TON, 'clay', 0)).toBeCloseTo(120 * KIP, 6);
+    // 3 000 kg: 3 000 / 907.18 · 8 896.4 = 29 420 N, about the weight in air.
+    expect(wedgeWorkingCapacity(3000, 'clay', 5)).toBeCloseTo(29419.95, 1);
+    // "Keep chain angle less than 5 to 6 degrees": above 5° the table does not apply.
+    expect(WEDGE_ANGLE_LIMIT.clay).toBe(5);
+    expect(wedgeWorkingCapacity(3000, 'clay', 5.1)).toBeNull();
+  });
+
+  it('sand (Table 36): rows at 0° and 6°, linear between rows and angles', () => {
+    expect(wedgeWorkingCapacity(2 * TON, 'sand', 0)).toBeCloseTo(9.35 * KIP, 6);
+    expect(wedgeWorkingCapacity(2 * TON, 'sand', 6)).toBeCloseTo(6.3 * KIP, 6);
+    expect(wedgeWorkingCapacity(2 * TON, 'sand', 3)).toBeCloseTo(7.825 * KIP, 6);
+    expect(wedgeWorkingCapacity(1.5 * TON, 'sand', 0)).toBeCloseTo(6.61 * KIP, 6);
+    // Below the first row in proportion to it; above the last in proportion to the last.
+    expect(wedgeWorkingCapacity(0.5 * TON, 'sand', 0)).toBeCloseTo(1.935 * KIP, 6);
+    expect(wedgeWorkingCapacity(120 * TON, 'sand', 0)).toBeCloseTo(662 * KIP, 6);
+    expect(wedgeWorkingCapacity(TON, 'sand', 6.1)).toBeNull();
+    expect(wedgeWorkingCapacity(TON, 'rock', 0)).toBeNull();
+  });
+
+  it('required mass inverts the capacity with the anchor safety factor', () => {
+    for (const seabed of ['clay', 'sand'] as const) {
+      for (const sf of [1.5, 2]) {
+        const p: AnchoringParams = { ...DEFAULT_ANCHORING, seabed, slidingSafetyFactor: sf };
+        for (const H of [2000, 8000, 50000, 400000, 3e6]) {
+          const m = requiredWedgeMass(H, 4, p)!;
+          expect((wedgeWorkingCapacity(m, seabed, 4)! * 1.5) / sf).toBeCloseTo(H, 3);
+        }
+      }
+    }
+    // 2.0 kips per US ton is 9.8066 N per kg, i.e. a working capacity equal to the weight in air.
+    expect((2 * KIP) / TON).toBeCloseTo(9.80665, 4);
+    expect(requiredWedgeMass(6000, 0, { ...DEFAULT_ANCHORING, seabed: 'clay' })).toBeCloseTo(6000 / ((2 * KIP) / TON), 9);
+    expect(requiredWedgeMass(6000, 0, { ...DEFAULT_ANCHORING, seabed: 'rock' })).toBeNull();
   });
 });
