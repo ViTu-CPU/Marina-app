@@ -26,6 +26,7 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | D17 | **Winter (2026-11-14):** pontoons stay in the water over winter. | Default products are heavy concrete pontoons; ice loads are not computed and are flagged as a warning. |
 | D18 | **Prices (2026-11-14):** unit prices are VAT 0 %; VAT 25.5 % is added to the total and shown separately. Supplier prices published with VAT are converted (÷ 1.255). | Contractor practice. |
 | D19 | **Price file (2026-11-14):** the prices and calculation parameters live in an Excel file in the repository that the user can edit. | Requested by the owner. |
+| D20 | **Target counts (2026-11-14):** the boat mix can be given as a target **number of berths per class** instead of shares. | Owner request. Details in I31–I34. |
 
 ## Defaults chosen by the implementer
 
@@ -61,6 +62,10 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | I28 | **Search speed-ups that do not change the result:** (a) a candidate is skipped when its piers, both sides full at the average pier length per berth plus two berths per row, cannot reach the best count so far; (b) the reach test is skipped when the berths placed are already too few. **One that can:** (c) strategy C first sweeps every orientation with offsets 4 m apart and runs the 1 m sweep only for orientations within 25 % of the fourth best. | SPEC §10 asks for under 2 s. With (c) an orientation whose best offset lies between coarse steps and gains more than 25 % could be missed; the returned layouts are always swept at 1 m. |
 | I29 | When nothing fits, the diagnostic compares the site with what the **least demanding boat class** needs (was: the longest class). | With strategy E a site is usable as soon as one class fits. |
 | I30 | Strategy E is not produced when only one boat class has a share above zero. | It would equal strategy A. |
+| I31 | **Target counts are upper limits.** With `Params.berthTarget = 'count'` each class gets at most its count; the classes are interleaved by the shares the counts imply (I7), and filling stops when every count is used up. Berths short of the counts are shown as `Stats.targetShortfall` (card, comparison table, CSV) but are **not** an issue, so they do not change the status. | A demand ("we need 20 berths for 7 m boats") is not a constraint of the site (D3). Placing more than asked would waste pontoon. |
+| I32 | **The pier on which the counts run out is made as short as possible:** the shortest length in 0.1 m steps that still takes the same number of berths (bisection), so both sides share them instead of one side being filled first; then shortened to the end of its last bay. Strategy E only gets the second step. | Without it the last pier kept its full length with one half-empty side. |
+| I33 | With counts, 'minInfrastructure' measures its shortfall against the total of the counts instead of the separate berth target. | One target, not two. |
+| I34 | Switching to counts for the first time fills them from the preferred (or first) alternative, or from the shares of 100 berths when there is none. Older project files open with shares and zero counts. | Gives a sensible start; files stay readable. |
 
 ## User interface
 

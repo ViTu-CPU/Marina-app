@@ -12,10 +12,12 @@ import type {
   MainPier,
   ObjectiveId,
   ObjectiveSettings,
+  Params,
   Stats,
 } from './model';
 import { pierAxis, rowFrame, toLocalRect } from './rows';
 import type { PreparedSite } from './site';
+import { mixClasses, targetShortfall } from './targets';
 
 export interface StatsInput {
   piers: MainPier[];
@@ -26,7 +28,14 @@ export interface StatsInput {
   unreachableRemoved?: number;
 }
 
-export function computeStats(layout: StatsInput, prepared: PreparedSite, classes: BoatClass[]): Stats {
+export function computeStats(
+  layout: StatsInput,
+  prepared: PreparedSite,
+  projectClasses: BoatClass[],
+  params: Pick<Params, 'berthTarget'> = { berthTarget: 'share' },
+): Stats {
+  // With target counts the target mix is the one implied by the counts (D20).
+  const classes = mixClasses(projectClasses, params);
   const active = layout.berths.filter((b) => !b.removed);
   const totalBerths = active.length;
 
@@ -85,6 +94,7 @@ export function computeStats(layout: StatsInput, prepared: PreparedSite, classes
     pontoonPerBerth: totalBerths > 0 ? pontoonLength / totalBerths : 0,
     mixDeviation,
     unreachableRemoved: layout.unreachableRemoved ?? 0,
+    targetShortfall: targetShortfall(classes, params, berthsByClass),
     issueCounts: {
       error: layout.issues.filter((i) => i.severity === 'error').length,
       warning: layout.issues.filter((i) => i.severity === 'warning').length,

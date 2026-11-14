@@ -73,11 +73,18 @@ export interface MixState {
    * rows are filled class by class from the largest boats down (size zoning).
    */
   quota?: Record<string, number>;
+  /**
+   * Optional upper limit of berths per class (target counts, DECISIONS D20). Classes are
+   * still chosen by target share, but a class at its limit gets no more berths, and the
+   * filling stops when every class is at its limit.
+   */
+  cap?: Record<string, number>;
 }
 
-export const newMixState = (classes: BoatClass[]): MixState => ({
+export const newMixState = (classes: BoatClass[], cap?: Record<string, number>): MixState => ({
   total: 0,
   counts: Object.fromEntries(classes.map((c) => [c.id, 0])),
+  ...(cap ? { cap } : {}),
 });
 
 export interface FillContext {
@@ -188,15 +195,17 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
   const counts = classes.map((c) => mix.counts[c.id] ?? 0);
   let total = mix.total;
   const quota = mix.quota ? classes.map((c) => mix.quota![c.id] ?? 0) : null;
-  /** Index of the class for the next berth, or -1 when every quota is used up. */
+  const cap = mix.cap ? classes.map((c) => mix.cap![c.id] ?? 0) : null;
+  /** Index of the class for the next berth, or -1 when every quota or cap is used up. */
   const pick = (): number => {
     if (quota) {
       for (const i of plan.byLengthDesc) if (counts[i]! < quota[i]!) return i;
       return -1;
     }
-    let best = 0;
+    let best = -1;
     let bestDeficit = -Infinity;
     for (let i = 0; i < classes.length; i++) {
+      if (cap && counts[i]! >= cap[i]!) continue;
       const deficit = shares[i]! * (total + 1) - counts[i]!;
       if (deficit > bestDeficit + 1e-12) {
         best = i;
@@ -250,7 +259,7 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
   const structureEdges = localEdges(prepared.structureRegion);
 
   const runs: PlacedBay[][] = [];
-  /** Set when every quota is used up: nothing more can be placed in this row. */
+  /** Set when every quota or cap is used up: nothing more can be placed in this row. */
   let exhausted = false;
   for (const [from, to] of stretches) {
     if (exhausted) break;
@@ -310,6 +319,7 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
         for (const index of plan.byLengthDesc) {
           if (classes[index]!.length >= longest) continue;
           if (quota && counts[index]! + n > quota[index]!) continue;
+          if (cap && counts[index]! + n > cap[index]!) continue;
           const same = Array<number>(n).fill(index);
           const smaller = bayAtOrigin(ctx, plan, same);
           if (bayIsValid(s, smaller)) {

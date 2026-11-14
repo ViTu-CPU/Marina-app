@@ -19,14 +19,15 @@ export const DEFAULT_PARAMS: Params = {
   maxMainPierLength: 150,
   orientation: 'auto',
   shoreOffset: 0,
+  berthTarget: 'share',
 };
 
 /** Default boat mix (SPEC §9). */
 export const DEFAULT_BOAT_CLASSES: BoatClass[] = [
-  { id: 'c5', name: '5 m', length: 5.0, beam: 2.0, color: '#38bdf8', share: 0.3 },
-  { id: 'c7', name: '7 m', length: 7.0, beam: 2.5, color: '#34d399', share: 0.35 },
-  { id: 'c9', name: '9 m', length: 9.0, beam: 3.0, color: '#fbbf24', share: 0.25 },
-  { id: 'c12', name: '12 m', length: 12.0, beam: 3.5, color: '#f87171', share: 0.1 },
+  { id: 'c5', name: '5 m', length: 5.0, beam: 2.0, color: '#38bdf8', share: 0.3, count: 30 },
+  { id: 'c7', name: '7 m', length: 7.0, beam: 2.5, color: '#34d399', share: 0.35, count: 35 },
+  { id: 'c9', name: '9 m', length: 9.0, beam: 3.0, color: '#fbbf24', share: 0.25, count: 25 },
+  { id: 'c12', name: '12 m', length: 12.0, beam: 3.5, color: '#f87171', share: 0.1, count: 10 },
 ];
 
 export const DEFAULT_OBJECTIVE: ObjectiveSettings = {

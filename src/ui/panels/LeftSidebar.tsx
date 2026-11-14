@@ -1,12 +1,13 @@
 /** Left sidebar (SPEC §8): project, site tools, boat classes, parameters, objective, layers. */
 import { useRef, useState } from 'react';
 import { distance } from '../../engine/geometry';
-import type { BoatClass, ObjectiveId, ObstacleKind, Params, ZoneKind } from '../../engine/model';
+import type { BerthTarget, BoatClass, ObjectiveId, ObstacleKind, Params, ZoneKind } from '../../engine/model';
+import { targetCount } from '../../engine/targets';
 import type { StringKey } from '../../i18n';
 import { originPlacing, parseLatLon } from '../../state/geo';
 import { appStore, LAYER_IDS, useAppStore, type ToolId } from '../../state/store';
 import { loadImage, readFileAsDataUrl } from '../export/download';
-import { formatLength, formatPercent } from '../format';
+import { formatCount, formatLength, formatPercent } from '../format';
 import { calibrateBackground, placeBackground } from '../tools/background';
 import { deleteSiteObject, hasEntrance } from '../tools/sitePaths';
 import { useT } from '../useT';
@@ -293,6 +294,29 @@ function BoatClassesSection() {
   const t = useT();
   const classes = useAppStore((s) => s.project.boatClasses);
   const language = useAppStore((s) => s.language);
+  const berthTarget = useAppStore((s) => s.project.params.berthTarget);
+  const counts = berthTarget === 'count';
+  /**
+   * Switch between target shares and target counts (D20) in one undo step. When counts
+   * are switched on for the first time, they start from the preferred (or first)
+   * alternative, or from the shares of 100 berths when there is none.
+   */
+  const setTarget = (target: BerthTarget) => {
+    if (target === berthTarget) return;
+    const { project } = state();
+    if (target === 'count' && classes.every((c) => c.count === 0)) {
+      const reference = project.layouts.find((l) => l.id === project.preferredLayoutId) ?? project.layouts[0];
+      state().setBoatClasses(
+        classes.map((c) => ({
+          ...c,
+          count: reference ? (reference.stats.berthsByClass[c.id] ?? 0) : Math.round(c.share * 100),
+        })),
+        { coalesce: 'berth-target' },
+      );
+    }
+    state().setParams({ berthTarget: target }, { coalesce: 'berth-target' });
+    state().endCoalescing();
+  };
   const update = (id: string, patch: Partial<BoatClass>, field: string) =>
     state().setBoatClasses(
       classes.map((c) => (c.id === id ? { ...c, ...patch } : c)),
@@ -303,20 +327,40 @@ function BoatClassesSection() {
     while (classes.some((c) => c.id === `class-${n}`)) n++;
     state().setBoatClasses([
       ...classes,
-      { id: `class-${n}`, name: '6 m', length: 6, beam: 2.3, color: CLASS_COLORS[classes.length % CLASS_COLORS.length]!, share: 0.1 },
+      {
+        id: `class-${n}`,
+        name: '6 m',
+        length: 6,
+        beam: 2.3,
+        color: CLASS_COLORS[classes.length % CLASS_COLORS.length]!,
+        share: 0.1,
+        count: 10,
+      },
     ]);
   };
   const shareSum = classes.reduce((sum, c) => sum + c.share, 0);
+  const countSum = classes.reduce((sum, c) => sum + targetCount(c), 0);
 
   return (
     <Section title={t('section.boats')}>
+      <div className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        <span id="berth-target">{t('boats.target')}</span>
+        <div className="flex gap-1" role="group" aria-labelledby="berth-target">
+          <Button active={!counts} onClick={() => setTarget('share')}>
+            {t('boats.targetShare')}
+          </Button>
+          <Button active={counts} onClick={() => setTarget('count')}>
+            {t('boats.targetCount')}
+          </Button>
+        </div>
+      </div>
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-xs text-slate-500">
             <th className="font-medium">{t('boats.name')}</th>
             <th className="font-medium">{t('boats.length')}</th>
             <th className="font-medium">{t('boats.beam')}</th>
-            <th className="font-medium">{t('boats.share')}</th>
+            <th className="font-medium">{counts ? t('boats.count') : t('boats.share')}</th>
             <th />
           </tr>
         </thead>
@@ -349,15 +393,27 @@ function BoatClassesSection() {
                 <NumberField bare label={`${t('boats.beam')}: ${c.name}`} value={c.beam} min={0.5} max={30} onChange={(beam) => update(c.id, { beam }, 'beam')} />
               </td>
               <td className="w-14 pr-1">
-                <NumberField
-                  bare
-                  label={`${t('boats.share')}: ${c.name}`}
-                  value={Math.round(c.share * 1000) / 10}
-                  min={0}
-                  max={100}
-                  step={1}
-                  onChange={(percent) => update(c.id, { share: percent / 100 }, 'share')}
-                />
+                {counts ? (
+                  <NumberField
+                    bare
+                    label={`${t('boats.count')}: ${c.name}`}
+                    value={c.count}
+                    min={0}
+                    max={10000}
+                    step={1}
+                    onChange={(count) => update(c.id, { count: Math.round(count) }, 'count')}
+                  />
+                ) : (
+                  <NumberField
+                    bare
+                    label={`${t('boats.share')}: ${c.name}`}
+                    value={Math.round(c.share * 1000) / 10}
+                    min={0}
+                    max={100}
+                    step={1}
+                    onChange={(percent) => update(c.id, { share: percent / 100 }, 'share')}
+                  />
+                )}
               </td>
               <td>
                 <button
@@ -376,15 +432,21 @@ function BoatClassesSection() {
       </table>
       <div className="flex items-center justify-between">
         <Button onClick={add}>{t('boats.add')}</Button>
-        <span className={`text-xs ${Math.abs(shareSum - 1) > 0.005 ? 'text-amber-700' : 'text-slate-500'}`} title={t('boats.shareNote')}>
-          {t('boats.shareSum')} {formatPercent(shareSum, language)}
-        </span>
+        {counts ? (
+          <span className="text-xs text-slate-500" title={t('boats.countNote')}>
+            {t('boats.countSum')} {formatCount(countSum, language)}
+          </span>
+        ) : (
+          <span className={`text-xs ${Math.abs(shareSum - 1) > 0.005 ? 'text-amber-700' : 'text-slate-500'}`} title={t('boats.shareNote')}>
+            {t('boats.shareSum')} {formatPercent(shareSum, language)}
+          </span>
+        )}
       </div>
     </Section>
   );
 }
 
-type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation'>;
+type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget'>;
 
 function ParamField({ name, min, max, step }: { name: NumericParam; min: number; max: number; step?: number }) {
   const t = useT();

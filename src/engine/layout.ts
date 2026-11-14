@@ -59,6 +59,7 @@ export function evaluateLayout(
       { piers: draft.piers, fingers: draft.fingers, berths, fairways, issues, unreachableRemoved: draft.unreachableRemoved ?? 0 },
       prepared,
       classes,
+      params,
     ),
     score: 0,
     modified: draft.modified,

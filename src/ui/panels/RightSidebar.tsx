@@ -79,6 +79,11 @@ function Alternatives() {
                   {formatLength(l.stats.pontoonLength, language)} m {t('results.pontoon')}
                 </span>
                 <FeasibilityBadge feasibility={l.feasibility} />
+                {l.stats.targetShortfall > 0 && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900" data-testid="short-of-target">
+                    {formatCount(l.stats.targetShortfall, language)} {t('results.shortOfTarget')}
+                  </span>
+                )}
                 {l.unreachableRemoved > 0 && (
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900" data-testid="left-out">
                     {formatCount(l.unreachableRemoved, language)} {t('results.leftOut')}
@@ -149,8 +154,9 @@ function Comparison() {
   const classes = useAppStore((s) => s.project.boatClasses);
   const selectedId = useAppStore((s) => s.selectedLayoutId);
   const language = useAppStore((s) => s.language);
+  const berthTarget = useAppStore((s) => s.project.params.berthTarget);
   if (layouts.length === 0) return null;
-  const rows = comparisonRows(layouts, classes, language);
+  const rows = comparisonRows(layouts, classes, language, berthTarget);
   return (
     <Section title={t('results.comparison')}>
       <div className="overflow-x-auto">

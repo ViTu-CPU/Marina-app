@@ -88,6 +88,7 @@ describe('defaults', () => {
       maxMainPierLength: 150,
       orientation: 'auto',
       shoreOffset: 0,
+      berthTarget: 'share',
     });
   });
 });

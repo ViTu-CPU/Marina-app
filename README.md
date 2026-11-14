@@ -75,7 +75,8 @@ npx playwright install chromium
 - Two built-in examples: a rectangular basin and an irregular bay.
 
 **Inputs**
-- Boat classes: length, beam, target share, colour.
+- Boat classes: length, beam, colour, and either a target share or a target number of
+  berths per class (the generator places at most that many; the shortfall is shown).
 - Dock parameters: pier and finger widths, finger length ratio, one or two boats per bay,
   clearances, distance of the first berth from the shore, maximum pier length, pier
   direction (automatic or fixed).

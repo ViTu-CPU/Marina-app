@@ -105,6 +105,24 @@ describe('app shell (SPEC §8)', () => {
     expect(appStore.getState().project.boatClasses.map((c) => c.id)).not.toContain('c12');
   });
 
+  it('the boat mix can be given as target counts (D20) and switched back in one undo step each', () => {
+    renderShell();
+    act(() => appStore.getState().setBoatClasses(appStore.getState().project.boatClasses.map((c) => ({ ...c, count: 0 }))));
+    fireEvent.click(screen.getByRole('button', { name: 'Count' }));
+    const { project } = appStore.getState();
+    expect(project.params.berthTarget).toBe('count');
+    // Without layouts the counts start from the shares of 100 berths.
+    expect(project.boatClasses.map((c) => c.count)).toEqual([30, 35, 25, 10]);
+    expect(screen.getByText(/Target berths/).textContent).toContain('100');
+    fireEvent.change(screen.getByLabelText('Count: 5 m'), { target: { value: '12' } });
+    expect(appStore.getState().project.boatClasses[0]!.count).toBe(12);
+    fireEvent.click(screen.getByRole('button', { name: 'Share %' }));
+    expect(appStore.getState().project.params.berthTarget).toBe('share');
+    expect(screen.getByLabelText('Share (%): 5 m')).toBeTruthy();
+    act(() => appStore.getState().undo());
+    expect(appStore.getState().project.params.berthTarget).toBe('count');
+  });
+
   it('removing a berth from the selection panel marks the layout as manually edited', () => {
     renderShell();
     act(() => {

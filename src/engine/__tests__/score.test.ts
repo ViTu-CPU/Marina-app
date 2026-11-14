@@ -111,6 +111,7 @@ describe('objectives (SPEC §7)', () => {
     pontoonPerBerth: 4,
     mixDeviation: 0,
     unreachableRemoved: 0,
+    targetShortfall: 0,
     issueCounts: { error: 0, warning: 0 },
     ...over,
   });

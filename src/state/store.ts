@@ -100,7 +100,7 @@ export function emptyProject(): Project {
 export function inputFingerprint(project: Pick<Project, 'site' | 'boatClasses' | 'params'>): string {
   const text = JSON.stringify({
     site: project.site,
-    classes: project.boatClasses.map((c) => [c.id, c.length, c.beam, c.share]),
+    classes: project.boatClasses.map((c) => [c.id, c.length, c.beam, c.share, c.count]),
     params: project.params,
   });
   // FNV-1a, 32 bit: short and stable; collisions would only hide the "Regenerate" hint.

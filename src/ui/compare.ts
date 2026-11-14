@@ -2,7 +2,8 @@
  * Rows of the comparison table (SPEC §8): all statistics side by side, with the best
  * value of each row marked.
  */
-import type { BoatClass, Layout, Stats } from '../engine/model';
+import type { BerthTarget, BoatClass, Layout, Stats } from '../engine/model';
+import { targetCount } from '../engine/targets';
 import type { Language, StringKey } from '../i18n';
 import { formatArea, formatCount, formatLength, formatPercent, formatRatio } from './format';
 
@@ -23,6 +24,8 @@ interface Metric {
   value: (s: Stats) => number;
   format: (v: number, language: Language) => string;
   better: Direction;
+  /** Shown only when the boat mix is given as target counts (D20). */
+  countsOnly?: boolean;
 }
 
 const METRICS: Metric[] = [
@@ -36,6 +39,7 @@ const METRICS: Metric[] = [
   { key: 'stat.berthsPer1000m2', unit: '', value: (s) => s.berthsPer1000m2, format: formatRatio, better: 'higher' },
   { key: 'stat.pontoonPerBerth', unit: 'm', value: (s) => s.pontoonPerBerth, format: formatLength, better: 'lower' },
   { key: 'stat.mixDeviation', unit: '', value: (s) => s.mixDeviation, format: formatPercent, better: 'lower' },
+  { key: 'stat.targetShortfall', unit: '', value: (s) => s.targetShortfall, format: formatCount, better: 'lower', countsOnly: true },
   { key: 'stat.unreachableRemoved', unit: '', value: (s) => s.unreachableRemoved, format: formatCount, better: 'lower' },
   { key: 'stat.errors', unit: '', value: (s) => s.issueCounts.error, format: formatCount, better: 'lower' },
   { key: 'stat.warnings', unit: '', value: (s) => s.issueCounts.warning, format: formatCount, better: 'lower' },
@@ -49,9 +53,16 @@ export function bestIndices(values: number[], better: Direction): number[] {
   return best.length === values.length ? [] : best;
 }
 
-export function comparisonRows(layouts: Layout[], classes: BoatClass[], language: Language = 'en'): ComparisonRow[] {
+export function comparisonRows(
+  layouts: Layout[],
+  classes: BoatClass[],
+  language: Language = 'en',
+  berthTarget: BerthTarget = 'share',
+): ComparisonRow[] {
+  const counts = berthTarget === 'count';
   const rows: ComparisonRow[] = [];
   for (const metric of METRICS) {
+    if (metric.countsOnly && !counts) continue;
     const raw = layouts.map((l) => metric.value(l.stats));
     const values = raw.map((v) => metric.format(v, language));
     // Compare what is displayed: values that print the same are equally good.
@@ -68,7 +79,12 @@ export function comparisonRows(layouts: Layout[], classes: BoatClass[], language
         rows.push({
           label: { text: c.name },
           unit: '',
-          values: layouts.map((l) => formatCount(l.stats.berthsByClass[c.id] ?? 0, language)),
+          // With target counts each class shows "placed / target".
+          values: layouts.map((l) =>
+            counts
+              ? `${formatCount(l.stats.berthsByClass[c.id] ?? 0, language)} / ${formatCount(targetCount(c), language)}`
+              : formatCount(l.stats.berthsByClass[c.id] ?? 0, language),
+          ),
           best: [],
         });
       }

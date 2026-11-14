@@ -56,6 +56,7 @@ import { fingerPierPattern, localRectToPolygon, type BerthPattern } from './patt
 import { buildReachGrid, isSwept, reachableCells, type OccupiedBox, type ReachGrid } from './reach';
 import { layoutRows, pierAxis, rowFrame, toLocalRect } from './rows';
 import { rankLayouts } from './score';
+import { berthCaps, effectiveObjective, mixClasses } from './targets';
 import {
   pierPolygon,
   placePiersOnLine,
@@ -206,6 +207,8 @@ interface Candidate {
 interface SearchContext {
   prepared: PreparedSite;
   fill: FillContext;
+  /** Upper limit of berths per class when the mix is given as target counts (D20). */
+  caps?: Record<string, number>;
   design: RowDesign;
   params: Params;
   objective: ObjectiveSettings;
@@ -351,6 +354,67 @@ function trimRows(rows: FilledRow[], length: number, mix: MixState): FilledRow[]
   return kept;
 }
 
+/**
+ * With target counts (D20) the last pier is often only partly filled. It is shortened to
+ * the end of its last bay (rounded up to 0.1 m) so that no empty pontoon is built.
+ */
+function shrinkToBerths(segment: PierSegment, rows: FilledRow[]): PierSegment {
+  let end = 0;
+  for (const row of rows) for (const run of row.runs) for (const bay of run) end = Math.max(end, bay.s + bay.geometry.footprint);
+  const full = distance(segment.start, segment.end);
+  const length = Math.min(full, Math.ceil(end * 10 - 1e-6) / 10);
+  if (end <= 0 || length >= full - 1e-6) return segment;
+  return { start: segment.start, end: roundVec(add(segment.start, scale(sub(segment.end, segment.start), length / full))) };
+}
+
+const cloneMix = (mix: MixState): MixState => ({ ...mix, counts: { ...mix.counts } });
+
+/** True when every class has reached its target count (D20). */
+const capsReached = (mix: MixState): boolean =>
+  mix.cap !== undefined && Object.entries(mix.cap).every(([id, cap]) => (mix.counts[id] ?? 0) >= cap);
+
+/**
+ * Fill a pier. With target counts (D20) the pier on which the targets run out would
+ * otherwise be built to its full length with one side filled first; instead it gets the
+ * shortest length (0.1 m steps) that takes the same number of berths, so both sides share
+ * them. Other piers are filled as usual.
+ */
+function fillPier(
+  ctx: SearchContext,
+  segment: PierSegment,
+  mix: MixState,
+  minLength: number,
+  options: FillOptions = {},
+): { segment: PierSegment; rows: FilledRow[] } {
+  const width = ctx.params.mainPierWidth;
+  const before = ctx.caps ? cloneMix(mix) : null;
+  const rows = fillPierRows({ id: '', ...segment, width }, ctx.fill, mix, options);
+  if (!before || rows.length === 0 || !capsReached(mix)) return { segment, rows };
+  const placed = mix.total - before.total;
+  const full = distance(segment.start, segment.end);
+  const cut = (decimetres: number): PierSegment => ({
+    start: segment.start,
+    end: roundVec(add(segment.start, scale(sub(segment.end, segment.start), decimetres / 10 / full))),
+  });
+  const attempt = (decimetres: number) => {
+    const trial = cloneMix(before);
+    const trialRows = fillPierRows({ id: '', ...cut(decimetres), width }, ctx.fill, trial, options);
+    return { mix: trial, rows: trialRows, ok: trial.total - before.total >= placed };
+  };
+  let lo = Math.max(1, Math.ceil(minLength * 10 - 1e-6));
+  let hi = Math.floor(full * 10 + 1e-6);
+  if (lo > hi || !attempt(hi).ok) return { segment, rows };
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (attempt(mid).ok) hi = mid;
+    else lo = mid + 1;
+  }
+  const best = attempt(hi);
+  mix.total = best.mix.total;
+  mix.counts = best.mix.counts;
+  return { segment: shrinkToBerths(cut(hi), best.rows), rows: best.rows };
+}
+
 /** Step by which a pier is shortened when its head is not clear, m. */
 const HEAD_SHORTEN_STEP = 1;
 
@@ -442,11 +506,12 @@ function parallelCandidate(
     if (estimate < floor) return null;
   }
 
-  const mix = newMixState(ctx.fill.classes);
+  const mix = newMixState(ctx.fill.classes, ctx.caps);
   const piers: CandidatePier[] = [];
   for (const placed of segments) {
     ctx.report.piersPlaced++;
-    const rows = fillPierRows({ id: '', ...placed, width: params.mainPierWidth }, ctx.fill, mix);
+    const filled = fillPier(ctx, placed, mix, minLength);
+    const rows = filled.rows;
     if (rows.length === 0) {
       // Slanted candidates of the sweep are left out: a box square to a slanted pier
       // measures the site diagonally, which would make the diagnostic misleading.
@@ -454,8 +519,11 @@ function parallelCandidate(
       ctx.report.berthlessPiers++;
       continue;
     }
-    const fitted = fitHead(ctx, placed, rows, mix, minLength, design.fairwayWidth);
-    if (fitted) piers.push({ segment: fitted.segment, rows: fitted.rows, fillOptions: {} });
+    const fitted = fitHead(ctx, filled.segment, rows, mix, minLength, design.fairwayWidth);
+    if (fitted) {
+      const segment = ctx.caps ? shrinkToBerths(fitted.segment, fitted.rows) : fitted.segment;
+      piers.push({ segment, rows: fitted.rows, fillOptions: {} });
+    }
   }
   return summarize(ctx, strategy, angle, piers, floor);
 }
@@ -529,16 +597,17 @@ function bestShoreParallel(ctx: SearchContext): Candidate | null {
       const segment = { start: roundVec(add(base, scale(dir, t0))), end: roundVec(add(base, scale(dir, t0 + length))) };
       if (!convexInsideRegion(pierPolygon(segment.start, segment.end, width), prepared.structureRegion)) continue;
       ctx.report.piersPlaced++;
-      const mix = newMixState(ctx.fill.classes);
+      const mix = newMixState(ctx.fill.classes, ctx.caps);
       // The whole pier lies on the shore, so there is no shore end to keep clear.
       const fillOptions: FillOptions = { sides: [side], rowStart: 0 };
-      const rows = fillPierRows({ id: '', ...segment, width }, ctx.fill, mix, fillOptions);
+      const filled = fillPier(ctx, segment, mix, design.minBayFootprint, fillOptions);
+      const rows = filled.rows;
       if (rows.length === 0) {
         if (ctx.report.blockedPiers.length < MAX_BLOCKED_SAMPLE) ctx.report.blockedPiers.push(segment);
         ctx.report.berthlessPiers++;
         continue;
       }
-      const candidate = summarize(ctx, 'D', vectorToBearing(dir) % 180, [{ segment, rows, fillOptions }]);
+      const candidate = summarize(ctx, 'D', vectorToBearing(dir) % 180, [{ segment: filled.segment, rows, fillOptions }]);
       if (better(candidate, best, ctx.objective)) best = candidate;
     }
   }
@@ -636,7 +705,7 @@ function sizeZonedLayout(ctx: SearchContext, zoned: ZonedContext, options: Zoned
       if (rows.length === 0) continue;
       const fitted = fitHead(ctx, segment, rows, mix, params.shoreOffset + back.minFootprint, headWidth);
       if (!fitted) continue;
-      segment = fitted.segment;
+      segment = ctx.caps ? shrinkToBerths(fitted.segment, fitted.rows) : fitted.segment;
       piers.push({ segment, rows: fitted.rows, fillOptions: {} });
       placedHere = true;
       if (front && fitted.rows.some((r) => r.side === frontSide)) frontDesign = front;
@@ -745,6 +814,11 @@ function bestSizeZoned(ctx: SearchContext, angle: number): Candidate | null {
       : zonedContextFor(ctx, ctx.fill.classes.map((c) => (placeable.has(c.id) ? c : { ...c, share: 0 })));
   const smallest = zoned.zones[zoned.zones.length - 1]!;
   const largest = zoned.zones[0]!;
+  // With target counts no class may get more than its count: the total asked for is
+  // limited to the counts of the classes that can be placed (D20).
+  const capLimit = ctx.caps
+    ? zoned.zones.reduce((sum, zone) => sum + (ctx.caps![zone.boat.id] ?? 0), 0)
+    : Infinity;
   const firstModule = ctx.params.mainPierWidth + 2 * largest.depth + largest.fairway;
 
   /** Largest total in [lo, hi] for which the layout places every berth asked for. */
@@ -771,7 +845,10 @@ function bestSizeZoned(ctx: SearchContext, angle: number): Candidate | null {
     for (const direction of [1, -1] as const) {
       const first = { angle, direction, head, offset: ctx.params.mainPierWidth / 2 };
       // An upper bound for the total: fill the site with the smallest class only.
-      const ceiling = sizeZonedLayout(ctx, zonedContextFor(ctx, [smallest.boat]), { ...first, total: 1e6, order: false }).placed;
+      const ceiling = Math.min(
+        capLimit,
+        sizeZonedLayout(ctx, zonedContextFor(ctx, [smallest.boat]), { ...first, total: 1e6, order: false }).placed,
+      );
       const reference = largestComplete(first, 0, ceiling);
       if (reference <= 0) continue;
       // Rank the start offsets cheaply: ask for more berths than can fit and see how many
@@ -829,7 +906,7 @@ const STRATEGY_NAME: Record<StrategyId, (c: Candidate) => string> = {
 function toDraft(candidate: Candidate, id: string, ctx: SearchContext): LayoutDraft {
   const width = ctx.params.mainPierWidth;
   const fill: FillContext = { ...ctx.fill, orderRuns: true };
-  const mix = newMixState(fill.classes);
+  const mix = newMixState(fill.classes, ctx.caps);
   const piers: MainPier[] = [];
   const fingers: Finger[] = [];
   const berths: Berth[] = [];
@@ -921,7 +998,12 @@ function meanBerthAdvance(classes: BoatClass[], params: Params, pattern: BerthPa
 }
 
 export function generateLayouts(input: GenerateInput, pattern: BerthPattern = fingerPierPattern): GenerateResult {
-  const { site, boatClasses, params, objective } = input;
+  const { site, params } = input;
+  // With target counts (D20) the classes carry the shares implied by the counts, and the
+  // counts become upper limits.
+  const boatClasses = mixClasses(input.boatClasses, params);
+  const caps = berthCaps(input.boatClasses, params);
+  const objective = effectiveObjective(input.objective, input.boatClasses, params);
   const topN = input.topN ?? DEFAULT_TOP_N;
   const fail = (code: Diagnostic['code'], message: string): GenerateResult => ({
     layouts: [],
@@ -939,13 +1021,17 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = fi
   }
   const design = rowDesign(boatClasses, params, pattern);
   if (!design) {
-    return fail('NO_BOAT_CLASSES', 'Add at least one boat class with a target share above 0 %.');
+    return fail(
+      'NO_BOAT_CLASSES',
+      caps ? 'Give at least one boat class a target count above 0.' : 'Add at least one boat class with a target share above 0 %.',
+    );
   }
 
   const prepared = prepareSite(site, params);
   const ctx: SearchContext = {
     prepared,
     design,
+    ...(caps ? { caps } : {}),
     params,
     objective,
     reachGrids: new Map(),

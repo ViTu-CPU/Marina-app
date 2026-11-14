@@ -45,7 +45,9 @@ Default mix: 12.5 m, 18 m and 46 m.
    are tried; otherwise the cursor moves on by 0.5 m (I9).
 5. **Class mix**: each berth goes to the class furthest behind its target share, counted
    over the whole layout; each contiguous run is then ordered by boat length, shortest at
-   the shore (I7).
+   the shore (I7). With **target counts** (D20) the shares follow the counts and each count
+   is an upper limit: filling stops when all are used up, and the pier on which they run
+   out gets the shortest length that still takes its berths (I31, I32).
 6. **Search score**: number of berths that can be reached from the entrance, estimated on
    a grid (`reach.ts`, I15); for "min infrastructure" pontoon metres per berth with the
    shortfall penalty.

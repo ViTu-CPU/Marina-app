@@ -62,10 +62,23 @@ describe('project file (SPEC §2: JSON export/import)', () => {
       [(p) => ((p.boatClasses as { beam: number }[])[0]!.beam = 0), 'boatClasses[0]: length and beam must be positive.'],
       [(p) => ((p.site as { zones: unknown[] }).zones = [{ id: 'z', kind: 'nope', shape: [] }]), 'site.zones[0].kind must be one of: noStructures, noNavigation, protected.'],
       [(p) => delete p.name, 'name must be text.'],
+      [(p) => ((p.boatClasses as { count: number }[])[0]!.count = 2.5), 'boatClasses[0].count must be a whole number, 0 or more.'],
+      [(p) => ((p.params as { berthTarget: string }).berthTarget = 'both'), 'params.berthTarget must be one of: share, count.'],
     ];
     for (const [patch, message] of cases) {
       expect(parseProject(fileWith(patch))).toEqual({ ok: false, error: message });
     }
+  });
+
+  it('files from before target counts open with shares and zero counts (D20)', () => {
+    const parsed = parseProject(
+      fileWith((p) => {
+        delete (p.params as Record<string, unknown>).berthTarget;
+        for (const c of p.boatClasses as Record<string, unknown>[]) delete c.count;
+      }),
+    );
+    expect(parsed.ok && parsed.project.params.berthTarget).toBe('share');
+    expect(parsed.ok && parsed.project.boatClasses.map((c) => c.count)).toEqual([0, 0, 0, 0]);
   });
 
   it('missing parameters take their defaults', () => {

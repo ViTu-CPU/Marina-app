@@ -68,7 +68,15 @@ export interface BoatClass {
   color: string;
   /** Target fraction (0..1) of the berth COUNT. A target, not a hard constraint (D3). */
   share: number;
+  /**
+   * Extension (D20): target number of berths of this class. Used instead of `share` when
+   * `Params.berthTarget` is 'count'; the generator then places at most this many.
+   */
+  count: number;
 }
+
+/** Extension (D20): how the boat mix is given: target shares or target berth counts. */
+export type BerthTarget = 'share' | 'count';
 
 export interface Params {
   /** Main pier (walkway pontoon) width, m. */
@@ -95,6 +103,8 @@ export interface Params {
   orientation: 'auto' | number;
   /** Extension (D5): distance from the shore end of a pier to the first finger/berth, m. */
   shoreOffset: number;
+  /** Extension (D20): the boat mix is given as target shares or as target berth counts. */
+  berthTarget: BerthTarget;
 }
 
 export type ObjectiveId = 'maxCapacity' | 'spaceEfficiency' | 'minInfrastructure' | 'balanced';
@@ -197,6 +207,11 @@ export interface Stats {
    * entrance. They are not part of the layout and are not counted anywhere else.
    */
   unreachableRemoved: number;
+  /**
+   * Extension (D20): with target counts, the number of berths short of the targets
+   * (summed over the classes); 0 when the mix is given as shares.
+   */
+  targetShortfall: number;
   issueCounts: Record<IssueSeverity, number>;
 }
 

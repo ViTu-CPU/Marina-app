@@ -107,9 +107,12 @@ function boatClasses(v: unknown): BoatClass[] {
       beam: num(e.beam, `${p}.beam`),
       color: str(e.color, `${p}.color`),
       share: num(e.share, `${p}.share`),
+      // Files from before target counts (D20) have none; 0 until the user sets them.
+      count: e.count === undefined ? 0 : num(e.count, `${p}.count`),
     };
     if (c.length <= 0 || c.beam <= 0) fail(`${p}: length and beam must be positive`);
     if (c.share < 0) fail(`${p}.share must not be negative`);
+    if (c.count < 0 || !Number.isInteger(c.count)) fail(`${p}.count must be a whole number, 0 or more`);
     return c;
   });
 }
@@ -117,7 +120,7 @@ function boatClasses(v: unknown): BoatClass[] {
 function params(v: unknown): Params {
   const o = obj(v, 'params');
   // Missing keys take their defaults, so files from older versions stay readable.
-  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation'>): number =>
+  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget'>): number =>
     o[key] === undefined ? DEFAULT_PARAMS[key] : num(o[key], `params.${key}`);
   const boatsPerBay = o.boatsPerBay === undefined ? DEFAULT_PARAMS.boatsPerBay : o.boatsPerBay;
   if (boatsPerBay !== 1 && boatsPerBay !== 2) fail('params.boatsPerBay must be 1 or 2');
@@ -135,6 +138,8 @@ function params(v: unknown): Params {
     maxMainPierLength: pick('maxMainPierLength'),
     orientation,
     shoreOffset: pick('shoreOffset'),
+    berthTarget:
+      o.berthTarget === undefined ? DEFAULT_PARAMS.berthTarget : oneOf(o.berthTarget, ['share', 'count'] as const, 'params.berthTarget'),
   };
 }
 
@@ -215,6 +220,7 @@ function layout(v: unknown, i: number): Layout {
       pontoonPerBerth: 0,
       mixDeviation: 0,
       unreachableRemoved: 0,
+      targetShortfall: 0,
       issueCounts: { error: 0, warning: 0 },
     },
     score: typeof o.score === 'number' && Number.isFinite(o.score) ? o.score : 0,
