@@ -21,6 +21,11 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | D12 | **A layout with berths left out is not "constraints met" (2026-11-13).** It carries the warning `BERTHS_LEFT_OUT_UNREACHABLE`, so its status is `geometricOK` (amber), not `operationalOK` (green). Supersedes the first version of I14, where the count was only a note. | The pier layout could not be used as intended; the user should see that at a glance. |
 | D13 | **Strategy B (2026-11-13):** the reading recorded in I12 is accepted. | |
 | D14 | **Online map background (2026-11-13):** OpenStreetMap tiles can be shown under the drawing, so a background image need not be loaded and calibrated by hand. Chosen over the National Land Survey's aerial photos because it needs no API key. | Part of SPEC Phase 4 ("real geographic coordinates and map tiles"), brought forward at the owner's request. Details in U14–U17. |
+| D15 | **Sources (2026-11-14):** RIL 201-3-2013 and AS 3962 are paid and not available; use public sources only (manufacturer data, theses, public guidelines). Values that should come from those standards are marked "to be verified". | Background and sources in `docs/RESEARCH.md`. The tool never states compliance (CLAUDE.md). |
+| D16 | **Water depth (2026-11-14):** one design depth per project (plus water-level range), no soundings. | Anchoring is a preliminary quantity estimate. |
+| D17 | **Winter (2026-11-14):** pontoons stay in the water over winter. | Default products are heavy concrete pontoons; ice loads are not computed and are flagged as a warning. |
+| D18 | **Prices (2026-11-14):** unit prices are VAT 0 %; VAT 25.5 % is added to the total and shown separately. Supplier prices published with VAT are converted (÷ 1.255). | Contractor practice. |
+| D19 | **Price file (2026-11-14):** the prices and calculation parameters live in an Excel file in the repository that the user can edit. | Requested by the owner. |
 
 ## Defaults chosen by the implementer
 
