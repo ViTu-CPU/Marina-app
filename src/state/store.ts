@@ -41,6 +41,7 @@ export function projectBounds(project: Project): Box {
     ...site.shoreline,
     ...site.obstacles.flatMap((o) => o.shape),
     ...site.zones.flatMap((z) => z.shape),
+    ...(site.accessPontoons ?? []).flatMap((p) => [p.start, p.end]),
   ];
   return points.length > 0 ? boundingBox(points) : { minX: 0, minY: 0, maxX: 200, maxY: 120 };
 }
@@ -70,6 +71,7 @@ export type ToolId =
   | 'water'
   | 'shoreline'
   | 'entrance'
+  | 'access'
   | 'obstacle'
   | 'zone'
   | 'measure'
@@ -382,7 +384,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
           return;
         }
         set({ draft: [...draft, point] });
-        if (tool === 'entrance' && draft.length === 1) get().finishDraft();
+        if ((tool === 'entrance' || tool === 'access') && draft.length === 1) get().finishDraft();
       },
       removeLastDraftPoint: () => set((s) => ({ draft: s.draft.slice(0, -1) })),
       cancelDraft: () => set({ draft: [] }),
@@ -401,6 +403,15 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
         } else if (tool === 'entrance' && points.length >= 2) {
           get().updateSite((site) => ({ ...site, entrance: { a: points[0]!, b: points[1]! } }));
           set({ tool: 'select' });
+        } else if (tool === 'access' && points.length >= 2) {
+          // Access pontoon (D21): the two clicks are the ends of its centreline; it takes
+          // the main pier width and can be changed in the list of site objects.
+          const width = get().project.params.mainPierWidth;
+          get().updateSite((site) => {
+            const existing = site.accessPontoons ?? [];
+            const id = nextId('access', existing.map((p) => p.id));
+            return { ...site, accessPontoons: [...existing, { id, start: points[0]!, end: points[1]!, width }] };
+          });
         } else if (tool === 'obstacle' && closed.length >= 3) {
           get().updateSite((site) => ({
             ...site,

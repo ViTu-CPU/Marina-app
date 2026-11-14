@@ -21,6 +21,7 @@ const TOOLS: { id: ToolId; hint: StringKey }[] = [
   { id: 'water', hint: 'hint.polygon' },
   { id: 'shoreline', hint: 'hint.polyline' },
   { id: 'entrance', hint: 'hint.entrance' },
+  { id: 'access', hint: 'hint.access' },
   { id: 'obstacle', hint: 'hint.polygon' },
   { id: 'zone', hint: 'hint.polygon' },
   { id: 'measure', hint: 'hint.measure' },
@@ -59,10 +60,18 @@ function SiteSection() {
   const language = useAppStore((s) => s.language);
   const hint = TOOLS.find((x) => x.id === tool)?.hint ?? (tool === 'calibrate' ? 'hint.calibrate' : null);
 
-  const objects: { key: string; label: string }[] = [];
+  /** `width` is set for access pontoons, whose width can be edited here (D21). */
+  const objects: { key: string; label: string; width?: number }[] = [];
   if (site.water.length > 0) objects.push({ key: 'water', label: t('site.water') });
   if (site.shoreline.length > 0) objects.push({ key: 'shoreline', label: t('site.shoreline') });
   if (hasEntrance(site)) objects.push({ key: 'entrance', label: t('site.entrance') });
+  for (const p of site.accessPontoons ?? []) {
+    objects.push({
+      key: `access:${p.id}`,
+      label: `${t('site.accessPontoon')} (${p.id}), ${formatLength(distance(p.start, p.end), language)} m`,
+      width: p.width,
+    });
+  }
   for (const o of site.obstacles) objects.push({ key: `obstacle:${o.id}`, label: `${t(`kind.${o.kind}`)} (${o.id})` });
   for (const z of site.zones) objects.push({ key: `zone:${z.id}`, label: `${t(`zone.${z.kind}`)} (${z.id})` });
 
@@ -112,8 +121,28 @@ function SiteSection() {
         ) : (
           <ul className="text-sm">
             {objects.map((o) => (
-              <li key={o.key} className="flex items-center justify-between py-0.5">
+              <li key={o.key} className="flex items-center justify-between gap-1 py-0.5">
                 <span className="truncate">{o.label}</span>
+                {o.width !== undefined && (
+                  <span className="w-14 shrink-0">
+                    <NumberField
+                      bare
+                      label={`${t('site.accessWidth')}: ${o.label}`}
+                      value={o.width}
+                      min={0.5}
+                      max={20}
+                      onChange={(width) =>
+                        state().updateSite(
+                          (s) => ({
+                            ...s,
+                            accessPontoons: (s.accessPontoons ?? []).map((p) => (`access:${p.id}` === o.key ? { ...p, width } : p)),
+                          }),
+                          { coalesce: `${o.key}:width` },
+                        )
+                      }
+                    />
+                  </span>
+                )}
                 <button
                   type="button"
                   className="rounded px-1 text-xs text-red-700 hover:bg-red-50"

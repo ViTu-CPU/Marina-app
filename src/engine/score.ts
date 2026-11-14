@@ -16,6 +16,7 @@ import type {
   Stats,
 } from './model';
 import { pierAxis, rowFrame, toLocalRect } from './rows';
+import { accessPontoonsOf } from './site';
 import type { PreparedSite } from './site';
 import { mixClasses, targetShortfall } from './targets';
 
@@ -62,13 +63,21 @@ export function computeStats(
     fingerLength += r.d1 - r.d0;
   }
 
+  // Access pontoons belong to the site and count in every layout (D21).
+  let accessPontoonLength = 0;
+  for (const p of accessPontoonsOf(prepared.site)) {
+    const length = Math.hypot(p.end.x - p.start.x, p.end.y - p.start.y);
+    accessPontoonLength += length;
+    pontoonDeckArea += length * p.width;
+  }
+
   const slotArea = active.reduce((sum, b) => sum + polygonArea(b.slot), 0);
   const fairwayArea = layout.fairways.reduce(
     (sum, f) => sum + polygonArea(f.shape) - f.holes.reduce((h, ring) => h + polygonArea(ring), 0),
     0,
   );
   const marinaWaterArea = slotArea + fairwayArea;
-  const pontoonLength = mainPierLength + fingerLength;
+  const pontoonLength = mainPierLength + fingerLength + accessPontoonLength;
 
   // Target shares over the classes that take part in the mix.
   const shareSum = classes.reduce((sum, c) => sum + Math.max(0, c.share), 0);
@@ -85,6 +94,7 @@ export function computeStats(
     berthsByClass,
     mainPierLength,
     fingerLength,
+    accessPontoonLength,
     pontoonLength,
     pontoonDeckArea,
     fairwayArea,

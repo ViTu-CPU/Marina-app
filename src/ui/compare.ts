@@ -26,12 +26,15 @@ interface Metric {
   better: Direction;
   /** Shown only when the boat mix is given as target counts (D20). */
   countsOnly?: boolean;
+  /** Left out when every layout has 0. */
+  hideWhenZero?: boolean;
 }
 
 const METRICS: Metric[] = [
   { key: 'stat.totalBerths', unit: '', value: (s) => s.totalBerths, format: formatCount, better: 'higher' },
   { key: 'stat.mainPierLength', unit: 'm', value: (s) => s.mainPierLength, format: formatLength, better: 'none' },
   { key: 'stat.fingerLength', unit: 'm', value: (s) => s.fingerLength, format: formatLength, better: 'none' },
+  { key: 'stat.accessPontoonLength', unit: 'm', value: (s) => s.accessPontoonLength, format: formatLength, better: 'none', hideWhenZero: true },
   { key: 'stat.pontoonLength', unit: 'm', value: (s) => s.pontoonLength, format: formatLength, better: 'lower' },
   { key: 'stat.pontoonDeckArea', unit: 'm²', value: (s) => s.pontoonDeckArea, format: formatArea, better: 'lower' },
   { key: 'stat.marinaWaterArea', unit: 'm²', value: (s) => s.marinaWaterArea, format: formatArea, better: 'none' },
@@ -64,6 +67,7 @@ export function comparisonRows(
   for (const metric of METRICS) {
     if (metric.countsOnly && !counts) continue;
     const raw = layouts.map((l) => metric.value(l.stats));
+    if (metric.hideWhenZero && raw.every((v) => v === 0)) continue;
     const values = raw.map((v) => metric.format(v, language));
     // Compare what is displayed: values that print the same are equally good.
     const [winner] = bestIndices(raw, metric.better);

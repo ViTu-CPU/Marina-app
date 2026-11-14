@@ -4,6 +4,7 @@
 import { DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import {
   PROJECT_SCHEMA_VERSION,
+  type AccessPontoon,
   type BackgroundImage,
   type Berth,
   type BoatClass,
@@ -93,6 +94,18 @@ function site(v: unknown): Site {
         shape: polygon(e.shape, `${p}.shape`),
       };
     }),
+    // Extension (D21); files from older versions have none, and the key is then left out.
+    ...(o.accessPontoons === undefined
+      ? {}
+      : {
+          accessPontoons: arr(o.accessPontoons, 'site.accessPontoons').map((item, i): AccessPontoon => {
+            const p = `site.accessPontoons[${i}]`;
+            const e = obj(item, p);
+            const width = num(e.width, `${p}.width`);
+            if (width <= 0) fail(`${p}.width must be positive`);
+            return { id: str(e.id, `${p}.id`), start: vec(e.start, `${p}.start`), end: vec(e.end, `${p}.end`), width };
+          }),
+        }),
   };
 }
 
@@ -211,6 +224,7 @@ function layout(v: unknown, i: number): Layout {
       berthsByClass: {},
       mainPierLength: 0,
       fingerLength: 0,
+      accessPontoonLength: 0,
       pontoonLength: 0,
       pontoonDeckArea: 0,
       fairwayArea: 0,

@@ -27,6 +27,7 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | D18 | **Prices (2026-11-14):** unit prices are VAT 0 %; VAT 25.5 % is added to the total and shown separately. Supplier prices published with VAT are converted (÷ 1.255). | Contractor practice. |
 | D19 | **Price file (2026-11-14):** the prices and calculation parameters live in an Excel file in the repository that the user can edit. | Requested by the owner. |
 | D20 | **Target counts (2026-11-14):** the boat mix can be given as a target **number of berths per class** instead of shares. | Owner request. Details in I31–I34. |
+| D21 | **Access pontoon (2026-11-14):** empty pontoon metres can be placed, e.g. in front of a quay wall too high to step down from, and main piers ("pistolaiturit") start from it. | Owner request. Details in I35–I38. |
 
 ## Defaults chosen by the implementer
 
@@ -66,6 +67,10 @@ owner; "Default" = chosen by the implementer under SPEC §0 (simplest extendable
 | I32 | **The pier on which the counts run out is made as short as possible:** the shortest length in 0.1 m steps that still takes the same number of berths (bisection), so both sides share them instead of one side being filled first; then shortened to the end of its last bay. Strategy E only gets the second step. | Without it the last pier kept its full length with one half-empty side. |
 | I33 | With counts, 'minInfrastructure' measures its shortfall against the total of the counts instead of the separate berth target. | One target, not two. |
 | I34 | Switching to counts for the first time fills them from the preferred (or first) alternative, or from the shares of 100 berths when there is none. Older project files open with shares and zero counts. | Gives a sensible start; files stay readable. |
+| I35 | **An access pontoon is part of the site**, drawn by its centreline (two clicks) with its own width (default: main pier width). Main piers may start from either long edge (tolerance as I5). The pontoon is taken out of the structure and navigable regions, so nothing else is built on it and boats cannot pass through it; validation treats it like a structure (inside water, clear of obstacle buffers and restricted zones, no overlaps, fairways not obstructed). It carries no berths. | Site element because it is input to the generator, not one of its results. |
+| I36 | The access pontoon's length and deck area count in the pontoon metres of **every** layout (`Stats.accessPontoonLength`). | It is built whichever layout is chosen. |
+| I37 | An access pontoon more than **12 m** from the shoreline gets a warning: Marinetek states access bridges of "4–12 m lengths" (docs/RESEARCH.md §2.1). | Reaching it needs a gangway. |
+| I38 | Drawing and editing an access pontoon does not snap to the site. | It lies off the wall on purpose; snapping pulled it onto the shoreline. |
 
 ## User interface
 

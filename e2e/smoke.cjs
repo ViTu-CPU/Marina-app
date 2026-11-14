@@ -277,6 +277,32 @@ async function waitForServer() {
       await page.screenshot({ path: path.join(outDir, 'app.png') });
     });
 
+    await step('access pontoon in front of a quay wall: piers start from its edge (D21)', async () => {
+      await page.getByRole('combobox', { name: 'Load example' }).selectOption('rectBasin');
+      await tool('Access pontoon');
+      let s = await state();
+      // The demo shore runs along y = 0; the pontoon centreline 2.5 m off it, 3 m wide.
+      for (const p of [{ x: 20, y: 2.5 }, { x: 200, y: 2.5 }]) {
+        const q = toScreen(s, p);
+        await page.mouse.click(q.x, q.y);
+      }
+      s = await state();
+      const [pontoon] = s.project.site.accessPontoons;
+      assert.ok(pontoon, 'pontoon drawn');
+      assert.ok(Math.abs(pontoon.start.y - 2.5) < 0.6 && Math.abs(pontoon.end.y - 2.5) < 0.6);
+      await page.getByRole('button', { name: 'Generate', exact: true }).click();
+      s = await state();
+      assert.ok(s.project.layouts.length >= 1);
+      const edge = Math.max(pontoon.start.y, pontoon.end.y) + pontoon.width / 2;
+      const best = s.project.layouts[0];
+      assert.ok(best.stats.accessPontoonLength > 170);
+      // Every pier between the pontoon's ends starts at its outer edge.
+      const between = best.piers.filter((p) => p.start.x > pontoon.start.x + 2 && p.start.x < pontoon.end.x - 2);
+      assert.ok(between.length > 0);
+      for (const p of between) assert.ok(Math.abs(p.start.y - edge) < 0.6, `pier ${p.id} starts at y = ${p.start.y}`);
+      await page.screenshot({ path: path.join(outDir, 'access-pontoon.png') });
+    });
+
     await step('language toggle', async () => {
       await page.getByRole('button', { name: 'FI', exact: true }).click();
       assert.equal(await page.getByRole('heading', { level: 1 }).textContent(), 'Venesataman asettelusuunnittelu');

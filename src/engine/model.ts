@@ -43,6 +43,20 @@ export interface RestrictedZone {
   shape: Polygon;
 }
 
+/**
+ * Extension (D21): an access pontoon — empty pontoon metres, e.g. in front of a quay wall
+ * too high to step down from. It carries no berths; main piers may start from either of
+ * its long edges, and it is reached from the shore by a gangway.
+ */
+export interface AccessPontoon {
+  id: string;
+  /** Centreline end points, m. */
+  start: Vec2;
+  end: Vec2;
+  /** Width, m. */
+  width: number;
+}
+
 export interface Site {
   /** Permitted planning water area. */
   water: Polygon;
@@ -52,6 +66,8 @@ export interface Site {
   entrance: Segment;
   obstacles: Obstacle[];
   zones: RestrictedZone[];
+  /** Extension (D21): access pontoons; missing in older files. */
+  accessPontoons?: AccessPontoon[];
 }
 
 // ---------------------------------------------------------------------------
@@ -187,9 +203,11 @@ export interface Stats {
   mainPierLength: number;
   /** Sum of finger lengths, m. */
   fingerLength: number;
-  /** mainPierLength + fingerLength, m. */
+  /** Extension (D21): centreline length of the site's access pontoons, m. */
+  accessPontoonLength: number;
+  /** mainPierLength + fingerLength + accessPontoonLength, m. */
   pontoonLength: number;
-  /** Deck area of main piers and fingers, m². */
+  /** Deck area of main piers, fingers and access pontoons, m². */
   pontoonDeckArea: number;
   /** Extension: area of the fairway polygons, m². */
   fairwayArea: number;

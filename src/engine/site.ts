@@ -18,7 +18,7 @@ import {
   type Region,
 } from './geometry';
 import { bufferRegion, differenceRegions, unionRegions } from './geometryOps';
-import type { Params, Polygon, Site, Vec2, ZoneKind } from './model';
+import type { AccessPontoon, Params, Polygon, Polyline, Site, Vec2, ZoneKind } from './model';
 
 /**
  * How close the shore end of a pier must be to the shoreline to count as connected, m.
@@ -26,8 +26,36 @@ import type { Params, Polygon, Site, Vec2, ZoneKind } from './model';
  */
 export const SHORE_TOLERANCE = 0.5;
 
+/** The site's access pontoons (D21) that have a length and a width. */
+export const accessPontoonsOf = (site: Site): AccessPontoon[] =>
+  (site.accessPontoons ?? []).filter((p) => p.width > 0 && distance(p.start, p.end) > EPS);
+
+/**
+ * Lines a main pier may start from: the shoreline and both long edges of every access
+ * pontoon (D21).
+ */
+export function connectionLines(site: Site): Polyline[] {
+  const lines: Polyline[] = site.shoreline.length >= 2 ? [site.shoreline] : [];
+  for (const p of accessPontoonsOf(site)) {
+    const [a, b, c, d] = pierPolygon(p.start, p.end, p.width);
+    lines.push([a!, b!], [d!, c!]);
+  }
+  return lines;
+}
+
+/** Distance from a point to the nearest line a pier may start from, m. */
+export function distanceToConnection(lines: Polyline[], p: Vec2): number {
+  let best = Infinity;
+  for (const line of lines) best = Math.min(best, distancePointToPolyline(p, line));
+  return best;
+}
+
 export interface PreparedSite {
   site: Site;
+  /** See `connectionLines`. */
+  connectionLines: Polyline[];
+  /** Union of the access pontoons (D21); no other structure or boat may use it. */
+  accessRegion: Region;
   water: Region;
   /** Area of the water polygon, m². */
   waterArea: number;
@@ -61,10 +89,18 @@ export function prepareSite(site: Site, params: Pick<Params, 'obstacleClearance'
     noNavigation: zoneRegion('noNavigation'),
     protected: zoneRegion('protected'),
   };
-  const withoutObstacles = differenceRegions(differenceRegions(water, obstacleBuffer), zones.protected);
+  const accessRegion = unionRegions(
+    accessPontoonsOf(site).map((p) => regionFromPolygon(pierPolygon(p.start, p.end, p.width))),
+  );
+  const withoutObstacles = differenceRegions(
+    differenceRegions(differenceRegions(water, obstacleBuffer), zones.protected),
+    accessRegion,
+  );
   const obstacles = unionRegions(site.obstacles.map((o) => regionFromPolygon(o.shape)));
   return {
     site,
+    connectionLines: connectionLines(site),
+    accessRegion,
     water,
     waterArea: regionArea(water),
     openWaterArea: regionArea(differenceRegions(water, obstacles)),
@@ -126,7 +162,7 @@ export function placePiersOnLine(
   options: PierPlacementOptions,
   report?: PlacementReport,
 ): PierSegment[] {
-  const { site, structureRegion } = prepared;
+  const { site, structureRegion, connectionLines: lines } = prepared;
   const left = { x: -dir.y, y: dir.x };
 
   // Extent of the site along the line, in metres from `base`.
@@ -157,7 +193,7 @@ export function placePiersOnLine(
     // An oblique shore touches only one corner of the square pier end, so test across the width.
     for (const lateral of [0, options.width / 2, -options.width / 2]) {
       const p = add(add(base, scale(dir, t)), scale(left, lateral));
-      if (distancePointToPolyline(p, site.shoreline) <= SHORE_TOLERANCE) return true;
+      if (distanceToConnection(lines, p) <= SHORE_TOLERANCE) return true;
     }
     return false;
   };

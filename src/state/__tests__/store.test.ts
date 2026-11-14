@@ -210,3 +210,40 @@ describe('layout edits through the store (SPEC §8)', () => {
     expect(store.getState().project.preferredLayoutId).toBeNull();
   });
 });
+
+describe('access pontoons (D21)', () => {
+  it('two clicks with the access tool add a pontoon with the main pier width; it can be moved, saved and deleted', async () => {
+    const { deleteSiteObject, moveVertex } = await import('../../ui/tools/sitePaths');
+    const { parseProject, serializeProject } = await import('../projectFile');
+    const store = createAppStore();
+    store.getState().loadDemo('rectBasin');
+    store.getState().setTool('access');
+    store.getState().addDraftPoint({ x: 10, y: 2 }, 1);
+    store.getState().addDraftPoint({ x: 50, y: 2 }, 1);
+    const [pontoon] = store.getState().project.site.accessPontoons ?? [];
+    expect(pontoon).toEqual({
+      id: 'access-1',
+      start: { x: 10, y: 2 },
+      end: { x: 50, y: 2 },
+      width: store.getState().project.params.mainPierWidth,
+    });
+    expect(store.getState().draft).toEqual([]);
+
+    store.getState().updateSite((site) => moveVertex(site, 'access:access-1', 1, { x: 60, y: 2 }));
+    expect(store.getState().project.site.accessPontoons![0]!.end).toEqual({ x: 60, y: 2 });
+
+    const reopened = parseProject(serializeProject(store.getState().project));
+    expect(reopened.ok && reopened.project.site.accessPontoons).toEqual(store.getState().project.site.accessPontoons);
+
+    store.getState().updateSite((site) => deleteSiteObject(site, 'access:access-1'));
+    expect(store.getState().project.site.accessPontoons).toEqual([]);
+  });
+
+  it('older files without access pontoons open with none', async () => {
+    const { parseProject, serializeProject } = await import('../projectFile');
+    const file = JSON.parse(serializeProject(emptyProject())) as { project: { site: Record<string, unknown> } };
+    delete file.project.site.accessPontoons;
+    const parsed = parseProject(JSON.stringify(file));
+    expect(parsed.ok && (parsed.project.site.accessPontoons ?? [])).toEqual([]);
+  });
+});

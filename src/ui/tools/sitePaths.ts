@@ -6,7 +6,7 @@ import { ensureCounterClockwise } from '../../engine/geometry';
 import type { Site, Vec2 } from '../../engine/model';
 
 export interface SitePath {
-  /** Stable key: 'water', 'shoreline', 'entrance', 'obstacle:<id>' or 'zone:<id>'. */
+  /** Stable key: 'water', 'shoreline', 'entrance', 'access:<id>', 'obstacle:<id>' or 'zone:<id>'. */
   key: string;
   points: Vec2[];
   closed: boolean;
@@ -27,6 +27,9 @@ export function sitePaths(site: Site): SitePath[] {
   }
   if (hasEntrance(site)) {
     paths.push({ key: 'entrance', points: [site.entrance.a, site.entrance.b], closed: false, minPoints: 2, canInsert: false });
+  }
+  for (const p of site.accessPontoons ?? []) {
+    paths.push({ key: `access:${p.id}`, points: [p.start, p.end], closed: false, minPoints: 2, canInsert: false });
   }
   for (const o of site.obstacles) {
     paths.push({ key: `obstacle:${o.id}`, points: o.shape, closed: true, minPoints: 3, canInsert: true });
@@ -49,6 +52,11 @@ export function setPathPoints(site: Site, key: string, points: Vec2[]): Site {
     return a && b ? { ...site, entrance: { a, b } } : site;
   }
   const [kind, id] = key.split(':');
+  if (kind === 'access') {
+    const [start, end] = points;
+    if (!start || !end) return site;
+    return { ...site, accessPontoons: (site.accessPontoons ?? []).map((p) => (p.id === id ? { ...p, start, end } : p)) };
+  }
   if (kind === 'obstacle') return { ...site, obstacles: site.obstacles.map((o) => (o.id === id ? { ...o, shape: points } : o)) };
   if (kind === 'zone') return { ...site, zones: site.zones.map((z) => (z.id === id ? { ...z, shape: points } : z)) };
   return site;
@@ -94,12 +102,13 @@ export function normalizeSite(site: Site): Site {
   return unchanged ? site : { ...site, water, obstacles, zones };
 }
 
-/** Remove a whole object: 'water', 'shoreline', 'entrance', 'obstacle:<id>' or 'zone:<id>'. */
+/** Remove a whole object: 'water', 'shoreline', 'entrance', 'access:<id>', 'obstacle:<id>' or 'zone:<id>'. */
 export function deleteSiteObject(site: Site, key: string): Site {
   if (key === 'water') return { ...site, water: [] };
   if (key === 'shoreline') return { ...site, shoreline: [] };
   if (key === 'entrance') return { ...site, entrance: { a: { x: 0, y: 0 }, b: { x: 0, y: 0 } } };
   const [kind, id] = key.split(':');
+  if (kind === 'access') return { ...site, accessPontoons: (site.accessPontoons ?? []).filter((p) => p.id !== id) };
   if (kind === 'obstacle') return { ...site, obstacles: site.obstacles.filter((o) => o.id !== id) };
   if (kind === 'zone') return { ...site, zones: site.zones.filter((z) => z.id !== id) };
   return site;

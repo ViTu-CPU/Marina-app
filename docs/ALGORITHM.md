@@ -36,7 +36,7 @@ Default mix: 12.5 m, 18 m and 46 m.
    the first line is swept over one pitch in 1 m steps.
 3. **Pier placement** (`site.ts → placePiersOnLine`): the line is clipped to the structure
    region (centreline and both edges). A stretch becomes a pier if one end is within 0.5 m
-   of the shoreline (I5). The pier keeps one fairway width clear at its head (I4, I16) and
+   of the shoreline or of an access pontoon's long edge (I5, I35). The pier keeps one fairway width clear at its head (I4, I16) and
    is capped at `maxMainPierLength`.
 4. **Filling** (`fill.ts`): each side of a pier is filled from the shore end
    (`shoreOffset`) outwards, bay by bay. A bay is kept only if the water from the pier
@@ -114,7 +114,8 @@ fingers and slots by more than 1 cm · boat outside its slot.
 - berths cannot be reached from the entrance: the free navigable water is shrunk by half
   the fairway width (less 0.1 m), and the fairway in front of the berth must lie in the
   water swept by a circle of that size starting at the entrance (I21);
-- a pier does not start at the shoreline;
+- a pier does not start at the shoreline or an access pontoon;
+- an access pontoon is more than 12 m from the shoreline (gangway, I37);
 - the generator left berths out of the layout because they could not be reached from the
   entrance (one warning with the count, D12).
 

@@ -72,6 +72,8 @@ npx playwright install chromium
   calibration needed.
 - Background image (aerial photo or map screenshot) with two-point scale calibration,
   rotation and opacity.
+- Access pontoons: empty pontoon metres, e.g. in front of a high quay wall; main piers
+  start from their edges.
 - Two built-in examples: a rectangular basin and an irregular bay.
 
 **Inputs**

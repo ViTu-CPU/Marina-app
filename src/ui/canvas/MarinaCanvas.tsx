@@ -30,6 +30,7 @@ const COLORS = {
   waterEdge: '#0369a1',
   shoreline: '#15803d',
   entrance: '#f59e0b',
+  access: '#6b7280',
   obstacle: '#1f2937',
   zoneEdge: '#dc2626',
   pier: '#374151',
@@ -55,7 +56,7 @@ const PIER_DRAG_STEP = 0.1;
 /** A custom attribute of the node under the pointer (set as a prop on the shape). */
 const attr = (node: unknown, name: string): unknown => (node as { attrs: Record<string, unknown> }).attrs[name];
 
-const DRAWING_TOOLS: ToolId[] = ['water', 'shoreline', 'entrance', 'obstacle', 'zone', 'measure', 'calibrate'];
+const DRAWING_TOOLS: ToolId[] = ['water', 'shoreline', 'entrance', 'access', 'obstacle', 'zone', 'measure', 'calibrate'];
 const flat = (points: Vec2[]): number[] => points.flatMap((p) => [p.x, p.y]);
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,22 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
       {layers.shoreline && site.shoreline.length >= 2 && (
         <Line points={flat(site.shoreline)} stroke={COLORS.shoreline} strokeWidth={4} strokeScaleEnabled={false} lineCap="round" lineJoin="round" listening={false} />
       )}
+      {layers.piers &&
+        (site.accessPontoons ?? []).map((p) =>
+          distance(p.start, p.end) > 0 ? (
+            <Line
+              key={p.id}
+              points={flat(pierPolygon(p.start, p.end, p.width))}
+              closed
+              fill={COLORS.access}
+              stroke={COLORS.pier}
+              strokeWidth={1}
+              dash={[4, 3]}
+              strokeScaleEnabled={false}
+              listening={false}
+            />
+          ) : null,
+        )}
       {layers.shoreline && hasEntrance(site) && (
         <Line points={flat([site.entrance.a, site.entrance.b])} stroke={COLORS.entrance} strokeWidth={5} strokeScaleEnabled={false} lineCap="round" listening={false} />
       )}
@@ -307,6 +324,9 @@ export function MarinaCanvas() {
   /** World position of the pointer, snapped to the site geometry. */
   const snapped = (screen: Vec2, exclude?: { key: string; index: number }): Vec2 => {
     const s = appStore.getState();
+    // An access pontoon lies off the wall on purpose; snapping would pull its centreline
+    // onto the shoreline (D21).
+    if (s.tool === 'access' || exclude?.key.startsWith('access:')) return toWorld(screen);
     const targets = siteSnapTargets(s.project.site, s.draft);
     if (exclude) {
       const own = sitePaths(s.project.site).find((p) => p.key === exclude.key)?.points[exclude.index];

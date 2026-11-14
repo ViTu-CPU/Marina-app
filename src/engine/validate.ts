@@ -24,7 +24,7 @@ import { bufferRegion, differenceRegions } from './geometryOps';
 import type { Berth, BoatClass, Feasibility, Finger, Issue, MainPier, Params, Polygon } from './model';
 import { localRectToPolygon } from './patterns';
 import { layoutRows, pierAxis, toLocalRect, type RowInfo } from './rows';
-import { pierPolygon, SHORE_TOLERANCE, type PreparedSite } from './site';
+import { accessPontoonsOf, distanceToConnection, pierPolygon, SHORE_TOLERANCE, type PreparedSite } from './site';
 
 export interface LayoutElements {
   piers: MainPier[];
@@ -60,7 +60,14 @@ export const IssueCode = {
   NOT_CONNECTED_TO_ENTRANCE: 'NOT_CONNECTED_TO_ENTRANCE',
   BERTHS_LEFT_OUT_UNREACHABLE: 'BERTHS_LEFT_OUT_UNREACHABLE',
   PIER_NOT_CONNECTED_TO_SHORE: 'PIER_NOT_CONNECTED_TO_SHORE',
+  ACCESS_PONTOON_FAR_FROM_SHORE: 'ACCESS_PONTOON_FAR_FROM_SHORE',
 } as const;
+
+/**
+ * Longest gangway assumed between the shore and an access pontoon, m. Marinetek gives
+ * "4–12 m lengths" for its access bridges (docs/RESEARCH.md §2.1); a longer gap is flagged.
+ */
+export const MAX_GANGWAY_LENGTH = 12;
 
 /**
  * Passages up to this much narrower than the required fairway width still count as
@@ -68,7 +75,7 @@ export const IssueCode = {
  */
 export const CONNECTIVITY_SLACK = 0.1;
 
-type ElementKind = 'pier' | 'finger' | 'slot';
+type ElementKind = 'pier' | 'finger' | 'slot' | 'access';
 
 interface Element {
   id: string;
@@ -77,10 +84,15 @@ interface Element {
   box: Box;
 }
 
-const KIND_LABEL: Record<ElementKind, string> = { pier: 'Pier', finger: 'Finger', slot: 'Berth' };
+const KIND_LABEL: Record<ElementKind, string> = { pier: 'Pier', finger: 'Finger', slot: 'Berth', access: 'Access pontoon' };
 
-export function collectElements(layout: LayoutElements): Element[] {
+/** Piers, fingers, active slots and the site's access pontoons (D21). */
+export function collectElements(layout: LayoutElements, prepared?: PreparedSite): Element[] {
   const elements: Element[] = [];
+  for (const p of prepared ? accessPontoonsOf(prepared.site) : []) {
+    const shape = pierPolygon(p.start, p.end, p.width);
+    elements.push({ id: p.id, kind: 'access', shape, box: boundingBox(shape) });
+  }
   for (const p of layout.piers) {
     const shape = pierPolygon(p.start, p.end, p.width);
     elements.push({ id: p.id, kind: 'pier', shape, box: boundingBox(shape) });
@@ -100,13 +112,13 @@ export function geometricIssues(layout: LayoutElements, prepared: PreparedSite, 
   const issues: Issue[] = [];
   const error = (code: string, elementId: string, message: string) =>
     issues.push({ severity: 'error', code, message, elementId });
-  const elements = collectElements(layout);
+  const elements = collectElements(layout, prepared);
 
   for (const e of elements) {
     const label = `${KIND_LABEL[e.kind]} ${e.id}`;
     if (!convexInsideRegion(e.shape, prepared.water)) {
       const code =
-        e.kind === 'pier'
+        e.kind === 'pier' || e.kind === 'access'
           ? IssueCode.PIER_OUTSIDE_WATER
           : e.kind === 'finger'
             ? IssueCode.FINGER_OUTSIDE_WATER
@@ -258,16 +270,35 @@ export function operationalIssues(
   const issues: Issue[] = [];
   const warn = (code: string, elementId: string, message: string) =>
     issues.push({ severity: 'warning', code, message, elementId });
-  const elements = collectElements(layout);
+  const elements = collectElements(layout, prepared);
 
-  // Pier ↔ shoreline.
+  // Pier ↔ shoreline or access pontoon (D21).
   for (const pier of layout.piers) {
     const { left } = pierAxis(pier);
     const connected = [0, pier.width / 2, -pier.width / 2].some(
-      (lateral) =>
-        distancePointToPolyline(add(pier.start, scale(left, lateral)), prepared.site.shoreline) <= SHORE_TOLERANCE,
+      (lateral) => distanceToConnection(prepared.connectionLines, add(pier.start, scale(left, lateral))) <= SHORE_TOLERANCE,
     );
-    if (!connected) warn(IssueCode.PIER_NOT_CONNECTED_TO_SHORE, pier.id, `Pier ${pier.id} does not connect to the shoreline.`);
+    if (!connected) {
+      warn(IssueCode.PIER_NOT_CONNECTED_TO_SHORE, pier.id, `Pier ${pier.id} does not connect to the shoreline or an access pontoon.`);
+    }
+  }
+
+  // Access pontoon ↔ shore: reached by a gangway (D21).
+  if (prepared.site.shoreline.length >= 2) {
+    for (const p of accessPontoonsOf(prepared.site)) {
+      const ring = pierPolygon(p.start, p.end, p.width);
+      const gap = Math.min(
+        ...ring.map((v) => distancePointToPolyline(v, prepared.site.shoreline)),
+        ...prepared.site.shoreline.map((v) => distancePointToPolyline(v, [...ring, ring[0]!])),
+      );
+      if (gap > MAX_GANGWAY_LENGTH) {
+        warn(
+          IssueCode.ACCESS_PONTOON_FAR_FROM_SHORE,
+          p.id,
+          `Access pontoon ${p.id} is ${gap.toFixed(1)} m from the shoreline; gangways longer than ${MAX_GANGWAY_LENGTH} m are not assumed.`,
+        );
+      }
+    }
   }
 
   // Corridor in front of every berth.

@@ -102,6 +102,7 @@ describe('objectives (SPEC §7)', () => {
     berthsByClass: {},
     mainPierLength: 200,
     fingerLength: 200,
+    accessPontoonLength: 0,
     pontoonLength: 400,
     pontoonDeckArea: 800,
     fairwayArea: 5000,

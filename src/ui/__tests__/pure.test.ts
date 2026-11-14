@@ -160,6 +160,7 @@ describe('comparison table (SPEC §8: best value per row highlighted)', () => {
     berthsByClass: { c5: 30, c7: 35, c9: 25, c12: 10 },
     mainPierLength: 200,
     fingerLength: 200,
+    accessPontoonLength: 0,
     pontoonLength: 400,
     pontoonDeckArea: 800,
     fairwayArea: 5000,
