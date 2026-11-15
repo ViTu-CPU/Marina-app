@@ -449,7 +449,7 @@ function anchoring(v: unknown): AnchoringParams {
   if (v === undefined) return structuredClone(DEFAULT_ANCHORING);
   const o = obj(v, 'anchoring');
   const d = DEFAULT_ANCHORING;
-  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed' | 'normalHighWater' | 'normalLowWater'>): number =>
+  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed' | 'normalHighWater' | 'normalLowWater' | 'quayLevel'>): number =>
     o[key] === undefined ? d[key] : num(o[key], `anchoring.${key}`);
   const f = o.friction === undefined ? {} : obj(o.friction, 'anchoring.friction');
   const mu = (k: Seabed) => (f[k] === undefined ? d.friction[k] : num(f[k], `anchoring.friction.${k}`));
@@ -460,6 +460,7 @@ function anchoring(v: unknown): AnchoringParams {
     // D50: missing in older files (not known).
     normalHighWater: o.normalHighWater === undefined || o.normalHighWater === null ? null : num(o.normalHighWater, 'anchoring.normalHighWater'),
     normalLowWater: o.normalLowWater === undefined || o.normalLowWater === null ? null : num(o.normalLowWater, 'anchoring.normalLowWater'),
+    quayLevel: o.quayLevel === undefined || o.quayLevel === null ? null : num(o.quayLevel, 'anchoring.quayLevel'),
     seabed: o.seabed === undefined ? d.seabed : oneOf(o.seabed, ['clay', 'sand', 'rock'] as const, 'anchoring.seabed'),
     windSpeed: pick('windSpeed'),
     airDensity: pick('airDensity'),

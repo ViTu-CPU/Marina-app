@@ -92,6 +92,8 @@ export interface AnchoringParams {
    */
   normalHighWater: number | null;
   normalLowWater: number | null;
+  /** D52: level of the quay (gangway pivot) above the design water level, m; null = not known (no slope check). */
+  quayLevel: number | null;
   seabed: Seabed;
   /** Design (steady) wind speed, m/s. */
   windSpeed: number;
@@ -190,6 +192,7 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   lowWater: 0.9,
   normalHighWater: null,
   normalLowWater: null,
+  quayLevel: null,
   seabed: 'clay',
   windSpeed: 22,
   airDensity: 1.25,
@@ -232,6 +235,7 @@ export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
   lowWater: p.lowWater,
   normalHighWater: p.normalHighWater,
   normalLowWater: p.normalLowWater,
+  quayLevel: p.quayLevel,
   seabed: p.seabed,
   windSpeed: p.windSpeed,
   anchorType: p.anchorType,

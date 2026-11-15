@@ -10,6 +10,8 @@ import { appStore, useAppStore } from '../../state/store';
 import { comparisonRows } from '../compare';
 import { formatCount, formatLength } from '../format';
 import { useT } from '../useT';
+import { as3962NotesFor } from '../as3962Notes';
+import { useCostModel } from '../costModel';
 import { AnchoringAndCost } from './CostPanels';
 import { Button, NumberField, Section } from './fields';
 
@@ -323,6 +325,31 @@ function Issues({ layout }: { layout: Layout }) {
   );
 }
 
+/** D52: advisory checks against AS 3962-2001 (they do not change the status). */
+function As3962Panel({ layout }: { layout: Layout }) {
+  const t = useT();
+  const project = useAppStore((s) => s.project);
+  const model = useCostModel();
+  const notes = as3962NotesFor(project, layout, model?.choices.pontoonFreeboard ?? null);
+  return (
+    <Section title={`${t('as3962.title')} (${notes.filter((n) => n.severity === 'warning').length})`} defaultOpen={false}>
+      {notes.length === 0 ? (
+        <p className="text-sm text-slate-500">{t('as3962.none')}</p>
+      ) : (
+        <ul className="space-y-1 text-sm" data-testid="as3962">
+          {notes.map((n, i) => (
+            <li key={i} className={n.severity === 'warning' ? 'text-amber-900' : 'text-slate-600'}>
+              <span className="mr-1 rounded bg-slate-100 px-1 text-xs text-slate-600">{n.clause}</span>
+              {n.message}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs text-slate-500">{t('as3962.note')}</p>
+    </Section>
+  );
+}
+
 export function RightSidebar() {
   const layout = useAppStore((s) => s.project.layouts.find((l) => l.id === s.selectedLayoutId) ?? null);
   return (
@@ -331,6 +358,7 @@ export function RightSidebar() {
       {layout && <SelectionPanel layout={layout} />}
       <Comparison />
       {layout && <Issues layout={layout} />}
+      {layout && <As3962Panel layout={layout} />}
       {layout && <AnchoringAndCost layout={layout} />}
     </aside>
   );

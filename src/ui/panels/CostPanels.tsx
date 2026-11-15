@@ -23,7 +23,7 @@ const ANCHOR_TYPES: AnchorType[] = ['block', 'wedge'];
 const SINKER_METHODS: BuoySinkerMethod[] = ['table', 'factor'];
 const BUOY_TABLES: BuoyTableId[] = ['batunionen', 'topMarine'];
 
-type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed' | 'normalHighWater' | 'normalLowWater'>;
+type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed' | 'normalHighWater' | 'normalLowWater' | 'quayLevel'>;
 
 /** D36: sizing of the stern-buoy sinkers and chains; shown when the project has stern buoys. */
 function BuoyFields() {
@@ -90,14 +90,14 @@ function AnchoringField({ name, min, max, step }: { name: NumericAnchoring; min:
 }
 
 /** D50: optional normal high or low water (empty = not known). */
-function NormalLevelField({ name }: { name: 'normalHighWater' | 'normalLowWater' }) {
+function NormalLevelField({ name, min = 0 }: { name: 'normalHighWater' | 'normalLowWater' | 'quayLevel'; min?: number }) {
   const t = useT();
   const value = useAppStore((s) => s.project.anchoring[name]);
   return (
     <div className="flex items-center justify-between gap-2 text-sm text-slate-700">
       <span>{t(`anchoring.${name}`)}</span>
       <div className="w-20 shrink-0">
-        <OptionalNumberField label={t(`anchoring.${name}`)} value={value ?? undefined} min={0} max={10} onChange={(v) => state().setAnchoring({ [name]: v ?? null }, { coalesce: `anchoring:${name}` })} />
+        <OptionalNumberField label={t(`anchoring.${name}`)} value={value ?? undefined} min={min} max={20} onChange={(v) => state().setAnchoring({ [name]: v ?? null }, { coalesce: `anchoring:${name}` })} />
       </div>
     </div>
   );
@@ -194,6 +194,7 @@ export function AnchoringSection() {
       <AnchoringField name="lowWater" min={0} max={10} />
       <NormalLevelField name="normalHighWater" />
       <NormalLevelField name="normalLowWater" />
+      <NormalLevelField name="quayLevel" min={-5} />
       <WaterLevelLookup />
       <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
         {t('anchoring.seabed')}

@@ -432,6 +432,10 @@ async function waitForServer() {
         assert.equal(pier.width, 2.7);
         assert.ok(Math.min(pier.start.y, pier.end.y) >= 3.9, `pier ${pier.id} starts ${Math.min(pier.start.y, pier.end.y)} m from the shore`);
       }
+      // D52: AS 3962-2001 advisory checks, e.g. the gangway width by the berths it serves.
+      await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
+      assert.match(await page.getByTestId('as3962').textContent(), /Table 3\.3/);
+      await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
       const total = page.getByText('Total VAT 0 %', { exact: true });
       await total.scrollIntoViewIfNeeded();
       assert.ok(await total.isVisible());

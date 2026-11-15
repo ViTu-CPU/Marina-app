@@ -250,6 +250,10 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     );
     expect(set.ok && set.project.waterLevels).toEqual(info);
     expect(set.ok && [set.project.anchoring.normalHighWater, set.project.anchoring.normalLowWater]).toEqual([0.8, 0.7]);
+    // D52: the quay level, missing = not known.
+    expect(old.ok && old.project.anchoring.quayLevel).toBeNull();
+    const quay = parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).quayLevel = 1.8)));
+    expect(quay.ok && quay.project.anchoring.quayLevel).toBe(1.8);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waterLevels = { ...info, source: 'smhi' }))).ok).toBe(false);
   });
 

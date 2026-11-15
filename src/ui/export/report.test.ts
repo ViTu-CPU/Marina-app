@@ -44,6 +44,11 @@ describe('printable report (U24)', () => {
     expect(html).toContain('2026-11-15');
   });
 
+  it('has the AS 3962-2001 advisory checks (D52)', () => {
+    expect(html).toContain(translate('en', 'as3962.title'));
+    expect(html).toContain('3.6.1');
+  });
+
   it('lists the cost parameters with their sources and the product sources', () => {
     for (const p of model.priceList.parameters) expect(html).toContain(p.source.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;'));
     const urls = new Set(model.estimate.lines.map((l) => l.sourceUrl).filter((u) => u));

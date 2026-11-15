@@ -119,8 +119,13 @@ fairway in front of every berth, connection to the entrance, pier connected to t
   pier and fill it. Fills never take the fairway that existing berths need.
 
 **Anchoring and cost (preliminary)**
-- Anchoring plan for one design depth, shown as a map layer: crossed chain pairs and
-  concrete anchors per pier and access pontoon, chain and anchor chosen from the price list
+- Piers built from pontoon modules (default Marinetek Premier 2700: 19,90 / 16,05 / 12,20 m, at
+  most two shorter modules per pier), 4 m off the shore with a 6 m gangway; berth types finger
+  pier, Y-boom, mixed (booms for small boats, fingers for large) and stern buoy.
+- Anchoring plan for one design depth, shown as a map layer: chains from every pontoon joint
+  in an X pattern (towards the head and the shore on both sides), two crossed shore chains
+  under each pier's gangway, the AS 3962 minimum wave load (2 kN/m) from the directions with
+  open water, and concrete anchors per pier and access pontoon, chain and anchor chosen from the price list
   by breaking load and required mass; anchor type concrete block (friction) or concrete wedge
   (Pearl Harbor type, published capacities). Main piers of 10 m or more get two crossed chains
   at their head; fingers longer than 12 m get an end pile (Marinetek; not priced). An access pontoon in front of the shore has
@@ -135,6 +140,19 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 - Price list `data/hinnasto.xlsx` (A-Laiturit, Top Marine incl. buoys, Suomen Laatulaituri,
   Savorak, Marinetek estimate, labour and plant rates), editable in Excel; import an edited copy in the app or
   replace the file and rebuild. See [docs/RESEARCH.md](docs/RESEARCH.md).
+
+**Site conditions (preliminary, "Waves" window and anchoring parameters)**
+- Wave screening by eight direction sectors (N … NW), each with its own fetch (0 = no open
+  water), depth and winds; CEM growth, AS 3962-2001 Table 4.2 criteria (head, oblique and beam
+  seas; UFC 4-152-07 selectable); every direction that exceeds the criteria is listed.
+- Fetches measured from the OpenStreetMap shoreline (Overpass API), rays every 5° drawn on the
+  map; wind climate from ERA5 (Open-Meteo), per sector.
+- Proposal of a Marinetek floating breakwater (3300, 3300K, 3800, 4300K, 5300K) from the
+  brochures' attenuation diagrams, or "none fits".
+- Water levels from the nearest gauge: FMI mareographs (sea, 1991–2020) or SYKE stations
+  (lakes and rivers, last 30 years), extremes and the normal range.
+- Advisory checks against AS 3962-2001 (walkways, fingers, berth width, fairway, entrance,
+  gangway width and slope, depth at the berths, ladders).
 
 **Files**
 - Autosave in the browser; project file export/import (JSON).
@@ -176,7 +194,7 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
 
 - Strategies A–D use **one pier module for the whole layout**, sized by the longest boat
   class. Strategy E sizes each row for its own boats, but only for piers square to the
-  shore, and its search over start positions is coarser (2 m) than that of A–C (1 m).
+  shore; with the shore gap it can miss a pier against a side wall (docs/DECISIONS.md I98).
 - No **side-to berths** (finger piers, Y-boom and stern-buoy berths are implemented; the
   engine has an interface for more).
 - Stern buoys follow the Swedish boating union's marina handbook (Hamnhandboken 2016) by default;
@@ -188,15 +206,20 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   layouts, not provably optimal ones.
 - Fairway width is a single rule (factor × boat length, with a minimum). There is no
   turning-basin check.
-- One design water depth per project (no soundings). The anchoring plan covers wind only:
-  no waves, currents, ice or berthing loads, no structural check of pontoons and fixings.
+- One design water depth per project (no soundings). The anchoring plan covers wind and the
+  AS 3962 minimum wave load: no wave dynamics, currents, ice or berthing loads, no structural
+  check of pontoons and fixings. With waves the friction-only concrete blocks come out several
+  times heavier than in practice (docs/DECISIONS.md I99).
   Wind loads follow UFC 4-152-07 and the defaults have public sources where one was found
   (docs/RESEARCH.md §5, §9). Plain concrete blocks hold by friction and come out heavier
   than suppliers' standard packages; the wedge (Pearl Harbor type) option uses published
   working capacities and needs longer chains. The chains of a pier are splayed towards its
   ends (default 45°, a weak source) so that they also hold the wind along the pier; how
   real installations take that load is not documented publicly (docs/DECISIONS.md I49,
-  I54–I61, D25). Nothing is checked against RIL 201-3-2013 or AS 3962.
+  I54–I61, D25, D46). Nothing is checked against RIL 201-3-2013; AS 3962-2001 is used for
+  advisory checks only.
+- The automatic fetch and the water-level lookups need the Overpass API, FMI and SYKE services
+  in the browser; the fetch lookup was tested only with mocked answers.
 - Costs come from public list prices and stated assumptions (labour output, work-boat
   rate, Marinetek prices); they are a feasibility-stage estimate, not a quote.
 - No environmental constraints.
@@ -254,4 +277,4 @@ Not started; listed in the specification as later phases.
 - Turning-basin check; better optimisation; local refinement of angle and offset.
 - GeoJSON import in a projected metric CRS; DXF export.
 - Full Finnish localisation, including issue messages.
-- Bathymetry and draught per boat class; map tiles; exposure; cost estimation.
+- Bathymetry and draught per boat class; exposure. See docs/HANDOFF.md for the current list.

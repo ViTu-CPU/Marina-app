@@ -5,6 +5,7 @@
  */
 import type { AnchoringParams } from '../../engine/anchoring';
 import { BOM_GROUPS, type BomGroup } from '../../engine/bom';
+import { as3962NotesFor } from '../as3962Notes';
 import { breakwaterProposal, weightPerMetre } from '../../engine/breakwater';
 import type { Layout, Params, Project } from '../../engine/model';
 import { pierAxis } from '../../engine/rows';
@@ -289,6 +290,16 @@ export function buildReportHtml(input: ReportInput): string {
     }
     parts.push(`<p class="small">${esc(t('waves.note'))}</p>`);
   }
+
+  // D52: AS 3962-2001 advisory checks.
+  const asNotes = as3962NotesFor(project, layout, model?.choices.pontoonFreeboard ?? null);
+  parts.push(`<h2>${esc(t('as3962.title'))}</h2>`);
+  parts.push(
+    asNotes.length === 0
+      ? `<p>${esc(t('as3962.none'))}</p>`
+      : `<ul>${asNotes.map((n) => `<li${n.severity === 'warning' ? ' class="warn"' : ''}><strong>${esc(n.clause)}</strong> ${esc(n.message)}</li>`).join('')}</ul>`,
+  );
+  parts.push(`<p class="small">${esc(t('as3962.note'))}</p>`);
 
   // Anchoring plan and cost estimate.
   if (!model) {
