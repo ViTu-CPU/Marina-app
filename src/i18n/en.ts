@@ -127,6 +127,7 @@ export const en = {
   'param.boomWidth': 'Boom width (m)',
   'param.buoyDepthFactor': 'Stern buoy at length + × depth',
   'berthType.finger': 'Finger pier (two boats per finger)',
+  'berthType.mixed': 'Mixed: Y-booms for small boats, fingers for large',
   'berthType.yBoom': 'Y-boom (one boat between booms)',
   'berthType.sternBuoy': 'Stern buoy (bow to the pier)',
   'fill.berthType': 'Berth type',

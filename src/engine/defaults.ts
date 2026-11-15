@@ -23,6 +23,8 @@ export const DEFAULT_PARAMS: Params = {
   fingerLengths: [5, 6, 7, 8, 10, 12],
   // D34: Y-boom berths use Marinetek's Steel Boat Booms FN500/FN600/FN700 (5, 6, 7 m) and
   // the decked width 0,4 m of FN600K/FN700K (brochure, marinetek.hr, read 2026-11-15).
+  // D51: 'mixed' (Y-booms for small boats, fingers for the longer ones) is offered; finger piers stay
+  // the default because mixed rows were not more efficient on the demos (I98).
   berthType: 'finger',
   boomLengths: [5, 6, 7],
   boomWidth: 0.4,

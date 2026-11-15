@@ -109,9 +109,10 @@ export interface BoatClass {
 /**
  * Extension (D34): mooring type of a berth. 'finger': finger pier (SPEC §4); 'yBoom': one
  * boat between light booms (aisapaikka), with fingers for boats too long for a boom;
- * 'sternBuoy': bow to the pier, stern to a buoy (peräpoiju).
+ * 'sternBuoy': bow to the pier, stern to a buoy (peräpoiju); 'mixed' (D51): Y-booms for the boats
+ * a standard boom fits, fingers for the longer ones, in the same row.
  */
-export type BerthType = 'finger' | 'yBoom' | 'sternBuoy';
+export type BerthType = 'finger' | 'yBoom' | 'sternBuoy' | 'mixed';
 
 /** Extension (D20): how the boat mix is given: target shares or target berth counts. */
 export type BerthTarget = 'share' | 'count';

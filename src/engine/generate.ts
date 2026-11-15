@@ -103,7 +103,7 @@ export const OFFSET_STEP = 1;
 /** Orientation sweep step, degrees (SPEC §5.2). */
 export const ANGLE_STEP = 5;
 /** Offset sweep step of the size-zoned strategy E, m. */
-export const ZONED_OFFSET_STEP = 2;
+export const ZONED_OFFSET_STEP = 1;
 /** For how many start offsets (per direction) strategy E runs its exact search. */
 const ZONED_SHORTLIST = 6;
 /** How many berth-less piers are remembered for the diagnostics. */
@@ -1123,8 +1123,12 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = pa
     return fail('ALL_BERTHS_BLOCKED', 'No berth can be reached from the entrance through a fairway of the required width.');
   }
   const ranked = rankLayouts(evaluated, objective);
+  // I98: an orientation of the sweep (C) that is a near-duplicate of the perpendicular layout (A)
+  // adds nothing; A is kept as the named family (SPEC §5.7) whichever ranks higher.
+  const perpendicular = ranked.filter((l) => l.strategy === 'A');
+  const distinct = ranked.filter((l) => l.strategy !== 'C' || !perpendicular.some((a) => isNearDuplicate(a, l)));
   const kept: Layout[] = [];
-  for (const layout of ranked) {
+  for (const layout of distinct) {
     if (kept.some((k) => isNearDuplicate(k, layout))) continue;
     kept.push(layout);
     if (kept.length >= topN) break;

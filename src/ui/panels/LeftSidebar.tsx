@@ -618,7 +618,7 @@ function DockSection() {
         </select>
       </label>
       {berthType === 'sternBuoy' && <ParamField name="buoyDepthFactor" min={0} max={10} step={0.5} />}
-      {berthType === 'yBoom' && (
+      {(berthType === 'yBoom' || berthType === 'mixed') && (
         <>
           <ParamField name="boomWidth" min={0.1} max={2} step={0.05} />
           <LengthListField

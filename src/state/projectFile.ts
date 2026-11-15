@@ -156,7 +156,7 @@ function lengthList(v: unknown, key: 'fingerLengths' | 'boomLengths'): number[] 
   return [...new Set(list)].sort((a, b) => a - b);
 }
 
-const BERTH_TYPES = ['finger', 'yBoom', 'sternBuoy'] as const;
+const BERTH_TYPES = ['finger', 'yBoom', 'sternBuoy', 'mixed'] as const;
 
 function params(v: unknown): Params {
   const o = obj(v, 'params');
@@ -176,7 +176,8 @@ function params(v: unknown): Params {
     fingerWidth: pick('fingerWidth'),
     fingerLengthRatio: pick('fingerLengthRatio'),
     fingerLengths: lengthList(o.fingerLengths, 'fingerLengths'),
-    berthType: o.berthType === undefined ? DEFAULT_PARAMS.berthType : oneOf(o.berthType, BERTH_TYPES, 'params.berthType'),
+    // D51: files from before the mixed type keep finger piers (their old default).
+    berthType: o.berthType === undefined ? 'finger' : oneOf(o.berthType, BERTH_TYPES, 'params.berthType'),
     boomLengths: lengthList(o.boomLengths, 'boomLengths'),
     boomWidth: pick('boomWidth'),
     buoyDepthFactor: pick('buoyDepthFactor'),

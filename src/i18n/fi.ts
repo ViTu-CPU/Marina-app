@@ -129,6 +129,7 @@ export const fi: Partial<Record<StringKey, string>> = {
   'param.boomWidth': 'Puomin leveys (m)',
   'param.buoyDepthFactor': 'Peräpoiju: pituus + × syvyys',
   'berthType.finger': 'Aisalaituri (kaksi venettä aisaa kohden)',
+  'berthType.mixed': 'Seka: Y-puomit pienille, sormet isoille',
   'berthType.yBoom': 'Y-puomi (yksi vene puomien välissä)',
   'berthType.sternBuoy': 'Peräpoiju (keula laituriin)',
   'fill.berthType': 'Venepaikkatyyppi',

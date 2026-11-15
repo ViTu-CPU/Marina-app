@@ -302,7 +302,7 @@ async function waitForServer() {
       assert.deepEqual(cancelled, { running: true, after: false, same: true });
     });
 
-    await step('berth types: Y-boom (booms and fingers) and stern buoy (D33–D35)', async () => {
+    await step('berth types: Y-boom (booms and fingers), mixed and stern buoy (D33–D35, D51)', async () => {
       await page.getByRole('combobox', { name: 'Load example' }).selectOption('rectBasin');
       await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('yBoom');
       await generate();
@@ -311,6 +311,13 @@ async function waitForServer() {
       assert.ok(best.berths.every((b) => b.type === 'yBoom'), 'all berths are Y-boom berths');
       assert.ok(best.fingers.some((f) => f.kind === 'boom') && best.fingers.some((f) => !f.kind), 'booms and fingers');
       assert.equal(best.stats.issueCounts.error, 0);
+      // Mixed (D51): booms between the small boats and fingers for the large ones, in the same layout.
+      await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('mixed');
+      await generate();
+      const mixed = (await state()).project.layouts[0];
+      assert.ok(mixed.berths.every((b) => b.type === 'mixed'), 'mixed berths');
+      assert.ok(mixed.fingers.some((f) => f.kind === 'boom') && mixed.fingers.some((f) => !f.kind), 'booms and fingers');
+      assert.equal(mixed.stats.issueCounts.error, 0);
       // Stern buoys (D35): no fingers; each buoy at boat length + design depth, inside its slot.
       await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('sternBuoy');
       await generate();
