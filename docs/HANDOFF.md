@@ -5,102 +5,91 @@ Kopioi tämä uuden istunnon ensimmäiseksi viestiksi.
 ---
 
 Jatketaan Marina-app-projektia (repo `vitu-cpu/marina-app`). Lue ensin `CLAUDE.md`,
-`docs/SPEC.md`, `docs/DECISIONS.md`, `docs/RESEARCH.md` ja `docs/HANDOFF.md`. Työskentele haarassa
-`claude/trusting-tesla-4khdre` (tai luo se `main`ista, jos sitä ei ole). Keskustele kanssani
+`docs/SPEC.md`, `docs/DECISIONS.md`, `docs/RESEARCH.md` ja `docs/HANDOFF.md`. Keskustele kanssani
 suomeksi, UI pysyy englanniksi.
+
+## Haara ja julkaisu
+Neljännen istunnon työ on haarassa `claude/tender-keller-45kwzk` (main + 12 committia). Kun
+haluan julkaista, tee pull request mainiin: GitHub Actions testaa ja julkaisee mainin osoitteeseen
+https://vitu-cpu.github.io/Marina-app/ . Jos PR on jo yhdistetty, aloita uusi työ mainista uuteen
+haaraan.
 
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D42, I89, U26).
-- Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina.
-- Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013,
-  AS 3962) – kaikki on alustavaa ja vaatii pätevän suunnittelijan tarkastuksen.
-- Älä keksi lukuja. Jokaiselle arvolle lähde (URL + lukupäivä) tai merkintä "Assumption" /
-  "ESTIMATE". Kysy minulta, jos tarvitset jotain parempaan tulokseen.
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D53, I101, U26**).
+- Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
+  odottaa vahvistustani: aallonkorkeudet 2 desimaalilla (U25).
+- Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
+- Älä keksi lukuja: jokaiselle arvolle lähde (URL + lukupäivä) tai merkintä "Assumption" /
+  "ESTIMATE". Kysy, jos tarvitset jotain parempaan tulokseen.
+- Node-skriptit, jotka hakevat verkosta kehitysympäristössä: `NODE_USE_ENV_PROXY=1
+  NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt`.
 
-## Tilanne (2026-11-15, kolmannen istunnon jälkeen)
-Testit 403/403, e2e 21 vaihetta (PR #1 yhdistetty mainiin). Aiemmin tehty: tutkimus (RESEARCH.md), venepaikat
-kappalemäärinä (D20), rantaponttoni (D21), muokkaus (D22), hinnasto data/hinnasto.xlsx (D19),
-ankkurointisuunnitelma (D23), tuoteluettelo + kustannusarvio (D24), UFC-tuulikuorma ja
-lähteistetyt oletukset (I54–I57), kiila-ankkurit (I59).
+## Tilanne (2026-11-15, neljännen istunnon jälkeen)
+Testit 448/448, e2e 22 vaihetta. Neljännessä istunnossa (omistajan päätökset D42–D52):
 
-Kolmannessa istunnossa (omistajan päätökset D25–D32):
-1. **Vinot ketjut (D25, I60–I61)**: laiturin kaikki ketjut ovat vinossa θ = 45° kohtisuorasta
-   (parametri `splayAngle`, 0–80°). Rannanpuoleinen puolisko on vinossa kärkeä kohti ja kantaa
-   mereltä tulevan tuulen, kärjenpuoleinen puolisko rantaa kohti ja kantaa rannalta tulevan.
-   Kumpikin suunta tarkistetaan erikseen, ja linja mitoitetaan suuremman mukaan. Päätyketjut
-   ±30° ja maatuen oletettu kuorma poistuivat. Lähteet: Chalmers 2026 kuva 4 (SF Marina,
-   kulmat ulospäin) ja 45° Savorakin mökkilaiturin ohjeesta (heikko lähde).
-   Demoissa suurin linja 46,3 → 17,3 kN; ankkurimassa per laiturimetri lähes ennallaan.
-2. **Ankkurityyppi (D26)**: betonipaino pysyy oletuksena.
-3. **Väylä (D27, I62)**: oletuskerroin 1,5 → 1,75 (California DBW 2005 Table B-2), kerrotaan
-   edelleen veneen (ei paikan) pituudella. Demot: suorakaide 428 → 381 paikkaa, lahti 436 → 351.
-   Lahden strategia E jättää silloin 12 m luokan kokonaan pois (I25). Vanhat projektit
-   säilyttävät tallennetun kertoimen.
-4. **Hinnasto**: Top Marinen HD 3,0 m, tikkaat ja sähköpylväät tarkistettu sanatarkasti; MDP
-   2,4 × 15 m lisätty; Savorakin painot 300–3 000 kg ja ketjut 10–22 mm lisätty (I63).
-5. **Kalibrointi**: julkista suomalaista ankkurointisuunnitelmaa ei löytynyt; Skotlannin
-   lupahakemuksista (marine.gov.scot) ei saatu ketjukokoja, ankkureita eikä kuormia (RESEARCH §9.10).
-6. **Rantaponttoni muurin edessä (D28, I64–I66)**: ketjut vain vesipuolella; muurista poispäin
-   pitävät kaksi ristikkäistä rantaketjua kulkusillan kohdalla (oletus: ponttonin keskellä) ja
-   siihen liittyvät laiturit kuormitusleveyden mukaan; laiturit lisäävät osuutensa rannan
-   puolelta tulevaan kuormaansa. Seinäkiinnike = hinnaston kategoria `wall_fixing` (Savorakin
-   kalliosilmukka 20 mm, kapasiteettia ei julkaistu).
-7. **Vakiopituiset aisat (D29, I67, I70)**: sormen pituus pyöristetään ylöspäin projektin
-   pituuslistaan; oletus Marinetekin mallit 5, 6, 7 m (Boat Booms) ja 6, 8, 10, 12 m (Mooring
-   Fingers). Marinetekin ponttonit hinnastossa moduuleina (I71; hinnat yhä ESTIMATE).
-8. **Kärkiankkurointi (D30, D31, I68, I72)**: pistolaiturin kärkeen kaksi ristikkäistä ketjua;
-   yli 12 m:n sormille päätypaalu Marinetekin mukaan (ohjain G200/G400/G700, 20/40/70 kN),
-   kuorma puolet viereisten veneiden täydestä kylkituulesta (UFC). Paaluja ei hinnoitella.
-9. **Marinetekin esitteet** luettu (RESEARCH §9.12): marinetek.hr lisätty ympäristöön.
-10. **Kulkusillat rantaponttonilla (D32, I73, U20)**: käyttäjä antaa paikat metreinä ponttonin
-   ensimmäisestä pisteestä (tyhjä = yksi keskellä); jokaisella kaksi rantaketjua, kuorma
-   kuormitusleveyden mukaan; tuoteluettelo laskee kulkusillat; kartalla ruskea merkki.
-11. **Selkeys (U21, U22)**: samanlaiset varoitukset yhdeksi riviksi (avattava); kartan selite.
-12. **Tehostus (U23)**: generointi Web Workerissa (sivu ei jäädy, peruutus); kirjastot omissa
-   tiedostoissaan (kokonaiskoko ennallaan, välimuisti tehostuu).
-13. **Raportti (U24)**: "Report (PDF)" avaa tulostusikkunan valitun vaihtoehdon raportista
-   (kuva, vertailu, lähtötiedot, ankkurointi, kustannukset, lähteet); "Tallenna PDF-tiedostona".
-14. **Venepaikkatyypit (D33, D34, I74–I75)**: projektin oletustyyppi ja sivukohtainen tyyppi
-   täytössä; Y-puomi (Marinetekin puomit 5–7 m, 0,4 m; pidemmille veneille kiinnityssormi).
-   Peräpoiju (D35, I76–I77): poiju veneen pituus + suunnittelusyvyys laiturista, paikan sisällä.
-   Poijun etäisyyskerroin (I78): oletus 1 (Suomen Laiturikauppa), Top Marine 3.
-15. **Peräpoijujen mitoitus (D36, I79–I82)**: veneluokissa paino (t), tyhjä = arvio pituudesta
-   (Top Marinen purjevenetaulukko). Poijupaino = 3 × veneen paino (omistajan valinta) tai
-   Top Marinen valintataulukko. Hinnastoon Top Marinen poijut ja 500 kg betonipaino.
-16. **Muut lähteet ja uudet oletukset (D37, I83–I85, RESEARCH §9.14)**: omistaja pyysi arvioimaan
-   itse. Oletuksena nyt Svenska Båtunionenin Hamnhandboken 2016 (taulukko 3: paino vedessä
-   300–1 200 kg, ketju 10–16 mm, poiju 45–120 kp; avoin satama = koko ylöspäin), ketju
-   max(1,41 × syvyys, ylävesi + 0,8 m), etäisyyskerroin 1 säilyy. Varoitukset: syvyys > 5 m,
-   vedenkorkeusvaihtelu > 1,3 m, poiju > 1,4 × veneen pituus. 3 × paino -sääntöä ei tue mikään
-   muu lähde (10–25 kertaa muita raskaampi).
-17. **Poijurivien väylä (D38)**: Båtunionen ≥ 2,5 × veneen pituus, ≥ 20 m (painojen välissä vain
-   vapaa vesi lasketaan). Demot peräpoijuilla: suorakaide 355 → 207 paikkaa, lahti 345 → 260;
-   laituriväli 66 m (käsikirjan taulukko 1: 69 m). Sormilaiturit ennallaan.
-18. **Paikkaleveys (D39)**: omistaja päätti pitää veneen leveyden lisän 0,5 m (Båtunionen 0,7–0,8 m,
-   suojaisassa ja ahtaassa satamassa 0,2 m vähemmän).
-19. **Aaltoarvio, vaihe 1 (D40, I86, U25)**: työkalupalkin "Waves" avaa ikkunan: pisin avovesimatka,
-   suunta, syvyys ja tuulet (1 v, 50 v) → Hm0, Tp, aallonpituus (CEM II-2), UFC 4-152-07:n
-   kriteerit (keula/sivu) ja suositus (ei suojausta / kelluva vaimennin < 18 m aallot / kiinteä
-   aallonmurtaja). Ei kaupallinen käyttö → Open-Meteo sallittu.
-20. **Tuuliolot, vaihe 2 (D41, I87, I88)**: "Hae tuulidata" hakee Open-Meteosta ERA5-tuulet (meriruutu,
-   oletus 30 viimeistä täyttä vuotta, 5 vuoden palat): tuuliruusu, kerran vuodessa ja 50 vuoden tuuli
-   suunnittain; "Käytä avovesimatkan suunnan tuulia" täyttää aaltolaskennan. Yhteenveto tallentuu
-   projektiin ja raporttiin. Kehitysympäristön jaettu IP oli jo käyttänyt Open-Meteon päiväkiintiön,
-   joten testit käyttävät simuloitua vastausta; oikea haku tehdään käyttäjän selaimesta.
+1. **AS 3962-2001** (D42, RESEARCH §11): omistajan toimittama kopio luettu ja ohjelman arvot
+   tarkistettu. Kopio ei ole repossa; siinä on toisen henkilön käyttölisenssi. Tuuli: AS:n kaava
+   30 s tuulella antaa sivutuulelle 0,95 × UFC:n arvon, joten tuulimalli ei muuttunut.
+2. **Aaltoarvio 8 suuntasektorilla** (D47, I90–I92): jokaiselle sektorille avovesimatka (0 = ei
+   avovettä), syvyys ja tuulet; kriteerit AS 3962 taulukko 4.2 (keula/vino/sivu), UFC valittavissa;
+   kaikki ylittävät suunnat listataan; vanha yksi fetch siirtyy suuntansa sektoriin.
+3. **Marinetekin aallonmurtajaehdotus** (D48, I93, RESEARCH §12): 3300, 3300K, 3800, 4300K, 5300K,
+   vaimennuskäyrät digitoitu esitteistä; kevyin riittävä ehdotetaan tai "mikään ei riitä".
+4. **Avovesimatkat kartalta** (I94, RESEARCH §13): OpenStreetMapin rantaviiva Overpass API:sta,
+   säteet 5° välein, sektorin pisin säde; säteet kartalla (taso "Fetch rays"). **Testattu vain
+   simuloidulla vastauksella** (Overpassin pääpalvelin katkaisi yhteyden kehitysympäristöstä).
+5. **Vedenkorkeudet sijainnista** (D50, I95, RESEARCH §14): Ilmatieteen laitoksen mareografit
+   (meri, 1991–2020) ja SYKEn asemat (järvet ja joet, 30 viimeistä havaintovuotta); käyttäjä
+   valitsee aseman; HW/MHW/MW/MNW/NW → ylä- ja alivesi (ääriarvot) ja uudet normaali ylä- ja
+   alivesi (peräpoijujen tarkistus). Testattu oikealla datalla: Helsinki 1,5/1,0 m (normaali
+   1,0/0,6), Porovesi Iisalmi 1966–1995 1,4/1,4 m (0,8/0,7).
+6. **Laiturit tuotemoduuleista** (D44, I89): oletus Marinetek Premier 2700 (2,7 m; 19,90 / 16,05 /
+   12,20 m), enintään kaksi pisintä lyhyempää moduulia laiturissa; hinnastoon Premier-moduulit
+   (ESTIMATE). Vanhat projektit: vapaa pituus.
+7. **Ketjut joka liitoksesta X-kuviona** (D46, I96): Iisalmen suunnitelman mukaan; rannan päässä
+   kärkeä kohti, kärjessä ulospäin. Demoissa yksi ketju 4,4–4,6 laiturimetriä kohden (Iisalmi 5 m).
+8. **Kulkusillat rannasta** (D49, I97): laituri 4 m irti rannasta, 6 m kulkusilta, kaksi ristikkäistä
+   rantakiinnitysketjua kulkusillan alle; kulkusilta kartalla ja tuoteluettelossa.
+9. **Sekatyyppi** (D51, I98): Y-puomit pienille, sormet isoille samassa rivissä. Ei ollut demoissa
+   tehokkaampi (jakajat −6 % €, paikkoja −1–2 %), joten **oletus on edelleen aisalaituri**.
+10. **Aaltokuorma ankkurointiin** (D45, I99): AS 3962 4.8.2.3, 2 kN/m niistä suunnista, joilla on
+    avovettä. **Vaikutus suuri**: suorakaidedemossa 2 km itäinen fetch nostaa ankkurit 1 224 t →
+    5 040 t (285 k€ → 1,09 M€), koska betonipainot lasketaan pelkällä kitkalla.
+11. **AS 3962 -tarkistukset** (D52, I100): neuvoa-antava lista (kulkutie, sormet, paikkaleveys,
+    väylä, sisääntulo, kulkusillan leveys ja kaltevuus, syvyys, tikkaat); uusi valinnainen
+    laiturimuurin korkeus kulkusillan kaltevuuteen.
 
-## Avoimet asiat, ehdotettu järjestys
-1. Paalujen ja Marinetekin tuotteiden hinnat puuttuvat (pyydä tarjous).
-2. Hinnaston aukot: A-Laiturit G40 -ketjujen murtokuorma (kysyttävä toimittajalta);
-   asennuksen tuntimenekit, työveneen päivähinta ja Marinetekin hinnat ovat oletuksia.
-   Top Marinen MD-paketin hinta on eri sivuilla ristiriitainen (RESEARCH §2.3).
-3. Vinojen ketjujen suunta (I60): jos käytännöstä löytyy tietoa (ulospäin vai sisäänpäin,
-   kulma), päivitä.
-4. Roadmap (SPEC §11): kylkipaikka, GeoJSON, DXF (Y-puomi, peräpoiju, PDF-raportti, Web Worker
-   ja bundlen pilkkominen tehty).
+## Avoimet päätökset (kysy omistajalta)
+1. Sekatyyppi oletukseksi vai aisalaituri (I98)?
+2. Aaltokuorman ja kitka-ankkureiden yhdistelmä tekee ankkureista moninkertaiset käytäntöön
+   nähden (I99). Kalibroidaanko ankkurimalli (upotettu betonipaino, Iisalmi vertailukohtana) vai
+   käytetäänkö aaltokuormalle pienempää arvoa?
+3. U25: aallonkorkeudet 2 desimaalilla?
+4. Onko Iisalmen suunnitelmasta saatavilla mitoitustiedot (syvyys, fetch, kuormat), jotta sitä
+   voi käyttää tarkistuslaskelmana?
 
-## Omistajan vastaukset 2026-11-14
-- Toteutuneen sataman ankkurointisuunnitelmaa, urakoitsijan tarjoushintoja tai
-  RIL 201-3-2013:a ei ole nyt saatavilla. Kysy uudelleen, jos tilanne muuttuu.
-- marine.gov.scot ja www.highland.gov.uk lisättiin ympäristön sallittuihin palvelimiin.
+## Jatkotoimet, ehdotettu järjestys
+1. **Kokeile oikeat haut selaimessa** julkaisun jälkeen: avovesimatkat kartalta (Overpass),
+   vedenkorkeudet (FMI/SYKE) ja tuulidata (Open-Meteo), esim. Iisalmi ja Helsinki.
+2. **Ankkurimallin kalibrointi** (kohta 2 yllä): upotetun betonipainon kapasiteetti (NAVFAC/OCEL),
+   Iisalmen 100 m / 20 × 3 200 kg / 22 mm G40 30 m vertailuna.
+3. **Strategia E ja rantaväli** (I98 d): suorakaidedemossa rantaväli > 0 pudottaa läntisimmän
+   laiturin (364 → 308 paikkaa); haku korjattava.
+4. **Aallonmurtaja kartalle**: aallonmurtajaponttonin sijoitus ja pituus kartalla, sen ankkurointi
+   ja suojaava vaikutus (Iisalmen kaltainen tapaus).
+5. **Kulkusillan leveys tuotteesta** AS 3962 taulukon 3.3 mukaan (paikkamäärä per kulkusilta) ja
+   laiturimuurin korkeus esim. MML:n korkeusmallista.
+6. **Tuulen vertailu** Ilmatieteen laitoksen havaintoihin (opendata.fmi.fi on nyt sallittu).
+7. **Syvyys avovesimatkalla** syvyysaineistosta (selvitä avoimet lähteet, esim. Traficomin
+   syvyystiedot).
+8. **Hinnaston aukot**: Marinetekin tarjous (Premier, aallonmurtajat, sormet, puomit), paalut, A-Laiturit
+   G40 -ketjun murtokuorma, asennuksen tuntimenekit ja työveneen hinta (oletuksia), Top Marinen
+   MD-paketin ristiriitainen hinta.
+9. Roadmap: kylkipaikka, GeoJSON-tuonti, DXF-vienti, T- ja L-päät.
+
+## Ympäristö
+Sallittuihin palvelimiin lisättiin tässä istunnossa overpass-api.de, opendata.fmi.fi,
+rajapinnat.ymparisto.fi, en.ilmatieteenlaitos.fi, www.ilmatieteenlaitos.fi, www.ymparisto.fi ja
+wiki.openstreetmap.org (aiemmin mm. batunionen.se, pdhonline.com, open-meteo.com, marinetek.hr).
