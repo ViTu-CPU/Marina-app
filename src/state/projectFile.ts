@@ -2,6 +2,7 @@
  * JSON project file: export and import with structural validation (SPEC §2, persistence).
  */
 import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type Seabed } from '../engine/anchoring';
+import type { CharacteristicLevels, WaterLevelInfo } from '../engine/waterLevels';
 import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type AutoFetch, type WaveSettings } from '../engine/waves';
 import { SECTORS, type WindClimate } from '../engine/wind';
 import { PRODUCT_CATEGORIES, PRODUCT_UNITS, type PriceList, type Product } from '../engine/catalog';
@@ -362,6 +363,24 @@ function waveSettings(v: unknown): WaveSettings {
   };
 }
 
+/** D50: the levels of a gauge near the site. */
+function waterLevelInfo(v: unknown): WaterLevelInfo {
+  const o = obj(v, 'waterLevels');
+  const l = obj(o.levels, 'waterLevels.levels');
+  const level = (k: keyof CharacteristicLevels) => num(l[k], `waterLevels.levels.${k}`);
+  return {
+    source: oneOf(o.source, ['fmi', 'syke'] as const, 'waterLevels.source'),
+    station: str(o.station, 'waterLevels.station'),
+    waterBody: o.waterBody === undefined || o.waterBody === null ? null : str(o.waterBody, 'waterLevels.waterBody'),
+    position: latLon(o.position, 'waterLevels.position'),
+    distance: num(o.distance, 'waterLevels.distance'),
+    startYear: num(o.startYear, 'waterLevels.startYear'),
+    endYear: num(o.endYear, 'waterLevels.endYear'),
+    levels: { hw: level('hw'), mhw: level('mhw'), mw: level('mw'), mnw: level('mnw'), nw: level('nw') },
+    fetchedOn: str(o.fetchedOn, 'waterLevels.fetchedOn'),
+  };
+}
+
 /** D47: a saved automatic fetch lookup. */
 function autoFetchOf(v: unknown): AutoFetch {
   const o = obj(v, 'waves.autoFetch');
@@ -421,7 +440,7 @@ function anchoring(v: unknown): AnchoringParams {
   if (v === undefined) return structuredClone(DEFAULT_ANCHORING);
   const o = obj(v, 'anchoring');
   const d = DEFAULT_ANCHORING;
-  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed'>): number =>
+  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed' | 'normalHighWater' | 'normalLowWater'>): number =>
     o[key] === undefined ? d[key] : num(o[key], `anchoring.${key}`);
   const f = o.friction === undefined ? {} : obj(o.friction, 'anchoring.friction');
   const mu = (k: Seabed) => (f[k] === undefined ? d.friction[k] : num(f[k], `anchoring.friction.${k}`));
@@ -429,6 +448,9 @@ function anchoring(v: unknown): AnchoringParams {
     depth: pick('depth'),
     highWater: pick('highWater'),
     lowWater: pick('lowWater'),
+    // D50: missing in older files (not known).
+    normalHighWater: o.normalHighWater === undefined || o.normalHighWater === null ? null : num(o.normalHighWater, 'anchoring.normalHighWater'),
+    normalLowWater: o.normalLowWater === undefined || o.normalLowWater === null ? null : num(o.normalLowWater, 'anchoring.normalLowWater'),
     seabed: o.seabed === undefined ? d.seabed : oneOf(o.seabed, ['clay', 'sand', 'rock'] as const, 'anchoring.seabed'),
     windSpeed: pick('windSpeed'),
     airDensity: pick('airDensity'),
@@ -566,6 +588,7 @@ export function parseProject(text: string): ParseResult {
       anchoring: anchoring(p.anchoring),
       cost: costSettings(p.cost),
       waves: waveSettings(p.waves),
+      waterLevels: p.waterLevels === undefined || p.waterLevels === null ? null : waterLevelInfo(p.waterLevels),
       generatedFrom: typeof p.generatedFrom === 'string' ? p.generatedFrom : null,
     };
     return { ok: true, project };

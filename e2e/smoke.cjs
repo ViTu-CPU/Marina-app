@@ -563,6 +563,33 @@ async function waitForServer() {
       assert.equal(await page.getByTestId('wave-tool').count(), 0);
     });
 
+    await step('water levels from a gauge near the position: FMI mareograph (mocked), extremes and normal range (D50)', async () => {
+      const el = (pos, param, value) =>
+        `<BsWfs:BsWfsElement gml:id="x"><BsWfs:Location><gml:Point><gml:pos>${pos} </gml:pos></gml:Point></BsWfs:Location><BsWfs:ParameterName>${param}</BsWfs:ParameterName><BsWfs:ParameterValue>${value}</BsWfs:ParameterValue></BsWfs:BsWfsElement>`;
+      const params = ['WLEVP1YAVG_P30Y_AVG', 'WLEVP1YMAX_P30Y_AVG', 'WLEVP1YMAX_P30Y_MAX', 'WLEVP1YMIN_P30Y_AVG', 'WLEVP1YMIN_P30Y_MIN'];
+      const simple = [20, 977, 1512, -594, -927].map((v, i) => el('60.15371 24.95622', params[i], v)).join('');
+      await page.route('https://opendata.fmi.fi/**', (route) =>
+        route.fulfill({
+          contentType: 'text/xml',
+          body: route.request().url().includes('timevaluepair') ? '<gml:Point gml:id="p"><gml:name>Helsinki Kaivopuisto</gml:name><gml:pos>60.15371 24.95622 </gml:pos></gml:Point>' : simple,
+        }),
+      );
+      await page.route('https://rajapinnat.ymparisto.fi/**', (route) => route.fulfill({ json: { value: [] } }));
+      await page.getByText('Anchoring parameters', { exact: true }).click();
+      await page.getByRole('button', { name: 'Find water-level gauges', exact: true }).click();
+      const box = page.getByTestId('water-levels');
+      await box.getByText(/Helsinki Kaivopuisto/).waitFor();
+      await box.getByRole('button', { name: 'Use', exact: true }).first().click();
+      await page.waitForFunction(() => window.__marina.getState().project.waterLevels !== null);
+      const a = await page.evaluate(() => window.__marina.getState().project);
+      assert.equal(a.waterLevels.station, 'Helsinki Kaivopuisto');
+      assert.deepEqual([a.anchoring.highWater, a.anchoring.lowWater, a.anchoring.normalHighWater, a.anchoring.normalLowWater], [1.5, 1, 1, 0.6]);
+      assert.match(await box.textContent(), /Water levels from Helsinki Kaivopuisto/);
+      await page.unroute('https://opendata.fmi.fi/**');
+      await page.unroute('https://rajapinnat.ymparisto.fi/**');
+      await page.getByText('Anchoring parameters', { exact: true }).click();
+    });
+
     await step('language toggle', async () => {
       await page.getByRole('button', { name: 'FI', exact: true }).click();
       assert.equal(await page.getByRole('heading', { level: 1 }).textContent(), 'Venesataman asettelusuunnittelu');

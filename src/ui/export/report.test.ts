@@ -6,6 +6,7 @@ import { generateLayouts } from '../../engine/generate';
 import { translate } from '../../i18n';
 import { computeCostModel } from '../costModel';
 import { formatEuro } from '../format';
+import { bomWorkbook } from './bomXlsx';
 import { buildReportHtml } from './report';
 
 const parsed = parsePriceListFile(readFileSync('data/hinnasto.xlsx'), 'hinnasto.xlsx');
@@ -94,5 +95,14 @@ describe('printable report (U24)', () => {
     expect(fi).toContain(translate('fi', 'report.noPriceList'));
     expect(fi).not.toContain('<img');
     expect(fi).toContain('lang="fi"');
+  });
+});
+
+describe('bill of materials workbook (D24)', () => {
+  it('writes the parameters, also unknown (null) normal water levels (D50)', () => {
+    expect(project.anchoring.normalHighWater).toBeNull();
+    const bytes = bomWorkbook(project, layout, model, '2026-11-15');
+    expect(bytes.length).toBeGreaterThan(2000);
+    expect(String.fromCharCode(bytes[0]!, bytes[1]!)).toBe('PK');
   });
 });

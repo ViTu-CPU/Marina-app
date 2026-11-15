@@ -1,7 +1,7 @@
 /**
  * Panels of the anchoring plan and the cost estimate (D23, D24).
  */
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { MAX_SPLAY_ANGLE, resetAnchoringFactors, type AnchoringParams, type AnchorType, type BuoySinkerMethod, type BuoyTableId, type Seabed } from '../../engine/anchoring';
 import { BOM_GROUPS, seriesNames, type BomGroup } from '../../engine/bom';
 import type { Layout } from '../../engine/model';
@@ -11,8 +11,10 @@ import { useCostModel, type CostModel } from '../costModel';
 import { bomWorkbook } from '../export/bomXlsx';
 import { downloadBytes, readFileAsBytes, safeFileName, XLSX_MIME } from '../export/download';
 import { formatCount, formatEuro, formatKn, formatLength } from '../format';
+import { gaugeLevels, findGauges, type Gauge } from '../../state/waterLevels';
+import { useSitePosition } from '../sitePosition';
 import { useT } from '../useT';
-import { Button, NumberField, Section } from './fields';
+import { Button, NumberField, OptionalNumberField, Section } from './fields';
 import { IssueList } from './IssueList';
 
 const state = () => appStore.getState();
@@ -21,7 +23,7 @@ const ANCHOR_TYPES: AnchorType[] = ['block', 'wedge'];
 const SINKER_METHODS: BuoySinkerMethod[] = ['table', 'factor'];
 const BUOY_TABLES: BuoyTableId[] = ['batunionen', 'topMarine'];
 
-type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed'>;
+type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed' | 'normalHighWater' | 'normalLowWater'>;
 
 /** D36: sizing of the stern-buoy sinkers and chains; shown when the project has stern buoys. */
 function BuoyFields() {
@@ -87,6 +89,98 @@ function AnchoringField({ name, min, max, step }: { name: NumericAnchoring; min:
   );
 }
 
+/** D50: optional normal high or low water (empty = not known). */
+function NormalLevelField({ name }: { name: 'normalHighWater' | 'normalLowWater' }) {
+  const t = useT();
+  const value = useAppStore((s) => s.project.anchoring[name]);
+  return (
+    <div className="flex items-center justify-between gap-2 text-sm text-slate-700">
+      <span>{t(`anchoring.${name}`)}</span>
+      <div className="w-20 shrink-0">
+        <OptionalNumberField label={t(`anchoring.${name}`)} value={value ?? undefined} min={0} max={10} onChange={(v) => state().setAnchoring({ [name]: v ?? null }, { coalesce: `anchoring:${name}` })} />
+      </div>
+    </div>
+  );
+}
+
+/** D50: characteristic water levels of a gauge near the site (FMI mareographs, SYKE stations). */
+function WaterLevelLookup() {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const info = useAppStore((s) => s.project.waterLevels);
+  const { position } = useSitePosition();
+  const [gauges, setGauges] = useState<Gauge[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const len = (m: number) => formatLength(m, language);
+  const find = async () => {
+    if (!position) return;
+    setError(null);
+    setBusy(t('levels.finding'));
+    try {
+      setGauges((await findGauges(position.lat, position.lon)).slice(0, 8));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const use = async (g: Gauge) => {
+    setError(null);
+    setBusy(t('levels.reading'));
+    try {
+      state().applyWaterLevels(await gaugeLevels(g, { onProgress: (n) => setBusy(`${t('levels.reading')} ${n}`) }));
+      setGauges(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="space-y-1 rounded border border-slate-200 p-2" data-testid="water-levels">
+      <div className="text-xs font-semibold text-slate-600">{t('levels.title')}</div>
+      <Button disabled={!position || busy !== null} onClick={() => void find()}>
+        {t('levels.find')}
+      </Button>
+      {busy && (
+        <span role="status" className="ml-2 animate-pulse text-xs text-sky-800">
+          {busy}
+        </span>
+      )}
+      {!position && <p className="text-xs text-amber-800">{t('levels.noPosition')}</p>}
+      {error && (
+        <p role="alert" className="text-xs text-red-700">
+          {t('levels.error')} {error}
+        </p>
+      )}
+      {gauges && (
+        <ul className="space-y-0.5 text-xs" aria-label={t('levels.title')}>
+          {gauges.map((g) => (
+            <li key={`${g.source}-${g.id}`} className="flex items-center justify-between gap-1">
+              <span>
+                {g.name}
+                {g.waterBody && g.waterBody !== g.name ? ` (${g.waterBody})` : ''} · {len(g.distance / 1000)} km · {t(g.source === 'fmi' ? 'levels.sea' : 'levels.lake')}
+                {g.active ? '' : `, ${t('levels.ended')}`}
+              </span>
+              <Button disabled={busy !== null} onClick={() => void use(g)}>
+                {t('levels.use')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {info && (
+        <p className="text-xs text-slate-600">
+          {t('levels.applied')} {info.station} ({t(info.source === 'fmi' ? 'levels.sea' : 'levels.lake')}, {len(info.distance / 1000)} km, {info.startYear}–{info.endYear}): {t('levels.values')}{' '}
+          {[info.levels.hw, info.levels.mhw, info.levels.mw, info.levels.mnw, info.levels.nw].map(len).join(' / ')} m · {info.fetchedOn}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">{t('levels.note')}</p>
+    </div>
+  );
+}
+
 /** Left sidebar: parameters of the anchoring plan. */
 export function AnchoringSection() {
   const t = useT();
@@ -98,6 +192,9 @@ export function AnchoringSection() {
       <AnchoringField name="depth" min={0.5} max={100} />
       <AnchoringField name="highWater" min={0} max={10} />
       <AnchoringField name="lowWater" min={0} max={10} />
+      <NormalLevelField name="normalHighWater" />
+      <NormalLevelField name="normalLowWater" />
+      <WaterLevelLookup />
       <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
         {t('anchoring.seabed')}
         <select

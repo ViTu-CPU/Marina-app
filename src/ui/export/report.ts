@@ -180,9 +180,19 @@ export function buildReportHtml(input: ReportInput): string {
       [t('anchoring.seabed'), t(`seabed.${a.seabed}` as StringKey)],
       [t('anchoring.anchorType'), t(`anchorType.${a.anchorType}`)],
       ...ANCHORING.map((k): [string, string] => [t(`anchoring.${k}` as StringKey), String(a[k])]),
+      ...(a.normalHighWater === null ? [] : [[t('anchoring.normalHighWater'), String(a.normalHighWater)] as [string, string]]),
+      ...(a.normalLowWater === null ? [] : [[t('anchoring.normalLowWater'), String(a.normalLowWater)] as [string, string]]),
       [t('anchoring.friction'), String(a.friction[a.seabed])],
     ]),
   );
+  // D50: where the water levels came from.
+  const wl = project.waterLevels;
+  if (wl) {
+    const m = (x: number) => formatLength(x, language);
+    parts.push(
+      `<p class="small">${esc(t('levels.applied'))} ${esc(wl.station)} (${esc(t(wl.source === 'fmi' ? 'levels.sea' : 'levels.lake'))}, ${esc(m(wl.distance / 1000))} km, ${wl.startYear}–${wl.endYear}): ${esc(t('levels.values'))} ${esc([wl.levels.hw, wl.levels.mhw, wl.levels.mw, wl.levels.mnw, wl.levels.nw].map(m).join(' / '))} m; ${esc(wl.fetchedOn)}. ${esc(t('levels.note'))}</p>`,
+    );
+  }
   parts.push('</div></div>');
 
   // D40, D41, D47: wave screening, when a fetch and a wind are entered.

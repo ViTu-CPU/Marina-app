@@ -12,6 +12,7 @@
 
 import type { AnchoringParams } from './anchoring';
 import type { PriceList } from './catalog';
+import type { WaterLevelInfo } from './waterLevels';
 import type { WaveSettings } from './waves';
 
 export interface Vec2 {
@@ -374,6 +375,8 @@ export interface Project {
   cost: CostSettings;
   /** Extension (D40): inputs of the wind-wave screening. */
   waves: WaveSettings;
+  /** Extension (D50): characteristic water levels of a gauge near the site, or null. */
+  waterLevels: WaterLevelInfo | null;
   /**
    * Fingerprint of the inputs (site, boat classes, parameters) the layouts were generated
    * from, or null when there are no generated layouts. Used for the "Regenerate" hint.

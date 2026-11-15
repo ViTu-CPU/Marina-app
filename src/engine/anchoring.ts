@@ -84,6 +84,13 @@ export interface AnchoringParams {
   highWater: number;
   /** Lowest water level below the design level, m. */
   lowWater: number;
+  /**
+   * D50: normal high and low water (MHW − MW, MW − MNW), m, when known from a gauge; null = the
+   * extremes above stand for them. Used for the stern-buoy range check (Båtunionen's "normal
+   * högvattenyta").
+   */
+  normalHighWater: number | null;
+  normalLowWater: number | null;
   seabed: Seabed;
   /** Design (steady) wind speed, m/s. */
   windSpeed: number;
@@ -175,6 +182,8 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   depth: 4,
   highWater: 1.5,
   lowWater: 0.9,
+  normalHighWater: null,
+  normalLowWater: null,
   seabed: 'clay',
   windSpeed: 22,
   airDensity: 1.25,
@@ -214,6 +223,8 @@ export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
   depth: p.depth,
   highWater: p.highWater,
   lowWater: p.lowWater,
+  normalHighWater: p.normalHighWater,
+  normalLowWater: p.normalLowWater,
   seabed: p.seabed,
   windSpeed: p.windSpeed,
   anchorType: p.anchorType,
@@ -1072,8 +1083,16 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     if (p.depth > 5 + 1e-9) {
       warn('BUOY_DEEP_WATER', `Design depth ${p.depth.toFixed(1)} m: mooring between pier and buoy "bör undvikas om vattendjupet är större än 5-6 meter" (Båtunionen): the long buoy chains let the boats swing sideways; at larger depths each buoy is anchored to two sinkers.`);
     }
-    if (p.highWater + p.lowWater > 1.3 + 1e-9) {
-      warn('BUOY_WATER_LEVEL_RANGE', `High + low water ${(p.highWater + p.lowWater).toFixed(1)} m: the buoy chain slope 1:1 holds where normal high and low water differ by at most about 1.3 m (Båtunionen); with a larger range the slope "beräknas från fall till fall". If these are extreme levels, compare the normal range.`);
+    // D50: the normal range when a gauge gave it, else the extremes.
+    const normal = p.normalHighWater !== null && p.normalLowWater !== null;
+    const range = normal ? p.normalHighWater! + p.normalLowWater! : p.highWater + p.lowWater;
+    if (range > 1.3 + 1e-9) {
+      warn(
+        'BUOY_WATER_LEVEL_RANGE',
+        normal
+          ? `Normal high + low water ${range.toFixed(1)} m (MHW − MNW of the gauge): the buoy chain slope 1:1 holds where normal high and low water differ by at most about 1.3 m (Båtunionen); with a larger range the slope "beräknas från fall till fall".`
+          : `High + low water ${range.toFixed(1)} m: the buoy chain slope 1:1 holds where normal high and low water differ by at most about 1.3 m (Båtunionen); with a larger range the slope "beräknas från fall till fall". These are extreme levels: look up the normal range from a gauge (anchoring parameters, "Find water-level gauges").`,
+      );
     }
     if (farClasses.size > 0) {
       warn('BUOY_FAR_FROM_BOAT', `Boat–buoy distance (${(input.buoyDepthFactor! * p.depth).toFixed(1)} m) above 1.4 × the boat length for ${[...farClasses].join(', ')}: "Avståndet mellan båt och boj bör dock inte överstiga 1,4 gånger båtlängden" (Båtunionen).`);

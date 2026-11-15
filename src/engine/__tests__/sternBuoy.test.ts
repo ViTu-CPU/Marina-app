@@ -209,6 +209,10 @@ describe('stern-buoy sizing (D36, D37), hand-calculated', () => {
     expect(codes(plan([k9(4)], { depth: 4 }, 3))).not.toContain('BUOY_FAR_FROM_BOAT');
     // Range within 1.3 m: no warning.
     expect(codes(plan([k9(4)], { highWater: 0.7, lowWater: 0.6 }))).not.toContain('BUOY_WATER_LEVEL_RANGE');
+    // D50: with a gauge's normal range the check uses it, not the extremes (1.5 + 0.9 m).
+    expect(codes(plan([k9(4)], { normalHighWater: 0.6, normalLowWater: 0.6 }))).not.toContain('BUOY_WATER_LEVEL_RANGE');
+    const wide = plan([k9(4)], { normalHighWater: 0.8, normalLowWater: 0.7 }).issues.find((i) => i.code === 'BUOY_WATER_LEVEL_RANGE')!;
+    expect(wide.message).toContain('Normal high + low water 1.5 m');
   });
 
   it('deep water: the float carries the chain when it is heavier than the table float', () => {

@@ -916,3 +916,24 @@ date 14.11.2014), read for the breakwater proposal (DECISIONS D48):
   the attribution with the lookup.
 - From this development environment the main instance reset the TLS connection, so the query is tested
   with mocked answers only (unit tests and the end-to-end test), as Open-Meteo was (§10).
+
+## 14. Water levels: FMI and SYKE open data (read 2026-11-15)
+
+- **FMI open data** ([opendata.fmi.fi](https://opendata.fmi.fi/wfs), WFS 2.0, CC BY 4.0). Stored query
+  `fmi::observations::mareograph::yearly::30year::simple`: *"Yearly water level observations of 30-year normal
+  period 1991 - 2020."* Parameters for each mareograph (13 stations from Kemi to Hamina): `WLEVP1YAVG_P30Y_AVG`,
+  `_MIN`, `_MAX` (annual means), `WLEVP1YMAX_P30Y_AVG` / `_MAX` (annual maxima), `WLEVP1YMIN_P30Y_AVG` / `_MIN`
+  (annual minima), in mm from the theoretical mean water, the same in N2000 (`WLEVN2K…`), and percentiles of the
+  hourly levels (`WLEVP1H_P30Y_P001` … `P999`). Example, Helsinki Kaivopuisto: 20 / 977 / 1512 / −594 / −927 mm
+  (MW, MHW, HW, MNW, NW); the highest 1 512 mm matches FMI's record of +151 cm (§5 item 8). The `latlon`,
+  `bbox` and `maxlocations` parameters did not limit the answer; all stations come back and the nearest is
+  chosen. Station names from the same query in `timevaluepair` format (`gml:Point` with `gml:name` and
+  `gml:pos`). Answers carry `access-control-allow-origin: *`.
+- **SYKE Hydrologiarajapinta 1.1** ([rajapinnat.ymparisto.fi/api/Hydrologiarajapinta/1.1/odata](https://rajapinnat.ymparisto.fi/api/Hydrologiarajapinta/1.1/odata/),
+  OData v3, CC BY 4.0): `Suure` 1 = *"Vedenkorkeus"* (cm); `Paikka` = stations (1 754 water-level stations,
+  `Tila_Id` 1 *"Jatkuva"*, 2 *"Lopetettu"*), with ETRS-TM35FIN coordinates `KoordErTmPohj` / `KoordErTmIta`,
+  lake name `JarviNimi`; `Vedenkorkeus` = daily values (`Aika`, `Arvo`), 500 rows a page with `odata.nextLink`.
+  Example: *Porovesi, Iisalmi* (0406100) daily from 1916-08-16 to 1995-12-31 (ended); the new *Paloisjärvi*
+  station (4015) has data from 2026 only. Answers carry `access-control-allow-origin: *`.
+- **Characteristic levels** HW, MHW, MW, MNW, NW: the Finnish hydrological convention used by SYKE (highest,
+  mean high, mean, mean low, lowest water). The tool's reading of them for the anchoring plan is in DECISIONS I95.

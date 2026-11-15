@@ -95,6 +95,7 @@ function demoProject(name: string, site: Site): Project {
     anchoring: DEFAULT_ANCHORING,
     cost: DEFAULT_COST,
     waves: structuredClone(DEFAULT_WAVES),
+    waterLevels: null,
     generatedFrom: null,
   };
 }

@@ -7,7 +7,6 @@
  */
 import { useState } from 'react';
 import { breakwaterProposal, weightPerMetre, type BreakwaterProposal } from '../../engine/breakwater';
-import { centroid } from '../../engine/geometry';
 import { pierAxis } from '../../engine/rows';
 import {
   bearingOf,
@@ -23,11 +22,12 @@ import {
 import { sectorBearing, windClimate } from '../../engine/wind';
 import type { StringKey } from '../../i18n';
 import { sectorFetches, RAY_STEP_DEG } from '../../engine/fetchRays';
-import { localToLatLon, parseLatLon } from '../../state/geo';
+import { parseLatLon } from '../../state/geo';
 import { lookupFetch, OSM_SOURCE } from '../../state/overpass';
 import { fetchWindHistory } from '../../state/openMeteo';
 import { appStore, useAppStore } from '../../state/store';
 import { formatCount, formatLength, formatPercent } from '../format';
+import { useSitePosition } from '../sitePosition';
 import { useT } from '../useT';
 import { Button, NumberField, OptionalNumberField } from './fields';
 import { speedClassLabel, SPEED_COLORS, WindRose } from './WindRose';
@@ -51,15 +51,6 @@ function OptionalRow({ label, value, min, max, placeholder, onChange }: { label:
   );
 }
 
-/** The position the wind data and the fetch lookup use: an entered one, else the centre of the site on the map. */
-function useWavePosition(): { position: { lat: number; lon: number } | null; siteCentre: { lat: number; lon: number } | null } {
-  const waves = useAppStore((s) => s.project.waves);
-  const map = useAppStore((s) => s.project.map);
-  const water = useAppStore((s) => s.project.site.water);
-  const siteCentre = map ? localToLatLon(map, water.length >= 3 ? centroid(water) : { x: 0, y: 0 }) : null;
-  return { position: waves.location ?? siteCentre, siteCentre };
-}
-
 const RADII_KM = [5, 10, 20, 30, 50] as const;
 
 /** D47, I94: the fetch of every sector from the OpenStreetMap shoreline. */
@@ -67,7 +58,7 @@ function AutoFetchSection() {
   const t = useT();
   const language = useAppStore((s) => s.language);
   const waves = useAppStore((s) => s.project.waves);
-  const { position } = useWavePosition();
+  const { position } = useSitePosition();
   const [radiusKm, setRadiusKm] = useState<number>(waves.autoFetch ? waves.autoFetch.radius / 1000 : 20);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,7 +134,7 @@ function WindSection() {
   const [years, setYears] = useState<[number, number]>([lastYear - 29, lastYear]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { position, siteCentre } = useWavePosition();
+  const { position, siteCentre } = useSitePosition();
   const [text, setText] = useState('');
   const climate = waves.climate;
   // D47: the 22.5° sectors behind the wave directions that exceed the criteria.

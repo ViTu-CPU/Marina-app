@@ -226,6 +226,33 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { quality: 'superb' }))).ok).toBe(false);
   });
 
+  it('water levels (D50): the gauge and the normal range are kept; older files have neither', () => {
+    const old = parseProject(fileWith((p) => delete (p as Record<string, unknown>).waterLevels));
+    expect(old.ok && old.project.waterLevels).toBeNull();
+    expect(old.ok && old.project.anchoring.normalHighWater).toBeNull();
+    const info = {
+      source: 'syke',
+      station: 'Porovesi, Iisalmi',
+      waterBody: 'Porovesi',
+      position: { lat: 63.555, lon: 27.18 },
+      distance: 700,
+      startYear: 1966,
+      endYear: 1995,
+      levels: { hw: 2.29, mhw: 1.7, mw: 0.92, mnw: 0.23, nw: -0.41 },
+      fetchedOn: '2026-11-15',
+    };
+    const set = parseProject(
+      fileWith((p) => {
+        (p as Record<string, unknown>).waterLevels = info;
+        (p.anchoring as Record<string, unknown>).normalHighWater = 0.8;
+        (p.anchoring as Record<string, unknown>).normalLowWater = 0.7;
+      }),
+    );
+    expect(set.ok && set.project.waterLevels).toEqual(info);
+    expect(set.ok && [set.project.anchoring.normalHighWater, set.project.anchoring.normalLowWater]).toEqual([0.8, 0.7]);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waterLevels = { ...info, source: 'smhi' }))).ok).toBe(false);
+  });
+
   it('berth types (D34): params, berth types and boom fingers are kept; older files are finger piers', () => {
     const old = parseProject(
       fileWith((p) => {

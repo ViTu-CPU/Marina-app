@@ -8,6 +8,7 @@
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { DEFAULT_ANCHORING, type AnchoringParams } from '../engine/anchoring';
+import { anchoringLevels, type WaterLevelInfo } from '../engine/waterLevels';
 import { DEFAULT_WAVES, type WaveSettings } from '../engine/waves';
 import type { PriceList } from '../engine/catalog';
 import { DEFAULT_BOAT_CLASSES, DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
@@ -114,6 +115,7 @@ export function emptyProject(): Project {
     anchoring: structuredClone(DEFAULT_ANCHORING),
     cost: { ...DEFAULT_COST },
     waves: structuredClone(DEFAULT_WAVES),
+    waterLevels: null,
     generatedFrom: null,
   };
 }
@@ -218,6 +220,8 @@ export interface AppState {
   setAnchoring: (patch: Partial<AnchoringParams>, options?: CommitOptions) => void;
   /** D40: inputs of the wave screening. */
   setWaves: (patch: Partial<WaveSettings>, options?: CommitOptions) => void;
+  /** D50: keep a gauge's levels and set the anchoring water levels from them (one undo step). */
+  applyWaterLevels: (info: WaterLevelInfo) => void;
   /** D24: product choices; `priceList` replaces the built-in list (null restores it). */
   setCost: (patch: Partial<CostSettings>, options?: CommitOptions) => void;
   setBuiltInPriceList: (list: PriceList | null, error?: string | null) => void;
@@ -413,6 +417,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       setMap: (map, options) => get().commit((p) => ({ ...p, map }), options),
       setAnchoring: (patch, options) => get().commit((p) => ({ ...p, anchoring: { ...p.anchoring, ...patch } }), options),
       setWaves: (patch, options) => get().commit((p) => ({ ...p, waves: { ...p.waves, ...patch } }), options),
+      applyWaterLevels: (info) => get().commit((p) => ({ ...p, waterLevels: info, anchoring: { ...p.anchoring, ...anchoringLevels(info.levels) } })),
       setCost: (patch, options) => get().commit((p) => ({ ...p, cost: { ...p.cost, ...patch } }), options),
       setBuiltInPriceList: (builtInPriceList, priceListError = null) => set({ builtInPriceList, priceListError }),
 
