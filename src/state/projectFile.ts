@@ -312,6 +312,7 @@ function anchoring(v: unknown): AnchoringParams {
     friction: { clay: mu('clay'), sand: mu('sand'), rock: mu('rock') },
     chainLengthFactor: pick('chainLengthFactor'),
     maxAnchorMass: pick('maxAnchorMass'),
+    tipAnchorMinLength: pick('tipAnchorMinLength'),
     anchorType: o.anchorType === undefined ? d.anchorType : oneOf(o.anchorType, ['block', 'wedge'] as const, 'anchoring.anchorType'),
     waterDensity: pick('waterDensity'),
     concreteDensity: pick('concreteDensity'),
@@ -321,6 +322,7 @@ function anchoring(v: unknown): AnchoringParams {
   if (result.lineSpacing <= 0) fail('anchoring.lineSpacing must be positive');
   if (result.splayAngle < 0 || result.splayAngle > MAX_SPLAY_ANGLE) fail(`anchoring.splayAngle must be between 0 and ${MAX_SPLAY_ANGLE}`);
   if (result.maxAnchorMass <= 0) fail('anchoring.maxAnchorMass must be positive');
+  if (result.tipAnchorMinLength < 0) fail('anchoring.tipAnchorMinLength must not be negative');
   if (Object.values(result.friction).some((x) => x <= 0)) fail('anchoring.friction values must be positive');
   return result;
 }

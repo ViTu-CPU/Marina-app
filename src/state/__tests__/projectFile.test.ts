@@ -112,6 +112,12 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parseProject(fileWith((p) => ((p.params as Record<string, unknown>).fingerLengths = [6, -1]))).ok).toBe(false);
   });
 
+  it('files from before tip chains open with the default limit 10 m; it must not be negative (D30)', () => {
+    const old = parseProject(fileWith((p) => delete (p.anchoring as Record<string, unknown>).tipAnchorMinLength));
+    expect(old.ok && old.project.anchoring.tipAnchorMinLength).toBe(10);
+    expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).tipAnchorMinLength = -1))).ok).toBe(false);
+  });
+
   it('files from before splayed chains open with the default splay angle; it must lie in 0–80° (D25, I61)', () => {
     const parsed = parseProject(fileWith((p) => delete (p.anchoring as Record<string, unknown>).splayAngle));
     expect(parsed.ok && parsed.project.anchoring.splayAngle).toBe(45);

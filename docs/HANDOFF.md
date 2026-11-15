@@ -12,7 +12,7 @@ suomeksi, UI pysyy englanniksi.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D29, I67, U20).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D31, I70, U20).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013,
   AS 3962) – kaikki on alustavaa ja vaatii pätevän suunnittelijan tarkastuksen.
@@ -20,12 +20,12 @@ suomeksi, UI pysyy englanniksi.
   "ESTIMATE". Kysy minulta, jos tarvitset jotain parempaan tulokseen.
 
 ## Tilanne (2026-11-14, kolmannen istunnon jälkeen)
-Testit 338/338, e2e 18 vaihetta. Aiemmin tehty: tutkimus (RESEARCH.md), venepaikat
+Testit 345/345, e2e 18 vaihetta. Aiemmin tehty: tutkimus (RESEARCH.md), venepaikat
 kappalemäärinä (D20), rantaponttoni (D21), muokkaus (D22), hinnasto data/hinnasto.xlsx (D19),
 ankkurointisuunnitelma (D23), tuoteluettelo + kustannusarvio (D24), UFC-tuulikuorma ja
 lähteistetyt oletukset (I54–I57), kiila-ankkurit (I59).
 
-Kolmannessa istunnossa (omistajan päätökset D25–D28):
+Kolmannessa istunnossa (omistajan päätökset D25–D30):
 1. **Vinot ketjut (D25, I60–I61)**: laiturin kaikki ketjut ovat vinossa θ = 45° kohtisuorasta
    (parametri `splayAngle`, 0–80°). Rannanpuoleinen puolisko on vinossa kärkeä kohti ja kantaa
    mereltä tulevan tuulen, kärjenpuoleinen puolisko rantaa kohti ja kantaa rannalta tulevan.
@@ -47,10 +47,15 @@ Kolmannessa istunnossa (omistajan päätökset D25–D28):
    siihen liittyvät laiturit kuormitusleveyden mukaan; laiturit lisäävät osuutensa rannan
    puolelta tulevaan kuormaansa. Seinäkiinnike = hinnaston kategoria `wall_fixing` (Savorakin
    kalliosilmukka 20 mm, kapasiteettia ei julkaistu).
+7. **Vakiopituiset aisat (D29, I67)**: sormen pituus pyöristetään ylöspäin projektin
+   pituuslistaan (oletus Top Marinen 4–10 m, 10,5 ja 12 m; Marinetek julkaisee vain alueet).
+8. **Kärkiketjut (D30, I68–I69)**: päälaiturin kärkeen ja ≥ 10 m:n aisojen kärkiin kaksi
+   ristikkäistä ketjua. Aisan kärki kantaa puolet viereisten veneiden täydestä kylkituulesta
+   (UFC). Suorakaidedemossa ankkurimassa 1 240 t → 1 842 t (betonipaino, savi).
 
 ## Avoimet asiat, ehdotettu järjestys
-1. **Pitkien sormilaiturien kärkiankkurointi.**
-2. Kulkusillan paikka rantaponttonilla on oletus (keskellä); käyttäjä voisi sijoittaa sen.
+1. Kulkusillan paikka rantaponttonilla on oletus (keskellä); käyttäjä voisi sijoittaa sen.
+2. Marinetekin yksittäiset aisapituudet (jos saatavilla) pituuslistan oletukseksi.
 3. Hinnaston aukot: A-Laiturit G40 -ketjujen murtokuorma (kysyttävä toimittajalta);
    asennuksen tuntimenekit, työveneen päivähinta ja Marinetekin hinnat ovat oletuksia.
    Top Marinen MD-paketin hinta on eri sivuilla ristiriitainen (RESEARCH §2.3).

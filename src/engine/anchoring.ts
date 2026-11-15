@@ -45,7 +45,7 @@
  */
 import { unitPriceVat0, type PriceList, type Product } from './catalog';
 import { add, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
-import type { BoatClass, Issue, Layout, MainPier, Site, Vec2 } from './model';
+import type { BoatClass, Finger, Issue, Layout, MainPier, Site, Vec2 } from './model';
 import { pierAxis } from './rows';
 import { accessPontoonsOf, SHORE_TOLERANCE } from './site';
 
@@ -93,6 +93,11 @@ export interface AnchoringParams {
   chainLengthFactor: number;
   /** Heaviest single concrete anchor to be handled, kg; heavier needs give several anchors. */
   maxAnchorMass: number;
+  /**
+   * Main piers and fingers at least this long get two crossed tip chains (D30), m. A value
+   * longer than every pier and finger turns them off.
+   */
+  tipAnchorMinLength: number;
   anchorType: AnchorType;
   waterDensity: number;
   concreteDensity: number;
@@ -120,6 +125,7 @@ export interface AnchoringParams {
  *    (Chalmers 2026 Fig. 4; 12° in its reference case); 45° is from Savorak's instructions for
  *    a cottage-dock kit, "ristiin pohjapainoihin, 45 asteen kulmassa" (savorak.fi, read
  *    2026-11-14) — a light dock, so a weak source for a marina pier.
+ *  - tipAnchorMinLength 10 m: owner's choice (D30).
  *  - Assumptions without a source: depth and water levels (site data), pontoonFreeboard,
  *    lineSpacing, slidingSafetyFactor, friction for clay and rock.
  */
@@ -142,6 +148,7 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   friction: { sand: 0.6, clay: 0.3, rock: 0.5 },
   chainLengthFactor: 4,
   maxAnchorMass: 3000,
+  tipAnchorMinLength: 10,
   anchorType: 'block',
   waterDensity: 1000,
   concreteDensity: 2400,
@@ -182,6 +189,12 @@ export interface AnchorLine {
    * fixing in the quay wall at its gangway (D28); no anchor.
    */
   fixing: 'seabed' | 'wall';
+  /**
+   * 'side': a chain of the stations along a pier or access pontoon; 'tip': one of the two
+   * crossed chains at a pier head; 'finger': one of the two crossed chains at the tip of a
+   * long finger (D30); 'shore': a shore chain (D28).
+   */
+  role: 'side' | 'tip' | 'finger' | 'shore';
   /** Where the chain is fixed to the pontoon. */
   fix: Vec2;
   /** Position of the anchor on the seabed, or of the wall fixing (plan view). */
@@ -214,7 +227,7 @@ export interface AnchoringResult {
 }
 
 export interface AnchoringInput {
-  layout: Pick<Layout, 'piers' | 'berths'>;
+  layout: Pick<Layout, 'piers' | 'berths'> & { fingers?: Finger[] };
   site: Site;
   classes: BoatClass[];
   params: AnchoringParams;
@@ -599,6 +612,60 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   }
   const held: Held[] = [...piers, ...accessItems];
 
+  /** A chain to a concrete anchor `span` from `fix` along `direction` (at least `minSpan`). */
+  const seabedLine = (l: {
+    id: string;
+    holdsId: string;
+    role: AnchorLine['role'];
+    splay: AnchorLine['splay'];
+    governs: AnchorLine['governs'];
+    fix: Vec2;
+    direction: Vec2;
+    H: number;
+    minSpan: number;
+  }) => {
+    const { H } = l;
+    const chain = chooseChain(H, hHigh, p, priceList, vatPct);
+    // Without a chain the uplift is not known; it is left out and the line is flagged.
+    const uplift = chain?.uplift ?? 0;
+    const upAngle = upliftAngle(H, uplift);
+    const wedgeMass = usesWedge(p) && chain ? requiredWedgeMass(H, upAngle, p) : null;
+    const mass = wedgeMass ?? requiredAnchorMass(H, uplift, p);
+    const anchor = chooseAnchor(mass, priceList, vatPct, p.maxAnchorMass);
+    const length = chain?.length ?? chainLengthFor(hHigh, p);
+    const span = chain ? chain.span : Math.sqrt(length * length - hHigh * hHigh);
+    lines.push({
+      id: l.id,
+      holdsId: l.holdsId,
+      splay: l.splay,
+      governs: l.governs,
+      fixing: 'seabed',
+      role: l.role,
+      fix: l.fix,
+      // A crossed chain passes under the pontoon: the anchor is `span` from the fixing
+      // point, on the far side.
+      anchor: add(l.fix, scale(l.direction, Math.max(span, l.minSpan))),
+      horizontalKn: H / 1000,
+      topTensionKn: (chain?.topTension ?? H) / 1000,
+      upliftKn: uplift / 1000,
+      upliftAngleDeg: upAngle,
+      anchorType: wedgeMass === null ? 'block' : 'wedge',
+      chainLength: length,
+      chainId: chain?.product.id ?? null,
+      requiredAnchorKg: mass,
+      anchorId: anchor?.product.id ?? null,
+      anchorCount: anchor?.count ?? 0,
+    });
+    if (!chain) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(H / 1000).toFixed(1)} kN with the safety factor; line ${l.id} has no chain.`, l.holdsId);
+    if (anchor && anchor.count > 1) {
+      warn(
+        'SEVERAL_ANCHORS',
+        `Line ${l.id} needs ${Math.round(mass)} kg: ${anchor.count} anchors of ${anchor.product.anchorMassKg} kg. Several anchors on one line do not necessarily hold as much as one anchor of the same total mass.`,
+        l.holdsId,
+      );
+    }
+  };
+
   for (const item of held) {
     const { length, along, left } = pierAxis({ ...item, locked: false, origin: 'manual' });
     if (!(length > 0)) continue;
@@ -611,9 +678,14 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     const splayOf = (t: number): AnchorLine['splay'] => (angle === 0 ? 'none' : t <= length / 2 + 1e-9 ? 'head' : 'shore');
     const count = { head: 0, shore: 0, none: 0 };
     for (const t of stations) count[splayOf(t)] += 2;
-    // Across: the `pairs` lines of one side share the load. Along: the lines splayed against
-    // the wind share it (wind from the sea pushes the pier shorewards: the 'head' lines hold).
-    const acrossH = item.lateral / pairs / Math.cos(angle);
+    // D30: a main pier at least `tipAnchorMinLength` long gets two crossed chains at its head,
+    // splayed outwards (anchors beyond the head). They hold wind from the sea with the other
+    // head-ward lines and count as one more station across.
+    const tip = item.splayed && length >= p.tipAnchorMinLength - 1e-9;
+    if (tip) count[angle === 0 ? 'none' : 'head'] += 2;
+    // Across: the lines of one side share the load. Along: the lines splayed against the wind
+    // share it (wind from the sea pushes the pier shorewards: the 'head' lines hold).
+    const acrossH = item.lateral / (pairs + (tip ? 1 : 0)) / Math.cos(angle);
     const alongH = (splay: AnchorLine['splay']): number => {
       if (splay === 'none') return 0;
       const force = splay === 'head' ? item.axialFromSea : item.axialFromShore;
@@ -623,48 +695,19 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       unheld.push(item.id);
     }
 
-    const addLine = (fix: Vec2, direction: Vec2, splay: AnchorLine['splay'], offset: number, n: number) => {
+    const addLine = (fix: Vec2, direction: Vec2, splay: AnchorLine['splay'], role: AnchorLine['role'], id: string) => {
       const alongLoad = alongH(splay);
-      const H = Math.max(acrossH, alongLoad);
-      const governs: AnchorLine['governs'] = alongLoad > acrossH ? 'along' : 'across';
-      const chain = chooseChain(H, hHigh, p, priceList, vatPct);
-      // Without a chain the uplift is not known; it is left out and the line is flagged.
-      const uplift = chain?.uplift ?? 0;
-      const upAngle = upliftAngle(H, uplift);
-      const wedgeMass = usesWedge(p) && chain ? requiredWedgeMass(H, upAngle, p) : null;
-      const mass = wedgeMass ?? requiredAnchorMass(H, uplift, p);
-      const anchor = chooseAnchor(mass, priceList, vatPct, p.maxAnchorMass);
-      const length = chain?.length ?? chainLengthFor(hHigh, p);
-      const span = chain ? chain.span : Math.sqrt(length * length - hHigh * hHigh);
-      lines.push({
-        id: `${item.id}-A${n}`,
+      seabedLine({
+        id,
         holdsId: item.id,
+        role,
         splay,
-        governs,
-        fixing: 'seabed',
+        governs: alongLoad > acrossH ? 'along' : 'across',
         fix,
-        // A crossed chain passes under the pontoon: the anchor is `span` from the fixing
-        // point, on the far side.
-        anchor: add(fix, scale(direction, Math.max(span, (offset + 1) / Math.cos(angle)))),
-        horizontalKn: H / 1000,
-        topTensionKn: (chain?.topTension ?? H) / 1000,
-        upliftKn: uplift / 1000,
-        upliftAngleDeg: upAngle,
-        anchorType: wedgeMass === null ? 'block' : 'wedge',
-        chainLength: length,
-        chainId: chain?.product.id ?? null,
-        requiredAnchorKg: mass,
-        anchorId: anchor?.product.id ?? null,
-        anchorCount: anchor?.count ?? 0,
+        direction,
+        H: Math.max(acrossH, alongLoad),
+        minSpan: (item.width + 1) / Math.cos(angle),
       });
-      if (!chain) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(H / 1000).toFixed(1)} kN with the safety factor; line ${item.id}-A${n} has no chain.`, item.id);
-      if (anchor && anchor.count > 1) {
-        warn(
-          'SEVERAL_ANCHORS',
-          `Line ${item.id}-A${n} needs ${Math.round(mass)} kg: ${anchor.count} anchors of ${anchor.product.anchorMassKg} kg. Several anchors on one line do not necessarily hold as much as one anchor of the same total mass.`,
-          item.id,
-        );
-      }
     };
 
     let n = 0;
@@ -673,8 +716,14 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       const towards = scale(along, splay === 'shore' ? -Math.sin(angle) : Math.sin(angle));
       // Fixed on the left edge, anchored on the right (holds against wind from the right) and
       // vice versa. In front of a wall only the line anchored on the water side (D28).
-      if (item.wallSide !== 'right') addLine(at(t, item.width / 2), add(scale(left, -Math.cos(angle)), towards), splay, item.width, ++n);
-      if (item.wallSide !== 'left') addLine(at(t, -item.width / 2), add(scale(left, Math.cos(angle)), towards), splay, item.width, ++n);
+      if (item.wallSide !== 'right') addLine(at(t, item.width / 2), add(scale(left, -Math.cos(angle)), towards), splay, 'side', `${item.id}-A${++n}`);
+      if (item.wallSide !== 'left') addLine(at(t, -item.width / 2), add(scale(left, Math.cos(angle)), towards), splay, 'side', `${item.id}-A${++n}`);
+    }
+    if (tip) {
+      const splay: AnchorLine['splay'] = angle === 0 ? 'none' : 'head';
+      const out = scale(along, Math.sin(angle));
+      addLine(at(length, item.width / 2), add(scale(left, -Math.cos(angle)), out), splay, 'tip', `${item.id}-T1`);
+      addLine(at(length, -item.width / 2), add(scale(left, Math.cos(angle)), out), splay, 'tip', `${item.id}-T2`);
     }
 
     // Shore chains at the gangway: two, crossed at the splay angle, from the wall-side edge
@@ -699,6 +748,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
           splay: 'none',
           governs: alongH > offshoreH ? 'along' : 'across',
           fixing: 'wall',
+          role: 'shore',
           fix,
           anchor: add(fix, scale(dir, set.plan)),
           horizontalKn: H / 1000,
@@ -715,6 +765,52 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
         if (!shore.product) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(shore.tension / 1000).toFixed(1)} kN with the safety factor; shore chain ${id} has no chain.`, item.id);
       }
     }
+  }
+
+  // D30: fingers at least `tipAnchorMinLength` long get two crossed chains at their tip. The
+  // finger carries the full broadside wind of the boats beside it (UFC 4-152-07 C1
+  // §6-3.4.1.4: individual fingers take the full load, no shielding); as a beam held at the
+  // pier and at the tip the tip takes half (assumption). One chain holds each side.
+  let tipFingers = 0;
+  for (const finger of layout.fingers ?? []) {
+    const pier = layout.piers.find((x) => x.id === finger.pierId);
+    if (!pier || finger.shape.length < 3) continue;
+    const { along, left } = pierAxis(pier);
+    const local = finger.shape.map((v) => ({ s: dot(sub(v, pier.start), along), d: dot(sub(v, pier.start), left) }));
+    const sign = local.reduce((a, v) => a + v.d, 0) >= 0 ? 1 : -1;
+    const side: 'left' | 'right' = sign > 0 ? 'left' : 'right';
+    const s0 = Math.min(...local.map((v) => v.s));
+    const s1 = Math.max(...local.map((v) => v.s));
+    const dIn = Math.min(...local.map((v) => sign * v.d));
+    const dOut = Math.max(...local.map((v) => sign * v.d));
+    if (dOut - dIn < p.tipAnchorMinLength - 1e-9) continue;
+    const byId = new Map(classes.map((c) => [c.id, c]));
+    let area = 0;
+    for (const b of layout.berths) {
+      if (b.pierId !== pier.id || b.side !== side || b.removed) continue;
+      const c = byId.get(b.boatClassId);
+      if (!c) continue;
+      const bs = b.slot.map((v) => dot(sub(v, pier.start), along));
+      if (Math.abs(Math.max(...bs) - s0) < 0.05 || Math.abs(Math.min(...bs) - s1) < 0.05) area += c.length * p.profileHeightRatio * c.length;
+    }
+    const F = k * area;
+    if (!(F > 0)) continue;
+    loads.push({ id: finger.id, lateralKn: F / 1000, axialFromSeaKn: 0, axialFromShoreKn: 0 });
+    tipFingers++;
+    const outward = scale(left, sign);
+    const corner = (s: number) => add(add(pier.start, scale(along, s)), scale(left, sign * dOut));
+    const out = scale(outward, Math.sin(theta));
+    const H = F / 2 / Math.cos(theta);
+    const minSpan = (s1 - s0 + 1) / Math.cos(theta);
+    const common = { holdsId: finger.id, role: 'finger' as const, splay: 'none' as const, governs: 'across' as const, H, minSpan };
+    seabedLine({ ...common, id: `${finger.id}-T1`, fix: corner(s0), direction: add(scale(along, Math.cos(theta)), out) });
+    seabedLine({ ...common, id: `${finger.id}-T2`, fix: corner(s1), direction: add(scale(along, -Math.cos(theta)), out) });
+  }
+  if (tipFingers > 0) {
+    warn(
+      'FINGER_TIP_CHAINS',
+      `${tipFingers} fingers of ${p.tipAnchorMinLength.toFixed(1)} m or more have 2 crossed tip chains each, sized for half of the full broadside wind on the boats beside them (UFC 4-152-07: individual fingers take the full wind load). The fingers and their joints to the pier are not checked.`,
+    );
   }
 
   if (unheld.length > 0) {

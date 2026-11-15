@@ -209,7 +209,8 @@ describe('anchoring plan of a pier', () => {
     obstacles: [],
     zones: [],
   };
-  const params: AnchoringParams = { ...DEFAULT_ANCHORING, seabed: 'sand' };
+  // Tip chains (D30) are off in this block, which checks the side lines; see 'tip chains'.
+  const params: AnchoringParams = { ...DEFAULT_ANCHORING, seabed: 'sand', tipAnchorMinLength: 1000 };
   const plan = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
 
   it('wind loads', () => {
@@ -383,6 +384,74 @@ describe('anchoring plan of a pier', () => {
     });
   });
 
+  describe('tip chains (D30)', () => {
+    const withTips: AnchoringParams = { ...DEFAULT_ANCHORING, seabed: 'sand' };
+
+    it('a pier of 10 m or more gets two crossed chains at its head, splayed outwards', () => {
+      // As above, plus the tip pair: across 14 036 / (4 + 1) / cos 45° = 3 970.0 N; wind from
+      // the sea shared by 4 + 2 head-ward lines, 12 342 / 6 / sin 45° = 2 909.0 N; wind from the
+      // shore by the 4 shore-ward lines, 12 342 / 4 / sin 45° = 4 363.6 N (governs those).
+      const planT = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params: withTips, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+      expect(planT.lines).toHaveLength(10);
+      const across = 14036 / 5 / Math.SQRT1_2 / 1000;
+      const tips = planT.lines.filter((l) => l.role === 'tip');
+      expect(tips.map((l) => l.id)).toEqual(['P1-T1', 'P1-T2']);
+      for (const l of tips) {
+        expect(l.horizontalKn).toBeCloseTo(across, 9);
+        expect(l.splay).toBe('head');
+        expect(l.fix.y).toBeCloseTo(30, 9);
+        expect(l.anchor.y).toBeGreaterThan(30);
+        expect(Math.sign(l.fix.x)).toBe(-Math.sign(l.anchor.x));
+        expect(l.anchor.y - l.fix.y).toBeCloseTo(Math.abs(l.anchor.x - l.fix.x), 9);
+      }
+      for (const l of planT.lines.filter((x) => x.role === 'side' && x.splay === 'head')) {
+        expect(l.horizontalKn).toBeCloseTo(across, 9);
+        expect(l.governs).toBe('across');
+      }
+      for (const l of planT.lines.filter((x) => x.splay === 'shore')) {
+        expect(l.horizontalKn).toBeCloseTo(12342 / 4 / Math.SQRT1_2 / 1000, 9);
+        expect(l.governs).toBe('along');
+      }
+      // A limit above the pier length turns them off.
+      const off = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params: { ...withTips, tipAnchorMinLength: 30.5 }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+      expect(off.lines.some((l) => l.role === 'tip')).toBe(false);
+    });
+
+    it('a finger of 10 m or more: half the full broadside wind of its boats at the tip, one chain per side', () => {
+      // Finger 10 m × 0.8 m on the left of the pier at y = 10…10.8, a 12 m × 3.5 m boat each side.
+      // Broadside 12 · (0.15 · 12) = 21.6 m² each → 43.2 m² · 484 Pa = 20 908.8 N, no shielding
+      // (UFC 4-152-07); the tip takes half, 10 454.4 N; each chain 10 454.4 / cos 45° = 14 784.6 N.
+      const big: BoatClass = { id: 'b12', name: '12 m', length: 12, beam: 3.5, color: '#000', share: 1, count: 0 };
+      const slot = (y0: number, y1: number) => [{ x: -1.5, y: y0 }, { x: -1.5, y: y1 }, { x: -14, y: y1 }, { x: -14, y: y0 }];
+      const two: Berth[] = [
+        { id: 'P1-L1', pierId: 'P1', side: 'left', boatClassId: 'b12', slot: slot(6, 10), boat: [], removed: false, issues: [] },
+        { id: 'P1-L2', pierId: 'P1', side: 'left', boatClassId: 'b12', slot: slot(10.8, 14.8), boat: [], removed: false, issues: [] },
+      ];
+      const finger = { id: 'P1-F1', pierId: 'P1', shape: [{ x: -1.5, y: 10 }, { x: -1.5, y: 10.8 }, { x: -11.5, y: 10.8 }, { x: -11.5, y: 10 }] };
+      const planF = anchoringPlan({ layout: { piers: [pier], berths: two, fingers: [finger] }, site, classes: [big], params: withTips, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+      expect(planF.loads.find((l) => l.id === 'P1-F1')!.lateralKn).toBeCloseTo(20.9088, 6);
+      const tipLines = planF.lines.filter((l) => l.role === 'finger');
+      expect(tipLines.map((l) => l.id)).toEqual(['P1-F1-T1', 'P1-F1-T2']);
+      for (const l of tipLines) {
+        expect(l.holdsId).toBe('P1-F1');
+        expect(l.horizontalKn).toBeCloseTo(10.4544 / Math.SQRT1_2, 6);
+        // Fixed at the tip corners, anchored beyond the tip and across the finger (crossed).
+        expect(l.fix.x).toBeCloseTo(-11.5, 9);
+        expect(l.anchor.x).toBeLessThan(-11.5);
+        expect(Math.abs(l.anchor.y - l.fix.y)).toBeCloseTo(Math.abs(l.anchor.x - l.fix.x), 9);
+      }
+      expect(tipLines[0]!.fix.y).toBeCloseTo(10, 9);
+      expect(tipLines[0]!.anchor.y).toBeGreaterThan(10.8);
+      expect(tipLines[1]!.fix.y).toBeCloseTo(10.8, 9);
+      expect(tipLines[1]!.anchor.y).toBeLessThan(10);
+      expect(planF.issues.some((i) => i.code === 'FINGER_TIP_CHAINS')).toBe(true);
+      // Shorter than the limit: no tip chains.
+      const short = anchoringPlan({ layout: { piers: [pier], berths: two, fingers: [finger] }, site, classes: [big], params: { ...withTips, tipAnchorMinLength: 10.5 }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+      expect(short.lines.some((l) => l.role === 'finger')).toBe(false);
+      expect(short.issues.some((i) => i.code === 'FINGER_TIP_CHAINS')).toBe(false);
+    });
+  });
+
   it('tributary lengths: half-way to the neighbours, the ends to the ends', () => {
     expect(tributaryLengths([50, 70], 100)).toEqual([60, 40]);
     expect(tributaryLengths([70, 50], 100)).toEqual([40, 60]);
@@ -406,7 +475,7 @@ describe('anchoring plan of a pier', () => {
     expect(again).toEqual(plan);
   });
   it('wedge anchors on clay: chains lengthened to the 5° limit, mass from Table 35', () => {
-    const clay: AnchoringParams = { ...DEFAULT_ANCHORING, seabed: 'clay', anchorType: 'wedge' };
+    const clay: AnchoringParams = { ...params, seabed: 'clay', anchorType: 'wedge' };
     const wedge = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params: clay, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
     const w13 = 3.1 * 9.81 * (1 - 1000 / 7850);
     for (const l of wedge.lines) {
@@ -430,7 +499,7 @@ describe('anchoring plan of a pier', () => {
   });
 
   it('wedge anchors are not sized on rock: plain blocks and a warning', () => {
-    const rock: AnchoringParams = { ...DEFAULT_ANCHORING, seabed: 'rock', anchorType: 'wedge' };
+    const rock: AnchoringParams = { ...params, seabed: 'rock', anchorType: 'wedge' };
     const onRock = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params: rock, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
     const line = onRock.lines[0]!;
     expect(line.anchorType).toBe('block');

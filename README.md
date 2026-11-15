@@ -114,7 +114,8 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 - Anchoring plan for one design depth, shown as a map layer: crossed chain pairs and
   concrete anchors per pier and access pontoon, chain and anchor chosen from the price list
   by breaking load and required mass; anchor type concrete block (friction) or concrete wedge
-  (Pearl Harbor type, published capacities). An access pontoon in front of the shore has
+  (Pearl Harbor type, published capacities). Main piers and fingers of 10 m or more get two
+  crossed chains at their tip. An access pontoon in front of the shore has
   chains on the water side only and is held off the wall by two shore chains at its gangway
   and by the piers attached to it. All factors are editable; a quantity estimate, not a
   mooring design.

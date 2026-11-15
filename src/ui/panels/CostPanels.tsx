@@ -88,6 +88,7 @@ export function AnchoringSection() {
       <AnchoringField name="leewardFactor" min={0} max={1} step={0.05} />
       <AnchoringField name="lineSpacing" min={1} max={100} step={1} />
       <AnchoringField name="splayAngle" min={0} max={MAX_SPLAY_ANGLE} step={5} />
+      <AnchoringField name="tipAnchorMinLength" min={0} max={1000} step={0.5} />
       <AnchoringField name="chainLengthFactor" min={1} max={10} step={0.5} />
       <AnchoringField name="chainSafetyFactor" min={1} max={10} step={0.1} />
       <AnchoringField name="corrosionAllowance" min={0} max={10} step={0.5} />

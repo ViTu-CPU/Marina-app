@@ -153,6 +153,7 @@ describe('cost estimate, hand-calculated', () => {
     splay: 'none',
     governs: 'across',
     fixing: 'seabed',
+    role: 'side',
     fix: { x: 0, y: 0 },
     anchor: { x: 10, y: 0 },
     horizontalKn: 5,
@@ -220,7 +221,7 @@ describe('cost estimate, hand-calculated', () => {
   });
 
   it('shore chains (D28): one wall fixing each, no anchor, no work-boat time', () => {
-    const wall = (id: string): AnchorLine => ({ ...line(id), fixing: 'wall', anchorType: null, anchorId: null, anchorCount: 0, requiredAnchorKg: 0, chainLength: 3 });
+    const wall = (id: string): AnchorLine => ({ ...line(id), fixing: 'wall', role: 'shore', anchorType: null, anchorId: null, anchorCount: 0, requiredAnchorKg: 0, chainLength: 3 });
     const withWall: AnchoringResult = { lines: [line('A1'), wall('S1'), wall('S2')], loads: [], issues: [] };
     const list: PriceList = { ...LIST, products: [...LIST.products, product({ id: 'wf', category: 'wall_fixing', price: 18 })] };
     const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: list, choices, anchoring: withWall });
