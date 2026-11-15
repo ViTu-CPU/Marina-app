@@ -315,13 +315,13 @@ parameter is shown with its source or marked **assumption**.
    the pier the lines of the loaded side share the load, `H = F / pairs / cos θ`; along it the
    lines splayed against the wind share it, `H = F / lines / sin θ`; each line takes the larger
    (both directions checked separately, UFC §6-3.4.1.4). Equal sharing is an **assumption**.
-   **Tip chains** (D30, I68–I69): two crossed chains at the head of each main pier and at the
-   tip of each finger ≥ 10 m; a finger's tip chains take half the full broadside wind of the
-   boats beside it (UFC 4-152-07 C1 §6-3.4.1.4, *"Individual fingers, however, should be designed
-   to accommodate the full wind load on the berthed craft"*). Neither UFC 4-152-07 nor DBW 2005
-   gives a rule for chains at finger tips; DBW recommends guide piles *"at the ends of all
-   fingerfloats adjacent to channels"* (D2.1) and mooring piles in double berths over 36 ft
-   (D2.2), which the tool does not model.
+   **Tip anchoring** (D30, D31, I68, I72): two crossed chains at the head of each main pier;
+   an **end pile** at the tip of each finger longer than 12 m (*"Longer than 12 m Super Yacht and
+   Concrete Fingers are moored with end piles"*, Marinetek 2012, §9.12), sized for half the full
+   broadside wind of the boats beside it (UFC 4-152-07 C1 §6-3.4.1.4, *"Individual fingers,
+   however, should be designed to accommodate the full wind load on the berthed craft"*), with
+   the smallest Marinetek pile guide (20/40/70 kN). DBW 2005 also recommends guide piles *"at the
+   ends of all fingerfloats adjacent to channels"* (D2.1).
 4. **Chain length and catenary**: chain length `L = max(h + 1 m, k · h)` with
    `h` = depth + high water and **`k = 4`**: "A common initial design assumption used by SF
    Marina is that the chain length is approximately four times the HAT water depth"

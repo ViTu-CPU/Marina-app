@@ -115,6 +115,9 @@ describe('project file (SPEC §2: JSON export/import)', () => {
   it('files from before tip chains open with the default limit 10 m; it must not be negative (D30)', () => {
     const old = parseProject(fileWith((p) => delete (p.anchoring as Record<string, unknown>).tipAnchorMinLength));
     expect(old.ok && old.project.anchoring.tipAnchorMinLength).toBe(10);
+    const noPile = parseProject(fileWith((p) => delete (p.anchoring as Record<string, unknown>).fingerPileMinLength));
+    expect(noPile.ok && noPile.project.anchoring.fingerPileMinLength).toBe(12);
+    expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).fingerPileMinLength = -1))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).tipAnchorMinLength = -1))).ok).toBe(false);
   });
 

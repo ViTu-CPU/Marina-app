@@ -3,6 +3,7 @@ import {
   anchoringPlan,
   chainLengthFor,
   chainLine,
+  choosePileGuide,
   chooseAnchor,
   chooseChain,
   DEFAULT_ANCHORING,
@@ -417,10 +418,10 @@ describe('anchoring plan of a pier', () => {
       expect(off.lines.some((l) => l.role === 'tip')).toBe(false);
     });
 
-    it('a finger of 10 m or more: half the full broadside wind of its boats at the tip, one chain per side', () => {
+    it('a finger longer than the limit gets an end pile: half the full broadside wind of its boats (D31)', () => {
       // Finger 10 m × 0.8 m on the left of the pier at y = 10…10.8, a 12 m × 3.5 m boat each side.
       // Broadside 12 · (0.15 · 12) = 21.6 m² each → 43.2 m² · 484 Pa = 20 908.8 N, no shielding
-      // (UFC 4-152-07); the tip takes half, 10 454.4 N; each chain 10 454.4 / cos 45° = 14 784.6 N.
+      // (UFC 4-152-07); the pile takes half, 10.454 kN → Marinetek G200 (20 kN).
       const big: BoatClass = { id: 'b12', name: '12 m', length: 12, beam: 3.5, color: '#000', share: 1, count: 0 };
       const slot = (y0: number, y1: number) => [{ x: -1.5, y: y0 }, { x: -1.5, y: y1 }, { x: -14, y: y1 }, { x: -14, y: y0 }];
       const two: Berth[] = [
@@ -428,28 +429,37 @@ describe('anchoring plan of a pier', () => {
         { id: 'P1-L2', pierId: 'P1', side: 'left', boatClassId: 'b12', slot: slot(10.8, 14.8), boat: [], removed: false, issues: [] },
       ];
       const finger = { id: 'P1-F1', pierId: 'P1', shape: [{ x: -1.5, y: 10 }, { x: -1.5, y: 10.8 }, { x: -11.5, y: 10.8 }, { x: -11.5, y: 10 }] };
-      const planF = anchoringPlan({ layout: { piers: [pier], berths: two, fingers: [finger] }, site, classes: [big], params: withTips, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+      const run = (over: Partial<AnchoringParams>) =>
+        anchoringPlan({ layout: { piers: [pier], berths: two, fingers: [finger] }, site, classes: [big], params: { ...withTips, ...over }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+      // Default: only fingers longer than 12 m (Marinetek) → none for a 10 m finger.
+      const byDefault = run({});
+      expect(byDefault.piles).toEqual([]);
+      expect(byDefault.issues.some((i) => i.code === 'FINGER_END_PILES')).toBe(false);
+      const planF = run({ fingerPileMinLength: 9.5 });
       expect(planF.loads.find((l) => l.id === 'P1-F1')!.lateralKn).toBeCloseTo(20.9088, 6);
-      const tipLines = planF.lines.filter((l) => l.role === 'finger');
-      expect(tipLines.map((l) => l.id)).toEqual(['P1-F1-T1', 'P1-F1-T2']);
-      for (const l of tipLines) {
-        expect(l.holdsId).toBe('P1-F1');
-        expect(l.horizontalKn).toBeCloseTo(10.4544 / Math.SQRT1_2, 6);
-        // Fixed at the tip corners, anchored beyond the tip and across the finger (crossed).
-        expect(l.fix.x).toBeCloseTo(-11.5, 9);
-        expect(l.anchor.x).toBeLessThan(-11.5);
-        expect(Math.abs(l.anchor.y - l.fix.y)).toBeCloseTo(Math.abs(l.anchor.x - l.fix.x), 9);
-      }
-      expect(tipLines[0]!.fix.y).toBeCloseTo(10, 9);
-      expect(tipLines[0]!.anchor.y).toBeGreaterThan(10.8);
-      expect(tipLines[1]!.fix.y).toBeCloseTo(10.8, 9);
-      expect(tipLines[1]!.anchor.y).toBeLessThan(10);
-      expect(planF.issues.some((i) => i.code === 'FINGER_TIP_CHAINS')).toBe(true);
-      // Shorter than the limit: no tip chains.
-      const short = anchoringPlan({ layout: { piers: [pier], berths: two, fingers: [finger] }, site, classes: [big], params: { ...withTips, tipAnchorMinLength: 10.5 }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
-      expect(short.lines.some((l) => l.role === 'finger')).toBe(false);
-      expect(short.issues.some((i) => i.code === 'FINGER_TIP_CHAINS')).toBe(false);
+      expect(planF.piles).toHaveLength(1);
+      const pile = planF.piles[0]!;
+      expect(pile.holdsId).toBe('P1-F1');
+      expect(pile.at.x).toBeCloseTo(-11.5, 9);
+      expect(pile.at.y).toBeCloseTo(10.4, 9);
+      expect(pile.loadKn).toBeCloseTo(10.4544, 6);
+      expect(pile.guide).toBe('G200');
+      // No chains at the finger: the pile holds it.
+      expect(planF.lines.every((l) => l.holdsId === 'P1')).toBe(true);
+      expect(planF.issues.find((i) => i.code === 'FINGER_END_PILES')?.message).toMatch(/^1 fingers longer than 9\.5 m/);
+      // At 35 m/s the load grows by (35/22)²: 26.46 kN → G400 (40 kN).
+      const windy = run({ fingerPileMinLength: 9.5, windSpeed: 35 });
+      expect(windy.piles[0]!.loadKn).toBeCloseTo(10.4544 * (35 / 22) ** 2, 6);
+      expect(windy.piles[0]!.guide).toBe('G400');
     });
+  });
+
+  it('pile guides: the smallest Marinetek guide whose design load is enough', () => {
+    expect(choosePileGuide(15)).toBe('G200');
+    expect(choosePileGuide(20)).toBe('G200');
+    expect(choosePileGuide(25)).toBe('G400');
+    expect(choosePileGuide(60)).toBe('G700');
+    expect(choosePileGuide(75)).toBeNull();
   });
 
   it('tributary lengths: half-way to the neighbours, the ends to the ends', () => {

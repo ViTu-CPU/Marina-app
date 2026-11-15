@@ -127,7 +127,7 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
 
 /**
  * D23: chains (lines) and concrete anchors (squares, about 1.2 m) of the anchoring plan;
- * shore chains end at a wall fixing (small circle, D28).
+ * shore chains end at a wall fixing (small circle, D28); end piles of long fingers (D31).
  */
 function AnchorShapes() {
   const model = useCostModel();
@@ -144,6 +144,9 @@ function AnchorShapes() {
           strokeScaleEnabled={false}
           listening={false}
         />
+      ))}
+      {model.anchoring.piles.map((x) => (
+        <Circle key={x.id} x={x.at.x} y={x.at.y} radius={0.4} fill={COLORS.pier} stroke={COLORS.anchor} strokeWidth={1} strokeScaleEnabled={false} listening={false} />
       ))}
       {model.anchoring.lines
         .filter((l) => l.fixing === 'wall')

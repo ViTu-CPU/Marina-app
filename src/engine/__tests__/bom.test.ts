@@ -167,7 +167,7 @@ describe('cost estimate, hand-calculated', () => {
     anchorId: 'a1000',
     anchorCount: 1,
   });
-  const anchoring: AnchoringResult = { lines: [line('A1'), line('A2')], loads: [], issues: [] };
+  const anchoring: AnchoringResult = { lines: [line('A1'), line('A2')], piles: [], loads: [], issues: [] };
   const choices = resolveChoices(LIST, DEFAULT_COST, DEFAULT_PARAMS);
   const estimate = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: LIST, choices, anchoring });
   const lineFor = (id: string) => estimate.lines.find((l) => l.productId === id)!;
@@ -222,7 +222,7 @@ describe('cost estimate, hand-calculated', () => {
 
   it('shore chains (D28): one wall fixing each, no anchor, no work-boat time', () => {
     const wall = (id: string): AnchorLine => ({ ...line(id), fixing: 'wall', role: 'shore', anchorType: null, anchorId: null, anchorCount: 0, requiredAnchorKg: 0, chainLength: 3 });
-    const withWall: AnchoringResult = { lines: [line('A1'), wall('S1'), wall('S2')], loads: [], issues: [] };
+    const withWall: AnchoringResult = { lines: [line('A1'), wall('S1'), wall('S2')], piles: [], loads: [], issues: [] };
     const list: PriceList = { ...LIST, products: [...LIST.products, product({ id: 'wf', category: 'wall_fixing', price: 18 })] };
     const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: list, choices, anchoring: withWall });
     const of = (id: string) => e.lines.find((l) => l.productId === id)!;

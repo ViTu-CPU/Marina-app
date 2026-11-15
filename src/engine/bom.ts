@@ -318,6 +318,11 @@ export function costEstimate(input: CostInput): CostEstimate {
     if (fixing) addQty('anchoring', fixing, wallLines, `${wallLines} shore chains`);
     else notes.push('No wall fixing in the price list: the wall fixings of the shore chains are not priced.');
   }
+  // End piles of long fingers (D31): no public prices.
+  if (anchoring.piles.length > 0) {
+    const guides = [...new Set(anchoring.piles.map((x) => x.guide ?? 'above G700'))].join(', ');
+    notes.push(`${anchoring.piles.length} end piles with pile guides (${guides}) for fingers longer than the limit are not priced: no public prices.`);
+  }
 
   // --- Fittings --------------------------------------------------------------------------
   const berths = layout.berths.filter((b) => !b.removed).length;

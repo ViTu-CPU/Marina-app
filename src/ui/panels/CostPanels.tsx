@@ -89,6 +89,7 @@ export function AnchoringSection() {
       <AnchoringField name="lineSpacing" min={1} max={100} step={1} />
       <AnchoringField name="splayAngle" min={0} max={MAX_SPLAY_ANGLE} step={5} />
       <AnchoringField name="tipAnchorMinLength" min={0} max={1000} step={0.5} />
+      <AnchoringField name="fingerPileMinLength" min={0} max={100} step={0.5} />
       <AnchoringField name="chainLengthFactor" min={1} max={10} step={0.5} />
       <AnchoringField name="chainSafetyFactor" min={1} max={10} step={0.1} />
       <AnchoringField name="corrosionAllowance" min={0} max={10} step={0.5} />
@@ -133,6 +134,7 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
     (l) => l.anchorCount,
   );
   const wallFixings = anchoring.lines.filter((l) => l.fixing === 'wall').length;
+  const piles = anchoring.piles.length;
   const maxLine = anchoring.lines.reduce((m, l) => Math.max(m, l.horizontalKn), 0);
   const maxMass = anchoring.lines.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
   return (
@@ -164,6 +166,12 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
             <span className="shrink-0">{formatCount(c, language)}</span>
           </div>
         ))}
+        {piles > 0 && (
+          <div className="flex justify-between gap-2 text-xs">
+            <span className="truncate">{t('anchoring.endPiles')}</span>
+            <span className="shrink-0">{formatCount(piles, language)}</span>
+          </div>
+        )}
         {wallFixings > 0 && (
           <div className="flex justify-between gap-2 text-xs">
             <span className="truncate">{t('anchoring.wallFixings')}</span>

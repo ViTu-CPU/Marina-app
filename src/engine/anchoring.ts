@@ -94,10 +94,12 @@ export interface AnchoringParams {
   /** Heaviest single concrete anchor to be handled, kg; heavier needs give several anchors. */
   maxAnchorMass: number;
   /**
-   * Main piers and fingers at least this long get two crossed tip chains (D30), m. A value
-   * longer than every pier and finger turns them off.
+   * Main piers at least this long get two crossed tip chains (D30), m. A value longer than
+   * every pier turns them off.
    */
   tipAnchorMinLength: number;
+  /** Fingers longer than this get an end pile at the tip (D31), m. */
+  fingerPileMinLength: number;
   anchorType: AnchorType;
   waterDensity: number;
   concreteDensity: number;
@@ -126,6 +128,8 @@ export interface AnchoringParams {
  *    a cottage-dock kit, "ristiin pohjapainoihin, 45 asteen kulmassa" (savorak.fi, read
  *    2026-11-14) — a light dock, so a weak source for a marina pier.
  *  - tipAnchorMinLength 10 m: owner's choice (D30).
+ *  - fingerPileMinLength 12 m: "Longer than 12 m Super Yacht and Concrete Fingers are moored with
+ *    end piles" (Marinetek catalogue 2012, p. 27; owner's choice D31).
  *  - Assumptions without a source: depth and water levels (site data), pontoonFreeboard,
  *    lineSpacing, slidingSafetyFactor, friction for clay and rock.
  */
@@ -149,6 +153,7 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   chainLengthFactor: 4,
   maxAnchorMass: 3000,
   tipAnchorMinLength: 10,
+  fingerPileMinLength: 12,
   anchorType: 'block',
   waterDensity: 1000,
   concreteDensity: 2400,
@@ -191,10 +196,9 @@ export interface AnchorLine {
   fixing: 'seabed' | 'wall';
   /**
    * 'side': a chain of the stations along a pier or access pontoon; 'tip': one of the two
-   * crossed chains at a pier head; 'finger': one of the two crossed chains at the tip of a
-   * long finger (D30); 'shore': a shore chain (D28).
+   * crossed chains at a pier head (D30); 'shore': a shore chain (D28).
    */
-  role: 'side' | 'tip' | 'finger' | 'shore';
+  role: 'side' | 'tip' | 'shore';
   /** Where the chain is fixed to the pontoon. */
   fix: Vec2;
   /** Position of the anchor on the seabed, or of the wall fixing (plan view). */
@@ -219,8 +223,36 @@ export interface AnchorLine {
   anchorCount: number;
 }
 
+/**
+ * Marinetek's standard pile guides: design pile load and pile diameter (Pile Guides brochure,
+ * docs/RESEARCH.md §9.12).
+ */
+export const PILE_GUIDES = [
+  { id: 'G200', loadKn: 20, pile: '305–356 mm' },
+  { id: 'G400', loadKn: 40, pile: '406–508 mm' },
+  { id: 'G700', loadKn: 70, pile: '762–920 mm' },
+] as const;
+export type PileGuideId = (typeof PILE_GUIDES)[number]['id'];
+
+/** The smallest standard guide whose design pile load is at least `loadKn`; null above all. */
+export const choosePileGuide = (loadKn: number): PileGuideId | null => PILE_GUIDES.find((g) => g.loadKn >= loadKn - 1e-9)?.id ?? null;
+
+/** An end pile at the tip of a long finger (D31). */
+export interface FingerPile {
+  id: string;
+  /** The finger it holds. */
+  holdsId: string;
+  /** Pile position: the middle of the finger's tip (plan view). */
+  at: Vec2;
+  /** Horizontal design load from wind, kN. */
+  loadKn: number;
+  guide: PileGuideId | null;
+}
+
 export interface AnchoringResult {
   lines: AnchorLine[];
+  /** End piles of fingers longer than `fingerPileMinLength` (D31); not priced. */
+  piles: FingerPile[];
   /** Per pier / access pontoon: design wind loads across (larger side) and along the pier, kN. */
   loads: { id: string; lateralKn: number; axialFromSeaKn: number; axialFromShoreKn: number }[];
   issues: Issue[];
@@ -767,11 +799,11 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     }
   }
 
-  // D30: fingers at least `tipAnchorMinLength` long get two crossed chains at their tip. The
-  // finger carries the full broadside wind of the boats beside it (UFC 4-152-07 C1
+  // D31: fingers longer than `fingerPileMinLength` are moored with an end pile (Marinetek).
+  // The finger carries the full broadside wind of the boats beside it (UFC 4-152-07 C1
   // §6-3.4.1.4: individual fingers take the full load, no shielding); as a beam held at the
-  // pier and at the tip the tip takes half (assumption). One chain holds each side.
-  let tipFingers = 0;
+  // pier and at the pile, the pile takes half (assumption).
+  const piles: FingerPile[] = [];
   for (const finger of layout.fingers ?? []) {
     const pier = layout.piers.find((x) => x.id === finger.pierId);
     if (!pier || finger.shape.length < 3) continue;
@@ -783,7 +815,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     const s1 = Math.max(...local.map((v) => v.s));
     const dIn = Math.min(...local.map((v) => sign * v.d));
     const dOut = Math.max(...local.map((v) => sign * v.d));
-    if (dOut - dIn < p.tipAnchorMinLength - 1e-9) continue;
+    if (dOut - dIn <= p.fingerPileMinLength + 1e-9) continue;
     const byId = new Map(classes.map((c) => [c.id, c]));
     let area = 0;
     for (const b of layout.berths) {
@@ -794,23 +826,25 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       if (Math.abs(Math.max(...bs) - s0) < 0.05 || Math.abs(Math.min(...bs) - s1) < 0.05) area += c.length * p.profileHeightRatio * c.length;
     }
     const F = k * area;
-    if (!(F > 0)) continue;
     loads.push({ id: finger.id, lateralKn: F / 1000, axialFromSeaKn: 0, axialFromShoreKn: 0 });
-    tipFingers++;
-    const outward = scale(left, sign);
-    const corner = (s: number) => add(add(pier.start, scale(along, s)), scale(left, sign * dOut));
-    const out = scale(outward, Math.sin(theta));
-    const H = F / 2 / Math.cos(theta);
-    const minSpan = (s1 - s0 + 1) / Math.cos(theta);
-    const common = { holdsId: finger.id, role: 'finger' as const, splay: 'none' as const, governs: 'across' as const, H, minSpan };
-    seabedLine({ ...common, id: `${finger.id}-T1`, fix: corner(s0), direction: add(scale(along, Math.cos(theta)), out) });
-    seabedLine({ ...common, id: `${finger.id}-T2`, fix: corner(s1), direction: add(scale(along, -Math.cos(theta)), out) });
+    const loadKn = F / 2 / 1000;
+    piles.push({
+      id: `${finger.id}-pile`,
+      holdsId: finger.id,
+      at: add(add(pier.start, scale(along, (s0 + s1) / 2)), scale(left, sign * dOut)),
+      loadKn,
+      guide: choosePileGuide(loadKn),
+    });
   }
-  if (tipFingers > 0) {
+  if (piles.length > 0) {
+    const max = piles.reduce((m, x) => Math.max(m, x.loadKn), 0);
     warn(
-      'FINGER_TIP_CHAINS',
-      `${tipFingers} fingers of ${p.tipAnchorMinLength.toFixed(1)} m or more have 2 crossed tip chains each, sized for half of the full broadside wind on the boats beside them (UFC 4-152-07: individual fingers take the full wind load). The fingers and their joints to the pier are not checked.`,
+      'FINGER_END_PILES',
+      `${piles.length} fingers longer than ${p.fingerPileMinLength.toFixed(1)} m are moored with an end pile at the tip (Marinetek: "Longer than 12 m … Fingers are moored with end piles"), each for half the full broadside wind of the boats beside it (UFC 4-152-07); largest ${max.toFixed(1)} kN${choosePileGuide(max) ? ` → pile guide ${choosePileGuide(max)}` : ''}. Piles and guides are not priced and not designed here.`,
     );
+    if (piles.some((x) => x.guide === null)) {
+      warn('PILE_LOAD_ABOVE_STANDARD_GUIDES', `${piles.filter((x) => x.guide === null).length} end piles need more than the 70 kN of Marinetek's strongest standard guide (G700).`);
+    }
   }
 
   if (unheld.length > 0) {
@@ -858,5 +892,5 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     'ANCHORING_NOT_A_DESIGN',
     'Preliminary quantity estimate from wind only. Waves, ice, currents, berthing loads and the capacity of the pontoon fixings are not calculated. Requires design by a qualified engineer (e.g. RIL 201-3-2013, AS 3962).',
   );
-  return { lines, loads, issues };
+  return { lines, piles, loads, issues };
 }

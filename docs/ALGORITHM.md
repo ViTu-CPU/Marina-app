@@ -101,7 +101,7 @@ navigable region, minus piers and row blocks.
 
 ## Anchoring plan and cost estimate (`anchoring.ts`, `bom.ts`)
 
-Derived from a layout, the site and the price list (DECISIONS D23–D30, I47–I69):
+Derived from a layout, the site and the price list (DECISIONS D23–D31, I47–I72):
 
 1. Wind load per pier after UFC 4-152-07 (I54): across the pier the boats are hit bow-on
    (beam × profile height), windward row in full, leeward row 20 %, plus the pier face not
@@ -113,10 +113,11 @@ Derived from a layout, the site and the price list (DECISIONS D23–D30, I47–I
    half towards the shore (wind from the shore). Each direction is checked on its own:
    across, the lines of one side share the load (÷ cos θ); along, the lines splayed against
    it share it (÷ sin θ); a line takes the larger.
-2a. Tip chains (D30, I68–I69): a main pier at least `tipAnchorMinLength` long gets two crossed
+2a. Tip chains (D30, I68): a main pier at least `tipAnchorMinLength` long gets two crossed
    chains at its head, splayed outwards; they count as one more station across and join the
-   head-ward lines along. A finger at least that long gets two crossed chains at its tip,
-   sized for half the full broadside wind of the boats beside it (UFC: no shielding).
+   head-ward lines along. A finger longer than `fingerPileMinLength` (12 m) gets an end pile
+   (D31, I72), sized for half the full broadside wind of the boats beside it (UFC: no
+   shielding), with the smallest Marinetek pile guide that holds it; piles are not priced.
 2b. Access pontoon in front of the shore (D28, I64–I66): square lines on the water side only
    (wind towards the wall). The wind pushing it off the wall is split by tributary length
    between two shore chains at its gangway (assumed at its middle; crossed at θ, to fixings
