@@ -9,7 +9,7 @@ Jatketaan Marina-app-projektia (repo `vitu-cpu/marina-app`). Lue ensin `CLAUDE.m
 suomeksi, UI pysyy englanniksi.
 
 ## Haara ja julkaisu
-Neljännen istunnon työ on haarassa `claude/tender-keller-45kwzk` (main + 12 committia). Kun
+Neljännen istunnon työ on haarassa `claude/tender-keller-45kwzk` (main + 12 committia, viimeisin tämä jatko-ohje). Kun
 haluan julkaista, tee pull request mainiin: GitHub Actions testaa ja julkaisee mainin osoitteeseen
 https://vitu-cpu.github.io/Marina-app/ . Jos PR on jo yhdistetty, aloita uusi työ mainista uuteen
 haaraan.
