@@ -154,7 +154,7 @@ rules.
 | Finger length ÷ boat length | 0.8 | finger length = 0.8 × length of the longer boat beside it, rounded up to a standard length |
 | Standard finger lengths | 5, 6, 7, 8, 10, 12 m | Marinetek's standard booms and mooring fingers (docs/DECISIONS.md D29, I70); empty = exact 0.8 × boat length |
 | Boats per bay | 2 | two boats between a pair of fingers |
-| Beam clearance | 0.5 m | total extra width per boat |
+| Beam clearance | 0.5 m | total extra width per boat; owner's choice (D39). Svenska Båtunionen's Hamnhandboken 2016 gives 0.7–0.8 m, 0.2 m less in a sheltered, cramped harbour |
 | Length clearance | 0.5 m | extra slot length |
 | Fairway width ÷ boat length | 1.75 | fairway = max(minimum, 1.75 × longest boat); 1.75 L<sub>b</sub> is the minimum fairway width without side-ties in California DBW 2005 Table B-2, where L<sub>b</sub> is the longest berth (docs/DECISIONS.md D27) |
 | Minimum fairway width | 8.0 m | |

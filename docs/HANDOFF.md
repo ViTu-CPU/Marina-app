@@ -12,7 +12,7 @@ suomeksi, UI pysyy englanniksi.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D39, I86, U25).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D40, I86, U25).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013,
   AS 3962) – kaikki on alustavaa ja vaatii pätevän suunnittelijan tarkastuksen.
@@ -78,10 +78,10 @@ Kolmannessa istunnossa (omistajan päätökset D25–D32):
 17. **Poijurivien väylä (D38)**: Båtunionen ≥ 2,5 × veneen pituus, ≥ 20 m (painojen välissä vain
    vapaa vesi lasketaan). Demot peräpoijuilla: suorakaide 355 → 207 paikkaa, lahti 345 → 260;
    laituriväli 66 m (käsikirjan taulukko 1: 69 m). Sormilaiturit ennallaan.
+18. **Paikkaleveys (D39)**: omistaja päätti pitää veneen leveyden lisän 0,5 m (Båtunionen 0,7–0,8 m,
+   suojaisassa ja ahtaassa satamassa 0,2 m vähemmän).
 
 ## Avoimet asiat, ehdotettu järjestys
-0. **Paikkaleveys** (Båtunionen taulukko 2: kaikille kiinnitystavoille 0,7–0,8 m veneen leveyttä
-   enemmän; nyt oletus 0,5 m = käsikirjan "suojaisa ja ahdas" -tapaus). Omistajan päätettävä.
 1. Paalujen ja Marinetekin tuotteiden hinnat puuttuvat (pyydä tarjous).
 2. Hinnaston aukot: A-Laiturit G40 -ketjujen murtokuorma (kysyttävä toimittajalta);
    asennuksen tuntimenekit, työveneen päivähinta ja Marinetekin hinnat ovat oletuksia.

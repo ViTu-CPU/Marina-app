@@ -26,6 +26,8 @@ export const DEFAULT_PARAMS: Params = {
   // gives 3 × depth.
   buoyDepthFactor: 1,
   boatsPerBay: 2,
+  // D39: owner's choice; Svenska Båtunionen's Hamnhandboken 2016 Tabell 2 gives 0.7–0.8 m, less
+  // 0.2 m in a sheltered, cramped harbour.
   beamClearance: 0.5,
   lengthClearance: 0.5,
   fairwayFactor: 1.75,
