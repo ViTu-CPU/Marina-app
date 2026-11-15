@@ -2,6 +2,7 @@
  * JSON project file: export and import with structural validation (SPEC §2, persistence).
  */
 import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type Seabed } from '../engine/anchoring';
+import { DEFAULT_WAVES, type WaveSettings } from '../engine/waves';
 import { PRODUCT_CATEGORIES, PRODUCT_UNITS, type PriceList, type Product } from '../engine/catalog';
 import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import {
@@ -311,6 +312,30 @@ function mapBackground(v: unknown): MapBackground | null {
   return { provider: oneOf(o.provider, ['osm'] as const, 'map.provider'), lat, lon, opacity: Math.min(1, Math.max(0, opacity)) };
 }
 
+/** Extension (D40): wave screening inputs; missing in older files (nothing entered). */
+function waveSettings(v: unknown): WaveSettings {
+  if (v === undefined) return { ...DEFAULT_WAVES };
+  const o = obj(v, 'waves');
+  const optional = (key: 'fetch' | 'fetchDepth' | 'wind1' | 'wind50'): number | null => {
+    const x = o[key];
+    if (x === undefined || x === null) return null;
+    const n = num(x, `waves.${key}`);
+    if (!(n > 0)) fail(`waves.${key} must be positive`);
+    return n;
+  };
+  const averaging = o.windAveragingS === undefined ? DEFAULT_WAVES.windAveragingS : num(o.windAveragingS, 'waves.windAveragingS');
+  if (!(averaging > 0)) fail('waves.windAveragingS must be positive');
+  return {
+    fetch: optional('fetch'),
+    fetchFrom: o.fetchFrom === undefined ? DEFAULT_WAVES.fetchFrom : ((num(o.fetchFrom, 'waves.fetchFrom') % 360) + 360) % 360,
+    fetchDepth: optional('fetchDepth'),
+    wind1: optional('wind1'),
+    wind50: optional('wind50'),
+    windAveragingS: averaging,
+    quality: o.quality === undefined ? DEFAULT_WAVES.quality : oneOf(o.quality, ['excellent', 'good', 'moderate'] as const, 'waves.quality'),
+  };
+}
+
 /** Extension (D23). Missing values take their defaults, so older files stay readable. */
 function anchoring(v: unknown): AnchoringParams {
   if (v === undefined) return structuredClone(DEFAULT_ANCHORING);
@@ -460,6 +485,7 @@ export function parseProject(text: string): ParseResult {
       map: mapBackground(p.map),
       anchoring: anchoring(p.anchoring),
       cost: costSettings(p.cost),
+      waves: waveSettings(p.waves),
       generatedFrom: typeof p.generatedFrom === 'string' ? p.generatedFrom : null,
     };
     return { ok: true, project };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEMO_PROJECTS } from '../../engine/demos';
+import { DEFAULT_WAVES } from '../../engine/waves';
 import { loadProjectFromStorage, saveProjectToStorage, STORAGE_KEY, type StorageLike } from '../persistence';
 import { APP_ID, DISCLAIMER, parseProject, serializeProject } from '../projectFile';
 import { createAppStore } from '../store';
@@ -164,6 +165,19 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).buoyExposed = 'yes'))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p.boatClasses as Record<string, unknown>[])[0]!.weight = 0))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).buoySinkerMethod = 'guess'))).ok).toBe(false);
+  });
+
+  it('wave screening inputs (D40): kept, older files have none, invalid values refused', () => {
+    const old = parseProject(fileWith((p) => delete (p as Record<string, unknown>).waves));
+    expect(old.ok && old.project.waves).toEqual(DEFAULT_WAVES);
+    const set = parseProject(
+      fileWith((p) => {
+        (p as Record<string, unknown>).waves = { fetch: 2500, fetchFrom: 450, fetchDepth: null, wind1: 15, wind50: 22, windAveragingS: 3600, quality: 'excellent' };
+      }),
+    );
+    expect(set.ok && set.project.waves).toEqual({ fetch: 2500, fetchFrom: 90, fetchDepth: null, wind1: 15, wind50: 22, windAveragingS: 3600, quality: 'excellent' });
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { fetch: -1 }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { quality: 'superb' }))).ok).toBe(false);
   });
 
   it('berth types (D34): params, berth types and boom fingers are kept; older files are finger piers', () => {

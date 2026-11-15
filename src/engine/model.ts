@@ -12,6 +12,7 @@
 
 import type { AnchoringParams } from './anchoring';
 import type { PriceList } from './catalog';
+import type { WaveSettings } from './waves';
 
 export interface Vec2 {
   x: number;
@@ -371,6 +372,8 @@ export interface Project {
   anchoring: AnchoringParams;
   /** Extension (D24): product choices and price list. */
   cost: CostSettings;
+  /** Extension (D40): inputs of the wind-wave screening. */
+  waves: WaveSettings;
   /**
    * Fingerprint of the inputs (site, boat classes, parameters) the layouts were generated
    * from, or null when there are no generated layouts. Used for the "Regenerate" hint.

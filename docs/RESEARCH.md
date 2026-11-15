@@ -783,3 +783,45 @@ Top Marine 2 × depth (or maximum depth + 1 m) with length + 3 × depth. The geo
 taut chain of length c·h lets the buoy move √(c² − 1)·h towards the pier (1:1 → h; 2 × depth →
 1,73 h). Longer chains (Ranta & Ranta's ≥ 2 × depth) are a holding argument for swing moorings.
 
+## 10. Wind waves and wave protection (read 2026-11-15)
+
+- **USACE, Coastal Engineering Manual EM 1110-2-1100, Part II, Chapter 2 "Meteorology and Wave
+  Climate" (Change 1, 31 July 2003)** ([PDF copy](https://pdhonline.com/courses/c772/Part-II-Chap_2entire.pdf);
+  HTML mirror coastalengineeringmanual.tpub.com). §II-2-2.b(1)(b): *"The equations governing wave
+  growth with fetch are"* g Hm0/u*² = 4.13 × 10⁻² (gX/u*²)^½ and g Tp/u* = 0.651 (gX/u*²)^⅓ (II-2-36),
+  C_D = u*²/U10² = 0.001 (1.1 + 0.035 U10); fully developed g Hm0/u*² = 2.115 × 10², g Tp/u* =
+  2.398 × 10² (II-2-37); duration as equivalent fetch gX/u*² = 5.23 × 10⁻³ (gt/u*)^1.5 (II-2-38);
+  time to become fetch-limited t = 77.23 X^0.67 / (u^0.34 g^0.33) (II-2-35). (c): *"it is recommended
+  that the straightline fetch be used"*. (d)/(3): *"deepwater wave growth formulae be used for all
+  depths"* with Tp ≤ 9.78 (d/g)^½ (II-2-39); if limited, *"The wave height may be found by noting the
+  dimensionless fetch associated with the limiting wave period"*; *"If wave height exceeds 0.6 times
+  the depth, wave height should be limited to 0.6 times the depth."* Winds (§II-2-1.a, i): small
+  basins respond to 1- to 5-min winds, large ones to 15- to 30-min averages; extreme winds are
+  converted between averaging times with Figure II-2-1 (5 min / 1 h ≈ 1.09, 100 s ≈ 1.2; above 1 h
+  U_t/U_3600 = −0.15 log10 t + 1.5334, Example II-2-2); overland winds × 1.2 for fetches under 16 km;
+  unknown stability → R_T = 1.1 for fetches over 16 km. Example II-2-7 (15 m/s, 10 km, 3 m): Tp ≈ 2.7 s,
+  Hm0 ≈ 1.0 m read from the nomograms (the equations: 2.6 s, 0.80 m). Example II-2-8 (25 m/s, 50 km,
+  1.6 m): limit 4.0 s, equivalent fetch 20 km, 2.1 m, *"so the final answer should be 0.8 m"* (0.6 ×
+  1.6 = 0.96 m; the printed value does not follow the stated rule). The SPM 1984 expression
+  1.277 + 0.296 tanh(0.9 log10(45/t)) for durations under 1 h was not read; it reproduces the two
+  CEM values.
+- **UFC 4-152-07 Change 1 (2012), §4-1.2.3 and Figure 4-1** ([wbdg.org](https://www.wbdg.org/)):
+  *"The berthing area should meet the wave climate criteria shown in Figure 4-1 adapted from Design
+  Wave Climate in Small Craft Harbors"*: significant wave height for 50-year / 1-year exceedance —
+  head seas < 2 s: not likely / < 1 ft; head seas > 2 s: < 2 ft / < 1 ft; beam seas < 2 s: not likely /
+  < 0.5 ft; beam seas > 2 s: < 0.8 ft / < 0.5 ft; *"Criteria for an 'excellent' wave climate multiply
+  wave height by 0.75, and for moderate wave climate multiply wave height by 1.25."* §4-3.5:
+  *"Wave attenuators … may be used to help protect areas from short period waves (wind waves with a
+  limited fetch, or ship wake). … It is imperative that a competent coastal engineer perform a wind
+  wave analysis study"*. §4-1.1.2: wind frequency by direction and speed should be determined.
+- **Marinetek, Breakwater Pontoons 3300, 3800** (brochure, modification date 14.11.2014, §9.12):
+  *"The Marinetek Breakwaters without keels work best when the sea wave length is less than 18 m."*
+  A diagram "Wave attenuation capacity, sheltered sea conditions" gives the attenuation against Hs
+  and wavelength (with wind 10–20 m/s and effective fetch 1–5 km scales); not digitised.
+- **California DBW (2005)** (§9.3): concrete pontoons *"probably should not be considered for marinas
+  in open water locations subject to wave heights over 12-14 inches unless designed and built to also
+  act as a wave attenuator"*. **Top Marine** (§2.3): HD pontoons allowed wave height 0,5 m, MD 0,3 m.
+- **Open-Meteo** ([terms](https://open-meteo.com/en/terms), search excerpt): free for non-commercial
+  use under 10 000 calls a day, data CC BY 4.0; historical API with ERA5 (0.25°, from 1940) and
+  ERA5-Land (0.1°). For step 2 of the tool (owner: not used commercially, D40).
+

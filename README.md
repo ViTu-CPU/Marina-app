@@ -78,6 +78,10 @@ npx playwright install chromium
 - Access pontoons: empty pontoon metres, e.g. in front of a high quay wall; main piers
   start from their edges.
 - Two built-in examples: a rectangular basin and an irregular bay.
+- Wave screening ("Waves"): wind waves from the longest fetch, its direction, the depth and
+  extreme winds (USACE Coastal Engineering Manual II-2), checked against the small craft harbour
+  criteria of UFC 4-152-07, with advice on a floating attenuator or a fixed breakwater
+  (preliminary; docs/DECISIONS.md D40).
 
 **Inputs**
 - Boat classes: length, beam, colour, and either a target share or a target number of

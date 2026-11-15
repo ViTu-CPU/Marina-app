@@ -8,6 +8,7 @@
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { DEFAULT_ANCHORING, type AnchoringParams } from '../engine/anchoring';
+import { DEFAULT_WAVES, type WaveSettings } from '../engine/waves';
 import type { PriceList } from '../engine/catalog';
 import { DEFAULT_BOAT_CLASSES, DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import { DEMO_PROJECTS, type DemoEntry } from '../engine/demos';
@@ -111,6 +112,7 @@ export function emptyProject(): Project {
     map: null,
     anchoring: structuredClone(DEFAULT_ANCHORING),
     cost: { ...DEFAULT_COST },
+    waves: { ...DEFAULT_WAVES },
     generatedFrom: null,
   };
 }
@@ -173,6 +175,8 @@ export interface AppState {
   diagnostics: Diagnostic[];
   /** Message for the user from the last file or storage operation, if it failed. */
   notice: string | null;
+  /** D40: whether the wave screening window is open (not saved). */
+  waveToolOpen: boolean;
   /**
    * The built-in price list (data/hinnasto.xlsx), loaded when the app starts (D24); null
    * while loading or when it could not be read (`priceListError`).
@@ -211,6 +215,8 @@ export interface AppState {
   setMap: (map: MapBackground | null, options?: CommitOptions) => void;
   /** D23: parameters of the anchoring plan. */
   setAnchoring: (patch: Partial<AnchoringParams>, options?: CommitOptions) => void;
+  /** D40: inputs of the wave screening. */
+  setWaves: (patch: Partial<WaveSettings>, options?: CommitOptions) => void;
   /** D24: product choices; `priceList` replaces the built-in list (null restores it). */
   setCost: (patch: Partial<CostSettings>, options?: CommitOptions) => void;
   setBuiltInPriceList: (list: PriceList | null, error?: string | null) => void;
@@ -255,6 +261,7 @@ export interface AppState {
   toggleLayer: (layer: LayerId) => void;
   select: (selection: Selection) => void;
   setNotice: (notice: string | null) => void;
+  setWaveToolOpen: (open: boolean) => void;
 }
 
 /** prepareSite is the costly part of re-validation; remember it for the current site. */
@@ -305,6 +312,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       selection: null,
       diagnostics: [],
       notice: null,
+      waveToolOpen: false,
       tool: 'select' as ToolId,
       draft: [] as Vec2[],
       cursor: null,
@@ -403,6 +411,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       setBackground: (background, options) => get().commit((p) => ({ ...p, background }), options),
       setMap: (map, options) => get().commit((p) => ({ ...p, map }), options),
       setAnchoring: (patch, options) => get().commit((p) => ({ ...p, anchoring: { ...p.anchoring, ...patch } }), options),
+      setWaves: (patch, options) => get().commit((p) => ({ ...p, waves: { ...p.waves, ...patch } }), options),
       setCost: (patch, options) => get().commit((p) => ({ ...p, cost: { ...p.cost, ...patch } }), options),
       setBuiltInPriceList: (builtInPriceList, priceListError = null) => set({ builtInPriceList, priceListError }),
 
@@ -553,6 +562,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       toggleLayer: (layer) => set((s) => ({ layers: { ...s.layers, [layer]: !s.layers[layer] } })),
       select: (selection) => set({ selection }),
       setNotice: (notice) => set({ notice }),
+      setWaveToolOpen: (waveToolOpen) => set({ waveToolOpen }),
     };
   });
 }

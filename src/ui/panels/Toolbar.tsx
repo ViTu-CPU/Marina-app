@@ -127,6 +127,8 @@ export function Toolbar() {
         {t('report.button')}
       </Button>
       <Button onClick={() => state().fitView()}>{t('toolbar.fit')}</Button>
+      {/* D40: the wave screening window. */}
+      <Button onClick={() => state().setWaveToolOpen(true)}>{t('toolbar.waves')}</Button>
 
       <div className="ml-auto flex items-center gap-1" role="group" aria-label={t('toolbar.language')}>
         <Button active={language === 'en'} onClick={() => state().setLanguage('en')}>

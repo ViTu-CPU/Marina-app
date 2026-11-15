@@ -490,6 +490,25 @@ async function waitForServer() {
       assert.ok(pages >= 2, `expected several pages, got ${pages}`);
     });
 
+    await step('wave screening: fetch, direction and winds give waves, criteria and advice (D40)', async () => {
+      await page.getByRole('button', { name: 'Waves', exact: true }).click();
+      const tool = page.getByTestId('wave-tool');
+      await tool.waitFor();
+      assert.ok(await tool.getByText('Enter the fetch and at least one wind to get the waves.').isVisible());
+      await tool.getByLabel('Longest fetch over water (m)').fill('2000');
+      await tool.getByLabel('Waves come from (°, compass)').fill('90');
+      await tool.getByLabel('Wind once a year (m/s)').fill('15');
+      await tool.getByLabel('Wind once in 50 years (m/s)').fill('22');
+      await page.waitForFunction(() => window.__marina.getState().project.waves.wind50 === 22);
+      assert.equal(await tool.getByTestId('wave-results').locator('tbody tr').count(), 2);
+      assert.ok((await tool.getByTestId('wave-checks').locator('tbody tr').count()) >= 2);
+      const advice = await tool.getByTestId('wave-advice').textContent();
+      assert.match(advice, /floating wave attenuator|no wave protection|fixed breakwater/);
+      await page.screenshot({ path: path.join(outDir, 'waves.png') });
+      await tool.getByRole('button', { name: 'Close', exact: true }).click();
+      assert.equal(await page.getByTestId('wave-tool').count(), 0);
+    });
+
     await step('language toggle', async () => {
       await page.getByRole('button', { name: 'FI', exact: true }).click();
       assert.equal(await page.getByRole('heading', { level: 1 }).textContent(), 'Venesataman asettelusuunnittelu');

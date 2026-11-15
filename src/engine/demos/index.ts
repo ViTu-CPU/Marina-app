@@ -1,4 +1,5 @@
 import { DEFAULT_ANCHORING } from '../anchoring';
+import { DEFAULT_WAVES } from '../waves';
 import { DEFAULT_BOAT_CLASSES, DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../defaults';
 import { circumscribedCirclePolygon } from '../geometry';
 import { PROJECT_SCHEMA_VERSION, type Project, type Site } from '../model';
@@ -93,6 +94,7 @@ function demoProject(name: string, site: Site): Project {
     map: null,
     anchoring: DEFAULT_ANCHORING,
     cost: DEFAULT_COST,
+    waves: DEFAULT_WAVES,
     generatedFrom: null,
   };
 }
