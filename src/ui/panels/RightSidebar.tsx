@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { boundingBox } from '../../engine/geometry';
 import type { Feasibility, Issue, Layout, MainPier, PierSide } from '../../engine/model';
+import { IssueList } from './IssueList';
 import { pierAxis } from '../../engine/rows';
 import { pierPolygon } from '../../engine/site';
 import { appStore, useAppStore } from '../../state/store';
@@ -298,24 +299,12 @@ function Issues({ layout }: { layout: Layout }) {
     state().select(target.selection);
     state().zoomToBox(target.box);
   };
-  const sorted = [...layout.issues].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));
   return (
     <Section title={`${t('results.issues')} (${layout.issues.length})`}>
-      {sorted.length === 0 ? (
+      {layout.issues.length === 0 ? (
         <p className="text-sm text-slate-500">{t('results.noIssues')}</p>
       ) : (
-        <ul className="max-h-64 space-y-0.5 overflow-y-auto" data-testid="issues">
-          {sorted.map((issue, i) => (
-            <li key={i}>
-              <button type="button" onClick={() => show(issue)} className="flex w-full items-start gap-1.5 rounded px-1 py-0.5 text-left text-xs hover:bg-slate-100">
-                <span className={`mt-0.5 shrink-0 rounded px-1 font-medium ${issue.severity === 'error' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-900'}`}>
-                  {t(`severity.${issue.severity}`)}
-                </span>
-                <span className="text-slate-800">{issue.message}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <IssueList issues={layout.issues} onShow={show} testId="issues" />
       )}
     </Section>
   );

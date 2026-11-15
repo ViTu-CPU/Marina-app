@@ -13,6 +13,7 @@ import { downloadBytes, readFileAsBytes, safeFileName, XLSX_MIME } from '../expo
 import { formatCount, formatEuro, formatKn, formatLength } from '../format';
 import { useT } from '../useT';
 import { Button, NumberField, Section } from './fields';
+import { IssueList } from './IssueList';
 
 const state = () => appStore.getState();
 const SEABEDS: Seabed[] = ['clay', 'sand', 'rock'];
@@ -178,11 +179,7 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
             <span className="shrink-0">{formatCount(wallFixings, language)}</span>
           </div>
         )}
-        <ul className="list-disc space-y-0.5 pl-4 text-xs text-amber-800">
-          {anchoring.issues.map((i) => (
-            <li key={`${i.code}-${i.message}`}>{i.message}</li>
-          ))}
-        </ul>
+        <IssueList issues={anchoring.issues} testId="anchoring-issues" />
         <p className="text-xs text-slate-500">{t('anchoring.compare')}</p>
       </div>
     </Section>

@@ -338,7 +338,7 @@ async function waitForServer() {
       await page.screenshot({ path: path.join(outDir, 'add-pier.png') });
     });
 
-    await step('anchoring plan and cost estimate from the built-in price list; BOM and price list export (D23, D24)', async () => {
+    await step('anchoring plan and cost estimate from the built-in price list; legend and grouped warnings; BOM and price list export (D23, D24, U21, U22)', async () => {
       await page.getByRole('combobox', { name: 'Load example' }).selectOption('rectBasin');
       await page.getByRole('button', { name: 'Generate', exact: true }).click();
       // The built-in price list is loaded at start-up.
@@ -347,6 +347,17 @@ async function waitForServer() {
       await total.scrollIntoViewIfNeeded();
       assert.ok(await total.isVisible());
       assert.ok(await page.getByText('Anchor lines', { exact: true }).isVisible());
+      // Legend (U22): closed until opened; lists the anchoring symbols while that layer is on.
+      await page.getByRole('button', { name: '▸ Legend', exact: true }).click();
+      const legend = page.getByTestId('legend');
+      assert.ok(await legend.getByText('Concrete anchor', { exact: true }).isVisible());
+      assert.ok(await legend.getByText('Gangway', { exact: true }).isVisible());
+      await page.getByRole('button', { name: '▾ Legend', exact: true }).click();
+      // Grouped warnings (U21): one row for the many "several anchors" lines, expandable.
+      const groupToggle = page.getByTestId('anchoring-issues').getByRole('button', { name: /similar – show all$/ }).first();
+      await groupToggle.scrollIntoViewIfNeeded();
+      await groupToggle.click();
+      assert.ok(await page.getByTestId('anchoring-issues').getByRole('button', { name: 'hide', exact: true }).first().isVisible());
       const bom = await download('Export bill of materials (.xlsx)');
       assert.match(path.basename(bom), /^Rectangular-basin-L\d+-bom\.xlsx$/);
       assert.ok(fs.statSync(bom).size > 2000);

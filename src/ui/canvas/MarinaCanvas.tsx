@@ -25,28 +25,8 @@ import { useT } from '../useT';
 import { MapTiles } from './MapTiles';
 import { hatchPatterns } from './patterns';
 
-const COLORS = {
-  water: '#e0f2fe',
-  waterTranslucent: 'rgba(186, 230, 253, 0.35)',
-  waterEdge: '#0369a1',
-  shoreline: '#15803d',
-  entrance: '#f59e0b',
-  access: '#6b7280',
-  gangway: '#b45309',
-  chain: '#92400e',
-  anchor: '#78350f',
-  obstacle: '#1f2937',
-  zoneEdge: '#dc2626',
-  pier: '#374151',
-  pierLocked: '#111827',
-  finger: '#9ca3af',
-  slot: '#64748b',
-  issue: '#dc2626',
-  selection: '#2563eb',
-  draft: '#7c3aed',
-  grid: '#e2e8f0',
-  gridMajor: '#cbd5e1',
-};
+import { COLORS } from './colors';
+import { MapLegend } from './MapLegend';
 
 /** Pixels within which the cursor snaps to existing geometry. */
 const SNAP_PIXELS = 10;
@@ -590,7 +570,7 @@ export function MarinaCanvas() {
     <div
       ref={containerRef}
       data-testid="canvas"
-      className="h-full w-full overflow-hidden bg-white"
+      className="relative h-full w-full overflow-hidden bg-white"
       style={{ cursor: drawing ? 'crosshair' : tool === 'edit' ? 'default' : 'grab' }}
     >
       <Stage
@@ -743,6 +723,7 @@ export function MarinaCanvas() {
           </Group>
         </Layer>
       </Stage>
+      <MapLegend />
     </div>
   );
 }
