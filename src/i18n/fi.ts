@@ -108,6 +108,10 @@ export const fi: Partial<Record<StringKey, string>> = {
   'boats.shareNote': 'Osuudet skaalataan 100 %:iin laskennassa.',
 
   'param.mainPierWidth': 'Päälaiturin leveys (m)',
+  'param.pierSeries': 'Laiturin ponttonisarja',
+  'param.pierModuleLengths': 'Laiturin moduulipituudet (m; tyhjä = vapaa pituus)',
+  'pierSeries.free': 'Vapaa pituus (ei moduuleja)',
+  'pierSeries.custom': 'Oma',
   'param.fingerWidth': 'Sormen leveys (m)',
   'param.fingerLengthRatio': 'Sormen pituus ÷ veneen pituus',
   'param.boatsPerBay': 'Veneitä per väli',

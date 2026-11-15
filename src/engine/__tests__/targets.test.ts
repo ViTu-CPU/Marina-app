@@ -6,7 +6,7 @@ import type { BoatClass, Params, Site } from '../model';
 import { berthCaps, effectiveObjective, mixClasses, targetShortfall, targetTotal } from '../targets';
 
 /** Exact finger lengths, 0.8 × boat length, as in the hand calculations below (no standard lengths, D29). */
-const COUNTS: Params = { ...DEFAULT_PARAMS, berthTarget: 'count', fingerLengths: [] };
+const COUNTS: Params = { ...DEFAULT_PARAMS, berthTarget: 'count', fingerLengths: [], mainPierWidth: 3, pierModuleLengths: [] };
 
 describe('berth targets as counts (D20)', () => {
   const classes: BoatClass[] = DEFAULT_BOAT_CLASSES.map((c, i) => ({ ...c, count: [10, 20, 0, 10][i]! }));

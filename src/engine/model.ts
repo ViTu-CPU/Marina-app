@@ -119,6 +119,13 @@ export type BerthTarget = 'share' | 'count';
 export interface Params {
   /** Main pier (walkway pontoon) width, m. */
   mainPierWidth: number;
+  /** Extension (D44): pier pontoon series (a preset id of engine/modules.ts, or 'custom'). */
+  pierSeries: string;
+  /**
+   * Extension (D44): module lengths of the pier pontoons, m. A generated pier is a sum of them,
+   * as many of the longest as fit; empty = any length.
+   */
+  pierModuleLengths: number[];
   /** Finger pier width, m. */
   fingerWidth: number;
   /** Finger length = ratio × boat length (assumption, not a standard). */

@@ -45,10 +45,10 @@ describe('fairway in front of stern-buoy rows (D38, Båtunionen)', () => {
     expect(fairwayWidthFor(12, SB)).toBe(21);
     // A smaller buoy factor than the general one leaves the general rule.
     expect(fairwayWidthFor(12, { ...SB, buoyFairwayFactor: 1, buoyFairwayMin: 5 }, 'sternBuoy')).toBe(21);
-    // The row design of a stern-buoy pier uses it: pitch = 3 + 2 · 16.5 + 30 = 66 m.
+    // The row design of a stern-buoy pier uses it: pitch = 2.7 (D44) + 2 · 16.5 + 30 = 65.7 m.
     const design = rowDesign(DEFAULT_BOAT_CLASSES, SB, sternBuoyPattern)!;
     expect(design.fairwayWidth).toBe(30);
-    expect(design.pitch).toBeCloseTo(66, 9);
+    expect(design.pitch).toBeCloseTo(65.7, 9);
   });
 });
 

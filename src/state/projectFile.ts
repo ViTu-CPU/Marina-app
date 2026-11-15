@@ -161,13 +161,18 @@ const BERTH_TYPES = ['finger', 'yBoom', 'sternBuoy'] as const;
 function params(v: unknown): Params {
   const o = obj(v, 'params');
   // Missing keys take their defaults, so files from older versions stay readable.
-  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth'>): number =>
+  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth' | 'pierSeries' | 'pierModuleLengths'>): number =>
     o[key] === undefined ? DEFAULT_PARAMS[key] : num(o[key], `params.${key}`);
   const boatsPerBay = o.boatsPerBay === undefined ? DEFAULT_PARAMS.boatsPerBay : o.boatsPerBay;
   if (boatsPerBay !== 1 && boatsPerBay !== 2) fail('params.boatsPerBay must be 1 or 2');
   const orientation = o.orientation === undefined || o.orientation === 'auto' ? 'auto' : num(o.orientation, 'params.orientation');
+  // D44: files from before the module rule keep piers of any length (I89).
+  const moduleLengths = o.pierModuleLengths === undefined ? [] : arr(o.pierModuleLengths, 'params.pierModuleLengths').map((x, i) => num(x, `params.pierModuleLengths[${i}]`));
+  if (moduleLengths.some((x) => !(x > 0))) fail('params.pierModuleLengths must be positive lengths');
   return {
     mainPierWidth: pick('mainPierWidth'),
+    pierSeries: o.pierSeries === undefined ? (o.pierModuleLengths === undefined ? 'free' : 'custom') : str(o.pierSeries, 'params.pierSeries'),
+    pierModuleLengths: [...new Set(moduleLengths)].sort((a, b) => b - a),
     fingerWidth: pick('fingerWidth'),
     fingerLengthRatio: pick('fingerLengthRatio'),
     fingerLengths: lengthList(o.fingerLengths, 'fingerLengths'),

@@ -54,6 +54,7 @@ import type {
 } from './model';
 import { localRectToPolygon, patternFor, type BerthPattern } from './patterns';
 import { buildReachGrid, isSwept, reachableCells, type OccupiedBox, type ReachGrid } from './reach';
+import { combinationLength, moduleCombination } from './modules';
 import { layoutRows, pierAxis, rowFrame, toLocalRect } from './rows';
 import { rankLayouts } from './score';
 import { berthCaps, effectiveObjective, mixClasses } from './targets';
@@ -415,6 +416,29 @@ function fillPier(
   return { segment: shrinkToBerths(cut(hi), best.rows), rows: best.rows };
 }
 
+/**
+ * D44: build the pier from whole modules. `segment` is the length the berths need (shorter than
+ * `available` when target counts ran out), `available` the longest the site allows. The pier
+ * becomes the shortest module combination that holds the berths within `available`, else the
+ * longest that fits; bays beyond its head are dropped. Null when not even one module fits or
+ * no berth is left.
+ */
+function snapToModules(ctx: SearchContext, segment: PierSegment, available: number, rows: FilledRow[], mix: MixState): { segment: PierSegment; rows: FilledRow[] } | null {
+  const lengths = ctx.params.pierModuleLengths;
+  if (lengths.length === 0) return { segment, rows };
+  const length = distance(segment.start, segment.end);
+  const modules = moduleCombination(length, available, lengths);
+  if (!modules) {
+    trimRows(rows, 0, mix);
+    return null;
+  }
+  const built = combinationLength(modules);
+  const kept = built < length - 1e-6 ? trimRows(rows, built, mix) : rows;
+  if (kept.length === 0) return null;
+  const end = roundVec(add(segment.start, scale(sub(segment.end, segment.start), built / length)));
+  return { segment: { start: segment.start, end }, rows: kept };
+}
+
 /** Step by which a pier is shortened when its head is not clear, m. */
 const HEAD_SHORTEN_STEP = 1;
 
@@ -522,7 +546,8 @@ function parallelCandidate(
     const fitted = fitHead(ctx, filled.segment, rows, mix, minLength, design.fairwayWidth);
     if (fitted) {
       const segment = ctx.caps ? shrinkToBerths(fitted.segment, fitted.rows) : fitted.segment;
-      piers.push({ segment, rows: fitted.rows, fillOptions: {} });
+      const built = snapToModules(ctx, segment, distance(fitted.segment.start, fitted.segment.end), fitted.rows, mix);
+      if (built) piers.push({ segment: built.segment, rows: built.rows, fillOptions: {} });
     }
   }
   return summarize(ctx, strategy, angle, piers, floor);
@@ -601,13 +626,14 @@ function bestShoreParallel(ctx: SearchContext): Candidate | null {
       // The whole pier lies on the shore, so there is no shore end to keep clear.
       const fillOptions: FillOptions = { sides: [side], rowStart: 0 };
       const filled = fillPier(ctx, segment, mix, design.minBayFootprint, fillOptions);
-      const rows = filled.rows;
-      if (rows.length === 0) {
+      if (filled.rows.length === 0) {
         if (ctx.report.blockedPiers.length < MAX_BLOCKED_SAMPLE) ctx.report.blockedPiers.push(segment);
         ctx.report.berthlessPiers++;
         continue;
       }
-      const candidate = summarize(ctx, 'D', vectorToBearing(dir) % 180, [{ segment: filled.segment, rows, fillOptions }]);
+      const built = snapToModules(ctx, filled.segment, length, filled.rows, mix);
+      if (!built) continue;
+      const candidate = summarize(ctx, 'D', vectorToBearing(dir) % 180, [{ segment: built.segment, rows: built.rows, fillOptions }]);
       if (better(candidate, best, ctx.objective)) best = candidate;
     }
   }
@@ -706,9 +732,11 @@ function sizeZonedLayout(ctx: SearchContext, zoned: ZonedContext, options: Zoned
       const fitted = fitHead(ctx, segment, rows, mix, params.shoreOffset + back.minFootprint, headWidth);
       if (!fitted) continue;
       segment = ctx.caps ? shrinkToBerths(fitted.segment, fitted.rows) : fitted.segment;
-      piers.push({ segment, rows: fitted.rows, fillOptions: {} });
+      const built = snapToModules(ctx, segment, distance(fitted.segment.start, fitted.segment.end), fitted.rows, mix);
+      if (!built) continue;
+      piers.push({ segment: built.segment, rows: built.rows, fillOptions: {} });
       placedHere = true;
-      if (front && fitted.rows.some((r) => r.side === frontSide)) frontDesign = front;
+      if (front && built.rows.some((r) => r.side === frontSide)) frontDesign = front;
     }
 
     if (!placedHere) {

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { AnchoringResult, AnchorLine } from '../anchoring';
 import { costEstimate, moduleCombination, resolveChoices } from '../bom';
 import type { PriceList, PriceParameter, Product } from '../catalog';
-import { DEFAULT_COST, DEFAULT_PARAMS } from '../defaults';
+import { DEFAULT_COST, DEFAULT_PARAMS as DEFAULTS } from '../defaults';
+
+/** The hand-calculated cases were written for a 3.0 m main pier (SPEC §4); D44 made 2.7 m the default. */
+const DEFAULT_PARAMS = { ...DEFAULTS, mainPierWidth: 3 };
 import type { Berth, Finger, MainPier, Site } from '../model';
 
 const product = (p: Partial<Product> & Pick<Product, 'id' | 'category' | 'price'>): Product => ({

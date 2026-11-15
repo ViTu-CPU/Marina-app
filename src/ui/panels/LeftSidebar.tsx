@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { estimateBoatWeight } from '../../engine/anchoring';
 import { distance } from '../../engine/geometry';
 import type { BerthTarget, BerthType, BoatClass, ObjectiveId, ObstacleKind, Params, ZoneKind } from '../../engine/model';
+import { PIER_SERIES } from '../../engine/modules';
 import { targetCount } from '../../engine/targets';
 import type { StringKey } from '../../i18n';
 import { originPlacing, parseLatLon } from '../../state/geo';
@@ -534,7 +535,7 @@ function BoatClassesSection() {
   );
 }
 
-type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth'>;
+type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth' | 'pierSeries' | 'pierModuleLengths'>;
 
 function ParamField({ name, min, max, step }: { name: NumericParam; min: number; max: number; step?: number }) {
   const t = useT();
@@ -548,6 +549,49 @@ function ParamField({ name, min, max, step }: { name: NumericParam; min: number;
       {...(step === undefined ? {} : { step })}
       onChange={(v) => state().setParams({ [name]: v }, { coalesce: `param:${name}` })}
     />
+  );
+}
+
+/** D44: the pier pontoon series: a preset sets the width and the module lengths; editing either makes it custom. */
+function PierSeriesField() {
+  const t = useT();
+  const series = useAppStore((s) => s.project.params.pierSeries);
+  const width = useAppStore((s) => s.project.params.mainPierWidth);
+  const lengths = useAppStore((s) => s.project.params.pierModuleLengths);
+  const preset = PIER_SERIES.find((x) => x.id === series);
+  return (
+    <>
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('param.pierSeries')}
+        <select
+          className="max-w-[11rem] rounded border border-slate-300 px-1 py-0.5 text-sm"
+          value={preset ? series : 'custom'}
+          onChange={(e) => {
+            const p = PIER_SERIES.find((x) => x.id === e.target.value);
+            if (p) state().setParams({ pierSeries: p.id, mainPierWidth: p.width, pierModuleLengths: [...p.lengths] });
+          }}
+        >
+          {PIER_SERIES.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.id === 'free' ? t('pierSeries.free') : p.name}
+            </option>
+          ))}
+          {!preset && <option value="custom">{t('pierSeries.custom')}</option>}
+        </select>
+      </label>
+      <NumberField
+        label={t('param.mainPierWidth')}
+        value={width}
+        min={0.5}
+        max={20}
+        onChange={(v) => state().setParams({ mainPierWidth: v, ...(preset && preset.width !== v ? { pierSeries: 'custom' } : {}) }, { coalesce: 'param:mainPierWidth' })}
+      />
+      <LengthListField
+        label={t('param.pierModuleLengths')}
+        value={[...lengths].sort((a, b) => a - b)}
+        onChange={(v) => state().setParams({ pierModuleLengths: [...v].sort((a, b) => b - a), pierSeries: 'custom' }, { coalesce: 'param:pierModuleLengths' })}
+      />
+    </>
   );
 }
 
@@ -584,7 +628,7 @@ function DockSection() {
           />
         </>
       )}
-      <ParamField name="mainPierWidth" min={0.5} max={20} />
+      <PierSeriesField />
       <ParamField name="fingerWidth" min={0.1} max={5} />
       <ParamField name="fingerLengthRatio" min={0.1} max={1.5} step={0.05} />
       <LengthListField

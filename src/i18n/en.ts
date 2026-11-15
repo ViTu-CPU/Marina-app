@@ -106,6 +106,10 @@ export const en = {
   'boats.shareNote': 'Shares are scaled to 100 % when used.',
 
   'param.mainPierWidth': 'Main pier width (m)',
+  'param.pierSeries': 'Pier pontoon series',
+  'param.pierModuleLengths': 'Pier module lengths (m; empty = any length)',
+  'pierSeries.free': 'Free length (no modules)',
+  'pierSeries.custom': 'Custom',
   'param.fingerWidth': 'Finger width (m)',
   'param.fingerLengthRatio': 'Finger length ÷ boat length',
   'param.boatsPerBay': 'Boats per bay',

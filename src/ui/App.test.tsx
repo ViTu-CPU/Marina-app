@@ -89,9 +89,11 @@ describe('app shell (SPEC §8)', () => {
     const field = screen.getByLabelText('Main pier width (m)') as HTMLInputElement;
     fireEvent.change(field, { target: { value: 'abc' } });
     expect(field.getAttribute('aria-invalid')).toBe('true');
-    expect(appStore.getState().project.params.mainPierWidth).toBe(3);
+    expect(appStore.getState().project.params.mainPierWidth).toBe(2.7);
     fireEvent.change(field, { target: { value: '2,5' } }); // decimal comma is accepted
     expect(appStore.getState().project.params.mainPierWidth).toBe(2.5);
+    // D44: a width of its own makes the pier series custom.
+    expect(appStore.getState().project.params.pierSeries).toBe('custom');
   });
 
   it('boat classes can be edited, added and deleted', () => {
