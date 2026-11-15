@@ -45,6 +45,8 @@ const ENTRIES: { layer: LayerId; label: StringKey; swatch: ReactNode }[] = [
   { layer: 'slots', label: 'legend.slot', swatch: fill('none', COLORS.slot) },
   { layer: 'boats', label: 'legend.buoy', swatch: swatch(<circle cx={W / 2} cy={H / 2} r={3.5} fill={COLORS.buoy} />) },
   { layer: 'boats', label: 'legend.boat', swatch: swatch(<rect x={4} y={2} width={W - 8} height={H - 4} rx={3} fill="#34d399" />) },
+  { layer: 'fetch', label: 'legend.fetchRay', swatch: line(COLORS.fetchRay, 1) },
+  { layer: 'fetch', label: 'legend.fetchMax', swatch: line(COLORS.fetchMax, 2) },
   { layer: 'anchoring', label: 'legend.chain', swatch: line(COLORS.chain, 1.5, '3 2') },
   { layer: 'anchoring', label: 'legend.anchor', swatch: swatch(<rect x={W / 2 - 4} y={H / 2 - 4} width={8} height={8} fill={COLORS.anchor} />) },
   { layer: 'anchoring', label: 'legend.severalAnchors', swatch: swatch(<rect x={W / 2 - 4} y={H / 2 - 4} width={8} height={8} fill={COLORS.issue} />) },

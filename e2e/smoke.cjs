@@ -539,6 +539,25 @@ async function waitForServer() {
       assert.equal(w.climate.startYear, 2016);
       assert.ok((await tool.locator('tr[data-sector="E"] td[title*="from the wind climate"]').count()) >= 1);
       await page.unroute('https://archive-api.open-meteo.com/**');
+      // D47: fetches from the OpenStreetMap shoreline (Overpass mocked): a lake 60.14–60.16 N, 24.92–24.99 E around the position.
+      let overpassBody = '';
+      await page.route('https://overpass-api.de/**', (route) => {
+        overpassBody = route.request().postData() ?? '';
+        const g = [[60.14, 24.92], [60.14, 24.99], [60.16, 24.99], [60.16, 24.92], [60.14, 24.92]].map(([lat, lon]) => ({ lat, lon }));
+        route.fulfill({ json: { elements: [{ type: 'way', id: 1, tags: { natural: 'water' }, geometry: g }] } });
+      });
+      await tool.getByRole('button', { name: 'Find fetches from the map', exact: true }).click();
+      await page.waitForFunction(() => window.__marina.getState().project.waves.autoFetch !== null);
+      assert.match(decodeURIComponent(overpassBody), /way\(around:2,60\.150000,24\.950000/);
+      const af = await page.evaluate(() => window.__marina.getState().project.waves);
+      assert.equal(af.autoFetch.distances.length, 72);
+      // N: 1.1 km to 60.16 N (longest ray at ±20°: 1.2 km); E: 2.2 km to 24.99 E (longest about 2.4 km).
+      const fetchN = af.sectors[0].fetch;
+      const fetchE = af.sectors[2].fetch;
+      assert.ok(fetchN > 1100 && fetchN < 1300, `N ${fetchN}`);
+      assert.ok(fetchE > 2200 && fetchE < 2500, `E ${fetchE}`);
+      assert.ok(af.sectors.every((x) => x.fetch > 0));
+      await page.unroute('https://overpass-api.de/**');
       await page.screenshot({ path: path.join(outDir, 'waves.png'), fullPage: true });
       await tool.getByRole('button', { name: 'Close', exact: true }).click();
       assert.equal(await page.getByTestId('wave-tool').count(), 0);

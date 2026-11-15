@@ -11,10 +11,11 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Image as KonvaImage, Layer, Line, Rect, Shape, Stage, Text } from 'react-konva';
 import { add, centroid, distance, dot, sub } from '../../engine/geometry';
 import type { BackgroundImage, BoatClass, Layout, Polygon, Site, Vec2 } from '../../engine/model';
+import { sectorFetches } from '../../engine/fetchRays';
 import { pierAxis } from '../../engine/rows';
 import { gangwayLinks, pierPolygon } from '../../engine/site';
 import { appStore, useAppStore, type LayerId, type Selection, type ToolId } from '../../state/store';
-import { OSM_ATTRIBUTION } from '../../state/geo';
+import { latLonToLocal, OSM_ATTRIBUTION } from '../../state/geo';
 import { gridStep, panBy, scaleBar, screenToWorld, visibleBounds, worldToScreen, zoomAt, type Size, type View } from '../../state/view';
 import { loadImage, registerStage } from '../export/download';
 import { formatLength } from '../format';
@@ -167,6 +168,37 @@ function AnchorShapes() {
           width={1.2}
           height={1.2}
           fill={l.anchorCount > 1 ? COLORS.issue : COLORS.anchor}
+          listening={false}
+        />
+      ))}
+    </>
+  );
+}
+
+/**
+ * D47: the rays of the automatic fetch lookup, from the site to the first shore; the longest ray
+ * of each sector (its fetch) thicker. Drawn only with a map position, which places the rays.
+ */
+function FetchRays() {
+  const map = useAppStore((s) => s.project.map);
+  const af = useAppStore((s) => s.project.waves.autoFetch);
+  if (!map || !af) return null;
+  const o = latLonToLocal(map, af.position.lat, af.position.lon);
+  const end = (i: number) => {
+    const r = (i * af.stepDeg * Math.PI) / 180;
+    return { x: o.x + af.distances[i]! * Math.sin(r), y: o.y + af.distances[i]! * Math.cos(r) };
+  };
+  const longest = new Set(sectorFetches(af.distances, af.radius, af.stepDeg).map((x) => Math.round(x.bearing / af.stepDeg)));
+  return (
+    <>
+      {af.distances.map((_, i) => (
+        <Line
+          key={`ray-${i}`}
+          points={flat([o, end(i)])}
+          stroke={longest.has(i) ? COLORS.fetchMax : COLORS.fetchRay}
+          strokeWidth={longest.has(i) ? 2 : 1}
+          opacity={0.8}
+          strokeScaleEnabled={false}
           listening={false}
         />
       ))}
@@ -635,6 +667,7 @@ export function MarinaCanvas() {
               <LayoutShapes layout={layout} classes={project.boatClasses} layers={layers} selection={selection} patternScale={patternScale} />
             )}
             {layout && layers.anchoring && <AnchorShapes />}
+            {layers.fetch && <FetchRays />}
           </Group>
         </Layer>
 

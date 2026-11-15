@@ -79,6 +79,7 @@ export const LAYER_IDS = [
   'slots',
   'boats',
   'anchoring',
+  'fetch',
   'issues',
 ] as const;
 export type LayerId = (typeof LAYER_IDS)[number];

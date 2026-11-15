@@ -188,6 +188,7 @@ describe('project file (SPEC §2: JSON export/import)', () => {
       criteria: 'as3962',
       location: null,
       climate: null,
+      autoFetch: null,
     });
     // D47: sectors and criteria are kept; wrong sector count or negative fetch refused.
     const own = emptySectors();
@@ -199,6 +200,11 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { sectors: own.slice(0, 7) }))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { sectors: own.map((x) => ({ ...x, fetch: -5 })) }))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { criteria: 'pianc' }))).ok).toBe(false);
+    // D47: the automatic lookup is kept; a ray count that does not match the step is refused.
+    const autoFetch = { source: 'OpenStreetMap', position: { lat: 63.56, lon: 27.19 }, radius: 20000, stepDeg: 90, distances: [1000, 2500, 300, 20000], fetchedOn: '2026-11-15' };
+    const af = parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoFetch })));
+    expect(af.ok && af.project.waves.autoFetch).toEqual(autoFetch);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoFetch: { ...autoFetch, distances: [1, 2] } }))).ok).toBe(false);
     // D41: position and fetched wind climate are kept.
     const sector = { rose: [0.01, 0.02, 0, 0, 0], annualMax: [12, 14], oneYear: 11.5, fiftyYear: null };
     const climate = {

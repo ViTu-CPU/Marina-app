@@ -2,7 +2,7 @@
  * JSON project file: export and import with structural validation (SPEC §2, persistence).
  */
 import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type Seabed } from '../engine/anchoring';
-import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type WaveSettings } from '../engine/waves';
+import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type AutoFetch, type WaveSettings } from '../engine/waves';
 import { SECTORS, type WindClimate } from '../engine/wind';
 import { PRODUCT_CATEGORIES, PRODUCT_UNITS, type PriceList, type Product } from '../engine/catalog';
 import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
@@ -358,6 +358,25 @@ function waveSettings(v: unknown): WaveSettings {
     criteria: o.criteria === undefined ? DEFAULT_WAVES.criteria : oneOf(o.criteria, ['as3962', 'ufc'] as const, 'waves.criteria'),
     location: o.location === undefined || o.location === null ? null : latLon(o.location, 'waves.location'),
     climate: o.climate === undefined || o.climate === null ? null : windClimateOf(o.climate),
+    autoFetch: o.autoFetch === undefined || o.autoFetch === null ? null : autoFetchOf(o.autoFetch),
+  };
+}
+
+/** D47: a saved automatic fetch lookup. */
+function autoFetchOf(v: unknown): AutoFetch {
+  const o = obj(v, 'waves.autoFetch');
+  const radius = num(o.radius, 'waves.autoFetch.radius');
+  const stepDeg = num(o.stepDeg, 'waves.autoFetch.stepDeg');
+  if (!(radius > 0) || !(stepDeg > 0) || 360 % stepDeg !== 0) fail('waves.autoFetch.radius / stepDeg are not valid');
+  const distances = arr(o.distances, 'waves.autoFetch.distances').map((x, i) => num(x, `waves.autoFetch.distances[${i}]`));
+  if (distances.length !== 360 / stepDeg) fail('waves.autoFetch.distances must have one value per ray');
+  return {
+    source: str(o.source, 'waves.autoFetch.source'),
+    position: latLon(o.position, 'waves.autoFetch.position'),
+    radius,
+    stepDeg,
+    distances,
+    fetchedOn: str(o.fetchedOn, 'waves.autoFetch.fetchedOn'),
   };
 }
 

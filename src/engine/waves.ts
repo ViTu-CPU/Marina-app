@@ -241,6 +241,21 @@ export interface WaveSectorInput {
 
 export const emptySectors = (): WaveSectorInput[] => WAVE_SECTORS.map(() => ({ fetch: 0, depth: null, wind1: null, wind50: null }));
 
+/** D47, I94: fetches measured from the OpenStreetMap shoreline, kept with the project. */
+export interface AutoFetch {
+  source: string;
+  /** Site position the rays start from, degrees. */
+  position: { lat: number; lon: number };
+  /** Search radius, m: a ray that crosses no shore is cut here. */
+  radius: number;
+  /** Angle between rays, degrees. */
+  stepDeg: number;
+  /** Distance along each ray (bearing i × stepDeg) to the first shore, m. */
+  distances: number[];
+  /** Date of the lookup, YYYY-MM-DD. */
+  fetchedOn: string;
+}
+
 /** Inputs of the wave screening, stored in the project (D40, D47). */
 export interface WaveSettings {
   /** Eight sectors N, NE, … NW (D47). */
@@ -260,6 +275,8 @@ export interface WaveSettings {
   location: { lat: number; lon: number } | null;
   /** D41: wind climate fetched for the site, or null. */
   climate: WindClimate | null;
+  /** D47: the last automatic fetch lookup, or null. */
+  autoFetch: AutoFetch | null;
 }
 
 /** Nothing entered yet; 10-min winds (FMI observations, Eurocode basic wind), a "good" climate, AS 3962 criteria. */
@@ -273,6 +290,7 @@ export const DEFAULT_WAVES: WaveSettings = {
   criteria: 'as3962',
   location: null,
   climate: null,
+  autoFetch: null,
 };
 
 /**

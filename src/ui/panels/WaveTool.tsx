@@ -22,7 +22,9 @@ import {
 } from '../../engine/waves';
 import { sectorBearing, windClimate } from '../../engine/wind';
 import type { StringKey } from '../../i18n';
+import { sectorFetches, RAY_STEP_DEG } from '../../engine/fetchRays';
 import { localToLatLon, parseLatLon } from '../../state/geo';
+import { lookupFetch, OSM_SOURCE } from '../../state/overpass';
 import { fetchWindHistory } from '../../state/openMeteo';
 import { appStore, useAppStore } from '../../state/store';
 import { formatCount, formatLength, formatPercent } from '../format';
@@ -49,6 +51,86 @@ function OptionalRow({ label, value, min, max, placeholder, onChange }: { label:
   );
 }
 
+/** The position the wind data and the fetch lookup use: an entered one, else the centre of the site on the map. */
+function useWavePosition(): { position: { lat: number; lon: number } | null; siteCentre: { lat: number; lon: number } | null } {
+  const waves = useAppStore((s) => s.project.waves);
+  const map = useAppStore((s) => s.project.map);
+  const water = useAppStore((s) => s.project.site.water);
+  const siteCentre = map ? localToLatLon(map, water.length >= 3 ? centroid(water) : { x: 0, y: 0 }) : null;
+  return { position: waves.location ?? siteCentre, siteCentre };
+}
+
+const RADII_KM = [5, 10, 20, 30, 50] as const;
+
+/** D47, I94: the fetch of every sector from the OpenStreetMap shoreline. */
+function AutoFetchSection() {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const waves = useAppStore((s) => s.project.waves);
+  const { position } = useWavePosition();
+  const [radiusKm, setRadiusKm] = useState<number>(waves.autoFetch ? waves.autoFetch.radius / 1000 : 20);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const af = waves.autoFetch;
+  const run = async () => {
+    if (!position) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const radius = radiusKm * 1000;
+      const r = await lookupFetch(position.lat, position.lon, radius);
+      const round = (m: number) => Math.round(m * 10) / 10;
+      state().setWaves({
+        sectors: waves.sectors.map((x, k) => ({ ...x, fetch: round(r.sectors[k]!.fetch) })),
+        autoFetch: { source: OSM_SOURCE, position, radius, stepDeg: RAY_STEP_DEG, distances: r.distances.map(round), fetchedOn: new Date().toISOString().slice(0, 10) },
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const open = af ? sectorFetches(af.distances, af.radius, af.stepDeg).map((x) => x.open) : [];
+  return (
+    <div className="space-y-1" data-testid="auto-fetch">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('autoFetch.title')}</div>
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-1">
+          {t('autoFetch.radius')}
+          <select aria-label={t('autoFetch.radius')} className="rounded border border-slate-300 px-1 py-0.5 text-sm" value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))}>
+            {RADII_KM.map((r) => (
+              <option key={r} value={r}>
+                {r} km
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button variant="primary" disabled={!position || busy} onClick={() => void run()}>
+          {t('autoFetch.run')}
+        </Button>
+        {busy && (
+          <span role="status" className="animate-pulse text-xs text-sky-800">
+            {t('autoFetch.running')}
+          </span>
+        )}
+      </div>
+      {!position && <p className="text-xs text-amber-800">{t('autoFetch.noPosition')}</p>}
+      {error && (
+        <p role="alert" className="text-xs text-red-700">
+          {t('autoFetch.error')} {error}
+        </p>
+      )}
+      {af && (
+        <p className="text-xs text-slate-600">
+          {t('autoFetch.done')} {af.position.lat.toFixed(4)}, {af.position.lon.toFixed(4)} ({formatCount(af.radius / 1000, language)} km, {af.fetchedOn})
+          {open.some((x) => x) ? ` · ${WAVE_SECTORS.filter((_, k) => open[k]).join(', ')}: ${t('autoFetch.open')}` : ''}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">{t('autoFetch.note')}</p>
+    </div>
+  );
+}
+
 /** ERA5 hourly winds are taken as 1-hour means (I88). */
 const ERA5_AVERAGING_S = 3600;
 
@@ -57,14 +139,11 @@ function WindSection() {
   const t = useT();
   const language = useAppStore((s) => s.language);
   const waves = useAppStore((s) => s.project.waves);
-  const map = useAppStore((s) => s.project.map);
-  const water = useAppStore((s) => s.project.site.water);
   const lastYear = new Date().getUTCFullYear() - 1;
   const [years, setYears] = useState<[number, number]>([lastYear - 29, lastYear]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const siteCentre = map ? localToLatLon(map, water.length >= 3 ? centroid(water) : { x: 0, y: 0 }) : null;
-  const position = waves.location ?? siteCentre;
+  const { position, siteCentre } = useWavePosition();
   const [text, setText] = useState('');
   const climate = waves.climate;
   // D47: the 22.5° sectors behind the wave directions that exceed the criteria.
@@ -389,6 +468,7 @@ export function WaveTool() {
           </div>
 
           <div className="min-w-0 space-y-3 text-sm">
+            <AutoFetchSection />
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('waves.sectors')}</div>
             <div className="overflow-x-auto">
               <table className="w-full text-right tabular-nums" data-testid="wave-results">

@@ -897,3 +897,22 @@ date 14.11.2014), read for the breakwater proposal (DECISIONS D48):
   M2712PE / M2716PE / M2720PE 12,20 / 16,05 / 19,90 × 2,7 m (concrete 2,4 m), 12,5 / 16,5 / 20,6 t; M3312PE /
   M3316PE / M3320PE × 3,3 m (3,0 m), 15,6 / 20,7 / 25,7 t; height 1,0 m, net capacity 5,6 kN/m², freeboard 0,56 m,
   joints 2 × 322 kN, joint gap 35 mm; *"Premier pontoons can be moored by piles, chain or Seaflex."* (DECISIONS D44.)
+
+## 13. OpenStreetMap shorelines through the Overpass API (2026-11-15)
+
+- **Overpass API** ([overpass-api.de](https://overpass-api.de/), documentation
+  [dev.overpass-api.de/overpass-doc](https://dev.overpass-api.de/overpass-doc/en/)): read-only query
+  service for OpenStreetMap data. Query language used: `way(around:r, lat1,lon1, lat2,lon2, …)` (elements
+  within r metres of a polyline), `rel(bw.set)` (relations having ways of a set as members),
+  `way.set(r.rels)` (member ways of relations, limited to a set), `out geom` (ways with coordinates) and
+  `out skel` (relations with their member lists). Water is tagged `natural=water` (lakes, ponds, rivers
+  with `water=*`), older river areas `waterway=riverbank`, reservoirs `landuse=reservoir`; large lakes are
+  multipolygon relations whose islands are inner members; the sea is the land side of `natural=coastline`
+  ways (OSM wiki: Tag:natural=water, Tag:natural=coastline, Relation:multipolygon).
+- Usage: the main instance is free for moderate use; its guidance is about 10 000 queries and 1 GB of
+  data a day per user (OSM wiki "Overpass API", section on public instances). The tool sends one query
+  per lookup.
+- Licence: OpenStreetMap data © OpenStreetMap contributors, Open Database Licence (ODbL); the tool shows
+  the attribution with the lookup.
+- From this development environment the main instance reset the TLS connection, so the query is tested
+  with mocked answers only (unit tests and the end-to-end test), as Open-Meteo was (§10).
