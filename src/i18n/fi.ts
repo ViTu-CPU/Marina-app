@@ -118,6 +118,8 @@ export const fi: Partial<Record<StringKey, string>> = {
   'param.beamClearance': 'Leveysvara (m)',
   'param.lengthClearance': 'Pituusvara (m)',
   'param.shoreOffset': 'Ensimmäinen paikka rannasta (m)',
+  'param.shoreGap': 'Laiturin etäisyys rannasta (m)',
+  'param.gangwayLength': 'Kulkusilta rannasta (m)',
   'param.maxMainPierLength': 'Laiturin enimmäispituus (m)',
   'param.orientation': 'Laiturien suunta',
   'param.orientationAuto': 'Automaattinen',

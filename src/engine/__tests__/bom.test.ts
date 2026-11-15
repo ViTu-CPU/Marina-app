@@ -95,6 +95,8 @@ describe('product choices', () => {
       boomSeries: 'Boom',
       gangwaySeries: 'G',
       pontoonFreeboard: 0.5,
+      // D49: the project's gangway length.
+      gangwayLength: 6,
     });
     expect(resolveChoices(LIST, DEFAULT_COST, { ...DEFAULT_PARAMS, mainPierWidth: 2.4 }).pontoonSeries).toBe('S24');
   });
@@ -207,6 +209,15 @@ describe('cost estimate, hand-calculated', () => {
   it('gangway: one pier from the shore; 6 m wanted → 8 m product = 1 200 €', () => {
     expect(lineFor('g8').orderQuantity).toBe(1);
     expect(estimate.byGroup.gangways).toBe(1200);
+  });
+
+  it('a pier 4 m off the shore still has its gangway; beyond its reach none (D49)', () => {
+    const off = (y: number) => costEstimate({ layout: { piers: [{ ...pier, start: { x: 0, y }, end: { x: 0, y: y + 30 } }], fingers, berths }, site, priceList: LIST, choices, anchoring });
+    expect(off(4).lines.find((l) => l.productId === 'g8')!.orderQuantity).toBe(1);
+    expect(off(7).lines.some((l) => l.productId === 'g8')).toBe(false);
+    // A 5 m gangway asked for: the 5 m product.
+    const short = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: LIST, choices: { ...choices, gangwayLength: 5 }, anchoring });
+    expect(short.lines.find((l) => l.productId === 'g5')!.orderQuantity).toBe(1);
   });
 
   it('gangways of an access pontoon (D32): one per placed gangway, else one', () => {

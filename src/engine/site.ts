@@ -105,9 +105,11 @@ export interface PreparedSite {
    * water − obstacle buffers − noNavigation zones − protected zones.
    */
   navigableRegion: Region;
+  /** D49: longest gap a pier's shore gangway can span, m (`Params.gangwayLength`). */
+  gangwayReach: number;
 }
 
-export function prepareSite(site: Site, params: Pick<Params, 'obstacleClearance'>): PreparedSite {
+export function prepareSite(site: Site, params: Pick<Params, 'obstacleClearance'> & Partial<Pick<Params, 'gangwayLength'>>): PreparedSite {
   const water = regionFromPolygon(site.water);
   const obstacleBuffer = unionRegions(
     site.obstacles.map((o) => bufferRegion(regionFromPolygon(o.shape), params.obstacleClearance)),
@@ -138,7 +140,40 @@ export function prepareSite(site: Site, params: Pick<Params, 'obstacleClearance'
     zones,
     structureRegion: differenceRegions(withoutObstacles, zones.noStructures),
     navigableRegion: differenceRegions(withoutObstacles, zones.noNavigation),
+    gangwayReach: params.gangwayLength ?? DEFAULT_GANGWAY_LENGTH,
   };
+}
+
+/** D49: default gangway from the shore to a pier, m (owner: *"gangway 6m, pier 4m off from the shore wall"*). */
+export const DEFAULT_GANGWAY_LENGTH = 6;
+
+/** D49: how a pier reaches land: straight from an access pontoon, or by a gangway over `gap` m from the shoreline. */
+export interface PierShoreLink {
+  kind: 'access' | 'gangway';
+  /** Middle of the pier's shore end, and the nearest point of the shoreline (= `from` for 'access'). */
+  from: Vec2;
+  to: Vec2;
+  /** Water between the pier end and the shoreline, m. */
+  gap: number;
+}
+
+/**
+ * The pier's connection to land (D49): 'access' when its shore end lies on an access pontoon's edge
+ * (I5 tolerance); 'gangway' when the shoreline is within `reach` m of its shore end (tested at the
+ * middle and both corners); null otherwise.
+ */
+export function pierShoreLink(pier: { start: Vec2; end: Vec2; width: number }, site: Site, reach: number): PierShoreLink | null {
+  const length = distance(pier.start, pier.end);
+  if (!(length > 0)) return null;
+  const along = scale(sub(pier.end, pier.start), 1 / length);
+  const left = { x: -along.y, y: along.x };
+  const ends = [0, pier.width / 2, -pier.width / 2].map((l) => add(pier.start, scale(left, l)));
+  const accessEdges = connectionLines({ ...site, shoreline: [] });
+  if (ends.some((p) => distanceToConnection(accessEdges, p) <= SHORE_TOLERANCE)) return { kind: 'access', from: pier.start, to: pier.start, gap: 0 };
+  if (site.shoreline.length < 2) return null;
+  const gap = Math.min(...ends.map((p) => distancePointToPolyline(p, site.shoreline)));
+  if (gap > reach + SHORE_TOLERANCE) return null;
+  return { kind: 'gangway', from: pier.start, to: closestPointOnPolyline(pier.start, site.shoreline), gap };
 }
 
 export interface PierSegment {
@@ -171,6 +206,8 @@ export interface PlacementReport {
 
 export interface PierPlacementOptions {
   width: number;
+  /** D49: water left between the shoreline and the pier's shore end (bridged by a gangway), m; none from an access pontoon. */
+  shoreGap?: number;
   maxLength: number;
   /** Water kept free beyond the pier head so boats can pass around it, m. */
   headClearance: number;
@@ -219,14 +256,18 @@ export function placePiersOnLine(
     intervals = intervals === null ? clipped : intersectIntervals(intervals, clipped);
   }
 
-  const touchesShore = (t: number): boolean => {
+  const touchesLines = (t: number, which: Polyline[]): boolean => {
     // An oblique shore touches only one corner of the square pier end, so test across the width.
     for (const lateral of [0, options.width / 2, -options.width / 2]) {
       const p = add(add(base, scale(dir, t)), scale(left, lateral));
-      if (distanceToConnection(lines, p) <= SHORE_TOLERANCE) return true;
+      if (distanceToConnection(which, p) <= SHORE_TOLERANCE) return true;
     }
     return false;
   };
+  const touchesShore = (t: number): boolean => touchesLines(t, lines);
+  // D49: a pier starting from the shoreline (not from an access pontoon) keeps the gangway gap.
+  const accessEdges = lines.filter((l) => l !== site.shoreline);
+  const gapAt = (t: number): number => (touchesLines(t, accessEdges) ? 0 : Math.max(0, options.shoreGap ?? 0));
 
   const piers: PierSegment[] = [];
   for (const [t0, t1] of intervals ?? []) {
@@ -236,10 +277,11 @@ export function placePiersOnLine(
       report.shoreRuns++;
       report.longestShoreRun = Math.max(report.longestShoreRun, t1 - t0);
     }
-    const usable = Math.min(options.maxLength, t1 - t0 - options.headClearance);
+    const gap = gapAt(fromStart ? t0 : t1);
+    const usable = Math.min(options.maxLength, t1 - t0 - options.headClearance - gap);
     if (usable < options.minLength || usable <= 0) continue;
-    const startT = fromStart ? t0 : t1;
-    const endT = fromStart ? t0 + usable : t1 - usable;
+    const startT = fromStart ? t0 + gap : t1 - gap;
+    const endT = fromStart ? startT + usable : startT - usable;
     const start = add(base, scale(dir, startT));
     const end = add(base, scale(dir, endT));
     // The three lines can miss a boundary spike narrower than half the pier: verify the rectangle.

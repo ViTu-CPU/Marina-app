@@ -11,7 +11,7 @@ import { prepareSite } from '../site';
  * The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27)
  * and exact finger lengths, 0.8 × boat length (no standard lengths, D29).
  */
-const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [], mainPierWidth: 3, pierModuleLengths: [] };
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [], mainPierWidth: 3, pierModuleLengths: [], shoreGap: 0 };
 const OPEN_BASIN: Site = { ...RECT_BASIN_SITE, obstacles: [] };
 
 const only = (id: string): BoatClass[] => DEFAULT_BOAT_CLASSES.filter((c) => c.id === id).map((c) => ({ ...c, share: 1 }));

@@ -14,7 +14,7 @@ import { IssueCode, validateLayout, type LayoutElements } from '../validate';
  * The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27)
  * and exact finger lengths, 0.8 × boat length (no standard lengths, D29).
  */
-const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [], mainPierWidth: 3, pierModuleLengths: [] };
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [], mainPierWidth: 3, pierModuleLengths: [], shoreGap: 0 };
 const classes = DEFAULT_BOAT_CLASSES;
 const params = PARAMS;
 const OPEN_BASIN: Site = { ...RECT_BASIN_SITE, obstacles: [] };
@@ -124,11 +124,14 @@ describe('operational validation (SPEC §6)', () => {
     expect(codes(validate(layout, site))).toEqual([IssueCode.FAIRWAY_IN_OBSTACLE_BUFFER]);
   });
 
-  it('a pier that does not start at the shoreline is reported', () => {
-    const result = validate({ piers: [pier('P1', 60, 5, 100)], fingers: [], berths: [] });
+  it('a pier that its gangway cannot reach from the shoreline is reported (D49)', () => {
+    // 7 m off the shore: beyond the 6 m gangway (+ 0.5 m tolerance).
+    const result = validate({ piers: [pier('P1', 60, 7, 100)], fingers: [], berths: [] });
     expect(codes(result)).toEqual([IssueCode.PIER_NOT_CONNECTED_TO_SHORE]);
     expect(result.issues[0]!.elementId).toBe('P1');
-    // Within the 0.5 m tolerance it counts as connected.
+    expect(result.issues[0]!.message).toContain('gangway of 6.0 m');
+    // 5 m off: the gangway reaches it; touching the shore (within 0.5 m) counts too.
+    expect(validate({ piers: [pier('P1', 60, 5, 100)], fingers: [], berths: [] }).issues).toEqual([]);
     expect(validate({ piers: [pier('P1', 60, 0.4, 100)], fingers: [], berths: [] }).issues).toEqual([]);
   });
 

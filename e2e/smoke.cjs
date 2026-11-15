@@ -375,11 +375,15 @@ async function waitForServer() {
       await page.waitForFunction(() => window.__marina.getState().builtInPriceList !== null, null, { timeout: 10000 });
       const fixings = page.getByText('Wall fixings of shore chains', { exact: true });
       await fixings.scrollIntoViewIfNeeded();
-      assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), '2');
+      // Piers beside the pontoon reach the shore by their own gangway, with 2 shore chains each (D49).
+      const onPontoon = (p) =>
+        Math.abs(p.start.y - edge) < 0.6 && p.start.x >= Math.min(pontoon.start.x, pontoon.end.x) - 0.1 && p.start.x <= Math.max(pontoon.start.x, pontoon.end.x) + 0.1;
+      const ownGangways = best.piers.filter((p) => !onPontoon(p)).length;
+      assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), String(2 + 2 * ownGangways));
       // Two gangways placed by hand (D32): 2 shore chains each.
       await page.getByLabel(`Gangways at (m from its first point) (${pontoon.id})`, { exact: true }).fill('20; 150');
       await page.waitForFunction(() => (window.__marina.getState().project.site.accessPontoons[0].gangways ?? []).length === 2);
-      assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), '4');
+      assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), String(4 + 2 * ownGangways));
       await page.screenshot({ path: path.join(outDir, 'access-pontoon.png') });
     });
 
@@ -414,6 +418,13 @@ async function waitForServer() {
       await generate();
       // The built-in price list is loaded at start-up.
       await page.waitForFunction(() => window.__marina.getState().builtInPriceList !== null, null, { timeout: 10000 });
+      // D44, D49: piers of Premier 2700 modules, 4 m off the south shore (y = 0), reached by a gangway.
+      const rect = await state();
+      const best = rect.project.layouts.find((l) => l.id === rect.selectedLayoutId);
+      for (const pier of best.piers) {
+        assert.equal(pier.width, 2.7);
+        assert.ok(Math.min(pier.start.y, pier.end.y) >= 3.9, `pier ${pier.id} starts ${Math.min(pier.start.y, pier.end.y)} m from the shore`);
+      }
       const total = page.getByText('Total VAT 0 %', { exact: true });
       await total.scrollIntoViewIfNeeded();
       assert.ok(await total.isVisible());

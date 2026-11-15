@@ -55,7 +55,7 @@ import { add, distancePointToPolyline, dot, pointInRing, scale, sub } from './ge
 import type { BoatClass, Finger, Issue, Layout, MainPier, Site, Vec2 } from './model';
 import { jointPositions } from './modules';
 import { pierAxis } from './rows';
-import { accessPontoonsOf, gangwayPositions, SHORE_TOLERANCE } from './site';
+import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierShoreLink, SHORE_TOLERANCE } from './site';
 
 export type Seabed = 'clay' | 'sand' | 'rock';
 
@@ -433,6 +433,8 @@ export interface AnchoringInput {
   buoyDepthFactor?: number;
   /** D46: module lengths of the piers (`Params.pierModuleLengths`); empty or missing = joints every `lineSpacing`. */
   moduleLengths?: readonly number[];
+  /** D49: longest gap a pier's shore gangway spans (`Params.gangwayLength`), m. */
+  gangwayReach?: number;
 }
 
 export interface ChainLine {
@@ -770,6 +772,7 @@ function pierLoads(pier: MainPier, layout: AnchoringInput['layout'], classes: Bo
 export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   const { layout, site, classes, params: p, priceList, vatPct } = input;
   const moduleLengths = input.moduleLengths ?? [];
+  const reach = input.gangwayReach ?? DEFAULT_GANGWAY_LENGTH;
   const freeboard = input.pierFreeboard ?? p.pontoonFreeboard;
   const q = 0.5 * p.airDensity * p.windSpeed ** 2;
   const issues: Issue[] = [];
@@ -937,16 +940,58 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       const tip = length >= p.tipAnchorMinLength - 1e-9;
       if (tip) both(length, 'head', 'tip');
       const perSide = specs.filter((x) => x.anchoredOn === 'right').length;
-      const count = { head: specs.filter((x) => x.splay === 'head').length, shore: specs.filter((x) => x.splay === 'shore').length };
+      // D49: a pier reached by a gangway from the shore has two shore chains under it, crossed at
+      // θ from the pier's axis; they hold the pier against wind from the shore with the shore-ward
+      // seabed chains (each line the same share of the force along the pier, I97).
+      const link = pierShoreLink(item, site, reach);
+      const shoreChains = link?.kind === 'gangway' ? 2 : 0;
+      const count = { head: specs.filter((x) => x.splay === 'head').length, shore: specs.filter((x) => x.splay === 'shore').length + shoreChains };
       // Across: the lines anchored on the windward side share the load. Along: the lines splayed
       // against the wind share it (wind from the sea pushes the pier shorewards: 'head' lines hold).
       const acrossH = item.lateral / perSide / Math.cos(angle);
-      const alongH = (splay: Spec['splay']): number => {
+      const alongShare = (splay: Spec['splay']): number => {
         const force = splay === 'head' ? item.axialFromSea : item.axialFromShore;
-        return force > 0 && angle > 0 && count[splay] > 0 ? force / count[splay] / Math.sin(angle) : 0;
+        return force > 0 && count[splay] > 0 ? force / count[splay] : 0;
       };
-      if (Math.max(item.axialFromSea, item.axialFromShore) > 0 && (angle === 0 || (item.axialFromSea > 0 && count.head === 0) || (item.axialFromShore > 0 && count.shore === 0))) {
+      const alongH = (splay: Spec['splay']): number => (angle > 0 ? alongShare(splay) / Math.sin(angle) : 0);
+      if (
+        Math.max(item.axialFromSea, item.axialFromShore) > 0 &&
+        ((angle === 0 && !(shoreChains > 0 && item.axialFromSea === 0)) || (item.axialFromSea > 0 && count.head === 0) || (item.axialFromShore > 0 && count.shore === 0))
+      ) {
         unheld.push(item.id);
+      }
+      if (link?.kind === 'gangway') {
+        // From the pier's shore-end corners to the wall, each crossing to the other side under the
+        // gangway: plan length gap / cos θ, at least 0.5 m (a pier touching the shore).
+        const plan = Math.max(link.gap, 0.5) / Math.cos(angle);
+        const H = alongShare('shore') / Math.cos(angle);
+        const shore = chooseShoreChain(H, plan, p, priceList, vatPct);
+        [1, -1].forEach((sign, i) => {
+          const fix = at(0, (sign * item.width) / 2);
+          const dir = add(scale(pierAlong, -Math.cos(angle)), scale(left, -sign * Math.sin(angle)));
+          const id = `${item.id}-S${i + 1}`;
+          lines.push({
+            id,
+            holdsId: item.id,
+            splay: 'none',
+            governs: 'along',
+            fixing: 'wall',
+            role: 'shore',
+            fix,
+            anchor: add(fix, scale(dir, plan)),
+            horizontalKn: H / 1000,
+            topTensionKn: shore.tension / 1000,
+            upliftKn: 0,
+            upliftAngleDeg: 0,
+            anchorType: null,
+            chainLength: shore.length,
+            chainId: shore.product?.id ?? null,
+            requiredAnchorKg: 0,
+            anchorId: null,
+            anchorCount: 0,
+          });
+          if (!shore.product) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(shore.tension / 1000).toFixed(1)} kN with the safety factor; shore chain ${id} has no chain.`, item.id);
+        });
       }
       let n = 0;
       let k = 0;

@@ -517,7 +517,7 @@ function parallelCandidate(
       prepared,
       scale(lateral, u),
       dir,
-      { width: params.mainPierWidth, maxLength: params.maxMainPierLength, headClearance: design.fairwayWidth, minLength },
+      { width: params.mainPierWidth, maxLength: params.maxMainPierLength, headClearance: design.fairwayWidth, minLength, shoreGap: params.shoreGap },
       ctx.report,
     );
     for (const raw of placed) segments.push({ start: roundVec(raw.start), end: roundVec(raw.end) });
@@ -605,7 +605,8 @@ function bestShoreParallel(ctx: SearchContext): Candidate | null {
         : null;
     if (!side) continue;
     const toWater = side === 'left' ? left : scale(left, -1);
-    const base = add(a, scale(toWater, width / 2));
+    // D49: the pier lies the gangway gap off the shore.
+    const base = add(a, scale(toWater, width / 2 + params.shoreGap));
 
     // The centreline and both edges of the pier must be in buildable water.
     let intervals: [number, number][] | null = null;
@@ -710,6 +711,7 @@ function sizeZonedLayout(ctx: SearchContext, zoned: ZonedContext, options: Zoned
     const headWidth = options.head === 'widest' ? zoned.zones[0]!.fairway : back.fairway;
     const segments = placePiersOnLine(prepared, scale(forward, u), dir, {
       width,
+      shoreGap: params.shoreGap,
       maxLength: params.maxMainPierLength,
       headClearance: headWidth,
       minLength: params.shoreOffset + back.minFootprint,

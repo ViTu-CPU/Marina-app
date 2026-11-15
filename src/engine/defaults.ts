@@ -44,6 +44,9 @@ export const DEFAULT_PARAMS: Params = {
   maxMainPierLength: 150,
   orientation: 'auto',
   shoreOffset: 0,
+  // D49: owner: "if not told differently, use default: gangway 6m, pier 4m off from the shore wall".
+  shoreGap: 4,
+  gangwayLength: 6,
   berthTarget: 'share',
 };
 

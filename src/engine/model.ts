@@ -175,6 +175,10 @@ export interface Params {
   orientation: 'auto' | number;
   /** Extension (D5): distance from the shore end of a pier to the first finger/berth, m. */
   shoreOffset: number;
+  /** Extension (D49): water between the shoreline and a pier's shore end, bridged by a gangway, m. */
+  shoreGap: number;
+  /** Extension (D49): length of the gangway from the shore to a pier, m. */
+  gangwayLength: number;
   /** Extension (D20): the boat mix is given as target shares or as target berth counts. */
   berthTarget: BerthTarget;
 }

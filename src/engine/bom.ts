@@ -11,10 +11,10 @@
  */
 import type { AnchoringResult } from './anchoring';
 import { DEFAULT_VAT_PCT, parameter, unitPriceVat0, type PriceList, type Product, type ProductUnit } from './catalog';
-import { distance, distancePointToPolyline } from './geometry';
+import { distance } from './geometry';
 import type { CostSettings, Layout, Params, Site } from './model';
 import { rowFrame, toLocalRect } from './rows';
-import { accessPontoonsOf, gangwayPositions, SHORE_TOLERANCE } from './site';
+import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierShoreLink } from './site';
 
 export type BomGroup = 'pontoons' | 'fingers' | 'gangways' | 'anchoring' | 'fittings' | 'labour' | 'plant';
 export const BOM_GROUPS: BomGroup[] = ['pontoons', 'fingers', 'gangways', 'anchoring', 'fittings', 'labour', 'plant'];
@@ -47,6 +47,8 @@ export interface ResolvedChoices {
   gangwaySeries: string | null;
   /** Freeboard of the chosen pontoon series, m (for the anchoring wind area), or null. */
   pontoonFreeboard: number | null;
+  /** D49: gangway length to buy, m: the project's (`Params.gangwayLength`), else the price list's `gangway_length_m`. */
+  gangwayLength?: number;
 }
 
 export interface CostEstimate {
@@ -115,7 +117,7 @@ export function resolveChoices(list: PriceList, cost: CostSettings, params: Para
   const pontoonSeries = pick(cost.pontoonSeries, 'pontoon', () => closestByWidth(list, 'pontoon', params.mainPierWidth, vat));
   const fingerSeries = pick(cost.fingerSeries, 'finger', () => closestByWidth(list, 'finger', params.fingerWidth, vat));
   const boomSeries = pick(cost.boomSeries ?? '', 'finger', () => closestByWidth(list, 'finger', params.boomWidth, vat));
-  const wanted = parameter(list, 'gangway_length_m', 6);
+  const wanted = params.gangwayLength ?? parameter(list, 'gangway_length_m', 6);
   const gangwaySeries = pick(cost.gangwaySeries, 'gangway', () => {
     let best: { name: string; price: number } | null = null;
     for (const name of seriesNames(list, 'gangway')) {
@@ -134,6 +136,7 @@ export function resolveChoices(list: PriceList, cost: CostSettings, params: Para
     boomSeries,
     gangwaySeries,
     pontoonFreeboard: freeboards.length > 0 ? Math.max(...freeboards) : null,
+    ...(params.gangwayLength === undefined ? {} : { gangwayLength: params.gangwayLength }),
   };
 }
 
@@ -283,12 +286,11 @@ export function costEstimate(input: CostInput): CostEstimate {
 
   // --- Gangways: one per pier that starts at the shoreline, one per access pontoon -----
   const gangwayProducts = choices.gangwaySeries ? seriesOf(list, 'gangway', choices.gangwaySeries) : [];
-  const fromShore = layout.piers.filter(
-    (p) => site.shoreline.length >= 2 && distancePointToPolyline(p.start, site.shoreline) <= SHORE_TOLERANCE + p.width / 2,
-  ).length;
+  // D49: every pier reached from the shoreline by its gangway (not those on an access pontoon).
+  const fromShore = layout.piers.filter((p) => pierShoreLink(p, site, choices.gangwayLength ?? DEFAULT_GANGWAY_LENGTH)?.kind === 'gangway').length;
   const accessGangways = accessPontoonsOf(site).reduce((n, a) => n + gangwayPositions(a).length, 0);
   const gangways = fromShore + accessGangways;
-  const wantedGangway = par('gangway_length_m', 6);
+  const wantedGangway = choices.gangwayLength ?? par('gangway_length_m', 6);
   const gangway = pickByLength(gangwayProducts, wantedGangway, vat);
   if (gangways > 0 && gangway) {
     addQty('gangways', gangway.product, gangways, `${fromShore} piers from the shore + ${accessGangways} on access pontoons`);

@@ -23,8 +23,8 @@ import {
 import { bufferRegion, differenceRegions } from './geometryOps';
 import type { Berth, BoatClass, Feasibility, Finger, Issue, MainPier, Params, Polygon } from './model';
 import { localRectToPolygon } from './patterns';
-import { layoutRows, pierAxis, toLocalRect, type RowInfo } from './rows';
-import { accessPontoonsOf, distanceToConnection, gangwayLinks, pierPolygon, SHORE_TOLERANCE, type PreparedSite } from './site';
+import { layoutRows, toLocalRect, type RowInfo } from './rows';
+import { accessPontoonsOf, gangwayLinks, pierPolygon, pierShoreLink, type PreparedSite } from './site';
 
 export interface LayoutElements {
   piers: MainPier[];
@@ -272,14 +272,14 @@ export function operationalIssues(
     issues.push({ severity: 'warning', code, message, elementId });
   const elements = collectElements(layout, prepared);
 
-  // Pier ↔ shoreline or access pontoon (D21).
+  // Pier ↔ access pontoon (D21) or shoreline, directly or by its gangway (D49).
   for (const pier of layout.piers) {
-    const { left } = pierAxis(pier);
-    const connected = [0, pier.width / 2, -pier.width / 2].some(
-      (lateral) => distanceToConnection(prepared.connectionLines, add(pier.start, scale(left, lateral))) <= SHORE_TOLERANCE,
-    );
-    if (!connected) {
-      warn(IssueCode.PIER_NOT_CONNECTED_TO_SHORE, pier.id, `Pier ${pier.id} does not connect to the shoreline or an access pontoon.`);
+    if (!pierShoreLink(pier, prepared.site, prepared.gangwayReach)) {
+      warn(
+        IssueCode.PIER_NOT_CONNECTED_TO_SHORE,
+        pier.id,
+        `Pier ${pier.id} does not connect to an access pontoon, nor to the shoreline with a gangway of ${prepared.gangwayReach.toFixed(1)} m.`,
+      );
     }
   }
 

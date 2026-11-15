@@ -116,6 +116,8 @@ export const en = {
   'param.beamClearance': 'Beam clearance (m)',
   'param.lengthClearance': 'Length clearance (m)',
   'param.shoreOffset': 'First berth from shore (m)',
+  'param.shoreGap': 'Pier gap from the shore (m)',
+  'param.gangwayLength': 'Gangway from the shore (m)',
   'param.maxMainPierLength': 'Max pier length (m)',
   'param.orientation': 'Pier direction',
   'param.orientationAuto': 'Automatic',

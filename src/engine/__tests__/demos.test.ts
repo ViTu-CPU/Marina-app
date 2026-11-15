@@ -98,6 +98,9 @@ describe('defaults', () => {
       maxMainPierLength: 150,
       orientation: 'auto',
       shoreOffset: 0,
+      // D49: piers 4 m off the shore, 6 m gangway.
+      shoreGap: 4,
+      gangwayLength: 6,
       berthTarget: 'share',
     });
   });

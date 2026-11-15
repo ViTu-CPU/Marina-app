@@ -161,7 +161,7 @@ const BERTH_TYPES = ['finger', 'yBoom', 'sternBuoy'] as const;
 function params(v: unknown): Params {
   const o = obj(v, 'params');
   // Missing keys take their defaults, so files from older versions stay readable.
-  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth' | 'pierSeries' | 'pierModuleLengths'>): number =>
+  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth' | 'pierSeries' | 'pierModuleLengths' | 'shoreGap'>): number =>
     o[key] === undefined ? DEFAULT_PARAMS[key] : num(o[key], `params.${key}`);
   const boatsPerBay = o.boatsPerBay === undefined ? DEFAULT_PARAMS.boatsPerBay : o.boatsPerBay;
   if (boatsPerBay !== 1 && boatsPerBay !== 2) fail('params.boatsPerBay must be 1 or 2');
@@ -191,6 +191,9 @@ function params(v: unknown): Params {
     maxMainPierLength: pick('maxMainPierLength'),
     orientation,
     shoreOffset: pick('shoreOffset'),
+    // D49: files from before the gangway rule had piers touching the shore (I97).
+    shoreGap: o.shoreGap === undefined ? 0 : num(o.shoreGap, 'params.shoreGap'),
+    gangwayLength: pick('gangwayLength'),
     berthTarget:
       o.berthTarget === undefined ? DEFAULT_PARAMS.berthTarget : oneOf(o.berthTarget, ['share', 'count'] as const, 'params.berthTarget'),
   };

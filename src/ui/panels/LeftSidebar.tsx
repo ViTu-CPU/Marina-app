@@ -649,6 +649,8 @@ function DockSection() {
       <ParamField name="beamClearance" min={0} max={5} />
       <ParamField name="lengthClearance" min={0} max={5} />
       <ParamField name="shoreOffset" min={0} max={200} step={1} />
+      <ParamField name="shoreGap" min={0} max={50} step={0.5} />
+      <ParamField name="gangwayLength" min={1} max={30} step={0.5} />
       <ParamField name="maxMainPierLength" min={5} max={1000} step={5} />
       <div className="flex items-center justify-between gap-2 text-sm text-slate-700">
         <span id="pier-direction">{t('param.orientation')}</span>

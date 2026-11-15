@@ -13,7 +13,7 @@ import { add, centroid, distance, dot, sub } from '../../engine/geometry';
 import type { BackgroundImage, BoatClass, Layout, Polygon, Site, Vec2 } from '../../engine/model';
 import { sectorFetches } from '../../engine/fetchRays';
 import { pierAxis } from '../../engine/rows';
-import { gangwayLinks, pierPolygon } from '../../engine/site';
+import { gangwayLinks, pierPolygon, pierShoreLink } from '../../engine/site';
 import { appStore, useAppStore, type LayerId, type Selection, type ToolId } from '../../state/store';
 import { latLonToLocal, OSM_ATTRIBUTION } from '../../state/geo';
 import { gridStep, panBy, scaleBar, screenToWorld, visibleBounds, worldToScreen, zoomAt, type Size, type View } from '../../state/view';
@@ -202,6 +202,30 @@ function FetchRays() {
           listening={false}
         />
       ))}
+    </>
+  );
+}
+
+/** D49: the gangway of each pier reached from the shoreline, from its shore end to the shore. */
+function PierGangways({ layout, site }: { layout: Layout; site: Site }) {
+  const reach = useAppStore((s) => s.project.params.gangwayLength);
+  return (
+    <>
+      {layout.piers.map((p) => {
+        const link = pierShoreLink(p, site, reach);
+        if (!link || link.kind !== 'gangway' || link.gap < 0.05) return null;
+        return (
+          <Line
+            key={`${p.id}-gangway`}
+            points={flat([link.from, link.to])}
+            stroke={COLORS.gangway}
+            strokeWidth={4}
+            strokeScaleEnabled={false}
+            lineCap="butt"
+            listening={false}
+          />
+        );
+      })}
     </>
   );
 }
@@ -666,6 +690,7 @@ export function MarinaCanvas() {
             {layout && (
               <LayoutShapes layout={layout} classes={project.boatClasses} layers={layers} selection={selection} patternScale={patternScale} />
             )}
+            {layout && layers.piers && <PierGangways layout={layout} site={project.site} />}
             {layout && layers.anchoring && <AnchorShapes />}
             {layers.fetch && <FetchRays />}
           </Group>
