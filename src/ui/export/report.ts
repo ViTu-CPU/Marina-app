@@ -7,8 +7,7 @@ import type { AnchoringParams } from '../../engine/anchoring';
 import { BOM_GROUPS, type BomGroup } from '../../engine/bom';
 import type { Layout, Params, Project } from '../../engine/model';
 import { pierAxis } from '../../engine/rows';
-import { bearingOf, waveAssessment } from '../../engine/waves';
-import { sectorBearing, sectorOf } from '../../engine/wind';
+import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../../engine/waves';
 import { targetCount } from '../../engine/targets';
 import { translate, type Language, type StringKey } from '../../i18n';
 import { comparisonRows } from '../compare';
@@ -185,10 +184,10 @@ export function buildReportHtml(input: ReportInput): string {
   );
   parts.push('</div></div>');
 
-  // D40, D41: wave screening, when the fetch and a wind are entered.
+  // D40, D41, D47: wave screening, when a fetch and a wind are entered.
   const waveResult = waveAssessment(
     project.waves,
-    project.waves.fetchDepth ?? project.anchoring.depth,
+    project.anchoring.depth,
     layout.piers.map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) })),
   );
   if (waveResult) {
@@ -198,52 +197,61 @@ export function buildReportHtml(input: ReportInput): string {
     parts.push(`<h2>${esc(t('waves.title'))}</h2>`);
     parts.push(
       kv([
-        [t('waves.fetch'), len(w.fetch!)],
-        [t('waves.fetchFrom'), formatCount(w.fetchFrom, language)],
-        [t('waves.fetchDepth'), len(waveResult.depth)],
+        [t('waves.fetchDepth'), len(w.fetchDepth ?? project.anchoring.depth)],
         ...(w.wind1 === null ? [] : [[t('waves.wind1'), len(w.wind1)] as [string, string]]),
         ...(w.wind50 === null ? [] : [[t('waves.wind50'), len(w.wind50)] as [string, string]]),
         [t('waves.windAveraging'), t(w.windAveragingS === 3600 ? 'waves.avg3600' : 'waves.avg600')],
+        [t('waves.criteriaSet'), t(`waveCriteria.${w.criteria}`)],
         [t('waves.quality'), t(`waveQuality.${w.quality}`)],
       ]),
     );
+    const ev = (x: (typeof waveResult.sectors)[number], e: 'oneYear' | 'fiftyYear') => x.events.find((y) => y.event === e);
     parts.push(
       table(
-        [t('waves.event'), t('waves.windUsed'), t('waves.duration'), t('waves.hm0'), t('waves.tp'), t('waves.length'), t('waves.limitedBy')],
-        waveResult.events.map((e) => [
-          esc(t(`waveEvent.${e.event}`)),
-          esc(len(e.waves.u10)),
-          esc(formatCount(e.waves.averagingS / 60, language)),
-          esc(height(e.waves.hm0)),
-          esc(len(e.waves.tp)),
-          esc(len(e.waves.wavelength)),
-          esc(t(`waveLimit.${e.waves.limit}`)),
-        ]),
-        [1, 2, 3, 4, 5],
+        [t('waves.sector'), t('waves.fetchCol'), t('waves.depthCol'), t('waves.wind1Col'), t('waves.wind50Col'), t('waves.hm01'), t('waves.hm050'), t('waves.tpL'), t('waves.headingCol'), t('waves.statusCol')],
+        waveResult.sectors.map((x) => {
+          const one = ev(x, 'oneYear');
+          const fifty = ev(x, 'fiftyYear');
+          return [
+            esc(`${WAVE_SECTORS[x.sector]} ${waveSectorBearing(x.sector)}°`),
+            esc(len(x.fetch)),
+            esc(len(x.depth)),
+            esc(one ? len(one.wind) : '–'),
+            esc(fifty ? len(fifty.wind) : '–'),
+            esc(one ? height(one.waves.hm0) : '–'),
+            esc(fifty ? height(fifty.waves.hm0) : '–'),
+            esc(fifty ? `${len(fifty.waves.tp)} / ${len(fifty.waves.wavelength)}` : '–'),
+            esc(x.headings.map((hd) => t(`waveHeading.${hd}`)).join(', ')),
+            esc(x.status === 'exceeds' ? t('waves.exceeds') : x.status === 'ok' ? t('waves.ok') : t('waves.noCriterion')),
+          ];
+        }),
+        [1, 2, 3, 4, 5, 6],
       ),
     );
     parts.push(`<h3>${esc(t('waves.criteria'))}</h3>`);
+    const failing = waveResult.sectors.filter((x) => x.status === 'exceeds');
     parts.push(
-      table(
-        [t('report.item'), t('waves.event'), t('waves.hm0'), t('report.value')],
-        waveResult.checks.map((c) => [
-          esc(t(`waveHeading.${c.heading}`)),
-          esc(t(`waveEvent.${c.event}`)),
-          esc(`${height(c.waves.hm0)}${c.limit === null ? '' : ` ≤ ${height(c.limit)}`}`),
-          esc(c.ok === null ? t('waves.noCriterion') : c.ok ? t('waves.ok') : t('waves.exceeds')),
-        ]),
-        [2],
-      ),
+      failing.length === 0
+        ? `<p>${esc(t('waves.noneBad'))}</p>`
+        : `<p>${esc(t('waves.bad'))}: ${failing
+            .map(
+              (x) =>
+                `<strong>${esc(WAVE_SECTORS[x.sector]!)}</strong> (${esc(
+                  x.checks
+                    .filter((c) => c.ok === false)
+                    .map((c) => `${t(`waveHeading.${c.heading}`).toLowerCase()}, ${t(`waveEvent.${c.event}`).toLowerCase()} ${height(c.waves.hm0)} > ${height(c.limit!)} m`)
+                    .join('; '),
+                )})`,
+            )
+            .join(', ')}</p>`,
     );
-    if (waveResult.piers.length > 0) {
-      parts.push(`<p class="small">${esc(t('waves.piers'))}: ${esc(waveResult.piers.map((p) => `${p.id} ${t(`waveHeading.${p.heading}`).toLowerCase()}`).join(', '))}</p>`);
-    }
+    if (waveResult.piers.length > 0) parts.push(`<p class="small">${esc(t('waves.piers'))}: ${esc(waveResult.piers.map((p) => p.id).join(', '))}</p>`);
     parts.push(`<div class="disclaimer">${esc(t(`waveAdvice.${waveResult.advice}`))}</div>`);
+    if (waveResult.doubleBerthPiles && project.params.boatsPerBay === 2) parts.push(`<p class="small">${esc(t('waves.piles'))}</p>`);
     const climate = w.climate;
     if (climate) {
-      const s = climate.sectors[sectorOf(w.fetchFrom)]!;
       parts.push(
-        `<p class="small">${esc(t('wind.title'))}: ${esc(climate.source)}; ${esc(t('wind.cell'))} ${climate.cell.lat.toFixed(2)}, ${climate.cell.lon.toFixed(2)}; ${climate.startYear}–${climate.endYear}; ${esc(t('wind.oneYear'))} ${s.oneYear === null ? '–' : esc(len(s.oneYear))}, ${esc(t('wind.fiftyYear'))} ${s.fiftyYear === null ? '–' : esc(len(s.fiftyYear))} (${sectorBearing(sectorOf(w.fetchFrom))}°); ${esc(climate.fetchedOn)}. ${esc(t('wind.note'))}</p>`,
+        `<p class="small">${esc(t('wind.title'))}: ${esc(climate.source)}; ${esc(t('wind.cell'))} ${climate.cell.lat.toFixed(2)}, ${climate.cell.lon.toFixed(2)}; ${climate.startYear}–${climate.endYear}; ${esc(climate.fetchedOn)}. ${esc(t('wind.note'))}</p>`,
       );
     }
     parts.push(`<p class="small">${esc(t('waves.note'))}</p>`);

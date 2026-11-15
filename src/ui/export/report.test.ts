@@ -56,8 +56,7 @@ describe('printable report (U24)', () => {
       ...project,
       waves: {
         ...project.waves,
-        fetch: 2000,
-        fetchFrom: 90,
+        sectors: project.waves.sectors.map((x, k) => ({ ...x, fetch: k === 2 ? 2000 : k === 4 ? 800 : 0 })),
         wind1: 15,
         wind50: 22,
         climate: {
@@ -79,6 +78,11 @@ describe('printable report (U24)', () => {
     expect(w).toContain('Open-Meteo Historical Weather API, ERA5');
     expect(w).toContain('1996–2025');
     expect(w).toMatch(/waveAdvice|attenuator|no wave protection|breakwater/);
+    // D47: one row per sector with a fetch, the criteria set and the directions that exceed them.
+    expect(w).toContain('E 90°');
+    expect(w).toContain('S 180°');
+    expect(w).not.toContain('N 0°');
+    expect(w).toContain(translate('en', 'waveCriteria.as3962'));
   });
 
   it('in Finnish; without a price list or an image', () => {

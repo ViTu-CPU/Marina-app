@@ -2,7 +2,7 @@
  * JSON project file: export and import with structural validation (SPEC §2, persistence).
  */
 import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type Seabed } from '../engine/anchoring';
-import { DEFAULT_WAVES, type WaveSettings } from '../engine/waves';
+import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type WaveSettings } from '../engine/waves';
 import { SECTORS, type WindClimate } from '../engine/wind';
 import { PRODUCT_CATEGORIES, PRODUCT_UNITS, type PriceList, type Product } from '../engine/catalog';
 import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
@@ -313,27 +313,49 @@ function mapBackground(v: unknown): MapBackground | null {
   return { provider: oneOf(o.provider, ['osm'] as const, 'map.provider'), lat, lon, opacity: Math.min(1, Math.max(0, opacity)) };
 }
 
-/** Extension (D40): wave screening inputs; missing in older files (nothing entered). */
+/**
+ * Extension (D40, D47): wave screening inputs; missing in older files (nothing entered). Files
+ * from before D47 have one fetch and its direction: the fetch goes to the sector of that direction.
+ */
 function waveSettings(v: unknown): WaveSettings {
-  if (v === undefined) return { ...DEFAULT_WAVES };
+  if (v === undefined) return structuredClone(DEFAULT_WAVES);
   const o = obj(v, 'waves');
-  const optional = (key: 'fetch' | 'fetchDepth' | 'wind1' | 'wind50'): number | null => {
-    const x = o[key];
+  const positive = (x: unknown, path: string): number | null => {
     if (x === undefined || x === null) return null;
-    const n = num(x, `waves.${key}`);
-    if (!(n > 0)) fail(`waves.${key} must be positive`);
+    const n = num(x, path);
+    if (!(n > 0)) fail(`${path} must be positive`);
     return n;
   };
   const averaging = o.windAveragingS === undefined ? DEFAULT_WAVES.windAveragingS : num(o.windAveragingS, 'waves.windAveragingS');
   if (!(averaging > 0)) fail('waves.windAveragingS must be positive');
+  let sectors = emptySectors();
+  if (o.sectors !== undefined) {
+    const list = arr(o.sectors, 'waves.sectors');
+    if (list.length !== WAVE_SECTORS.length) fail(`waves.sectors must have ${WAVE_SECTORS.length} sectors`);
+    sectors = list.map((item, i) => {
+      const path = `waves.sectors[${i}]`;
+      const x = obj(item, path);
+      const fetch = x.fetch === undefined || x.fetch === null ? 0 : num(x.fetch, `${path}.fetch`);
+      if (fetch < 0) fail(`${path}.fetch must not be negative`);
+      return { fetch, depth: positive(x.depth, `${path}.depth`), wind1: positive(x.wind1, `${path}.wind1`), wind50: positive(x.wind50, `${path}.wind50`) };
+    });
+  } else {
+    // Before D47: the longest fetch and the direction it came from.
+    const fetch = positive(o.fetch, 'waves.fetch');
+    if (fetch !== null) {
+      const from = o.fetchFrom === undefined ? 0 : num(o.fetchFrom, 'waves.fetchFrom');
+      sectors[waveSectorOf(from)]!.fetch = fetch;
+    }
+  }
   return {
-    fetch: optional('fetch'),
-    fetchFrom: o.fetchFrom === undefined ? DEFAULT_WAVES.fetchFrom : ((num(o.fetchFrom, 'waves.fetchFrom') % 360) + 360) % 360,
-    fetchDepth: optional('fetchDepth'),
-    wind1: optional('wind1'),
-    wind50: optional('wind50'),
+    sectors,
+    fetchDepth: positive(o.fetchDepth, 'waves.fetchDepth'),
+    wind1: positive(o.wind1, 'waves.wind1'),
+    wind50: positive(o.wind50, 'waves.wind50'),
     windAveragingS: averaging,
     quality: o.quality === undefined ? DEFAULT_WAVES.quality : oneOf(o.quality, ['excellent', 'good', 'moderate'] as const, 'waves.quality'),
+    // Files from before D47 were judged with UFC 4-152-07; they now open with AS 3962 like new projects.
+    criteria: o.criteria === undefined ? DEFAULT_WAVES.criteria : oneOf(o.criteria, ['as3962', 'ufc'] as const, 'waves.criteria'),
     location: o.location === undefined || o.location === null ? null : latLon(o.location, 'waves.location'),
     climate: o.climate === undefined || o.climate === null ? null : windClimateOf(o.climate),
   };

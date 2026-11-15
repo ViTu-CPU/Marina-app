@@ -112,7 +112,7 @@ export function emptyProject(): Project {
     map: null,
     anchoring: structuredClone(DEFAULT_ANCHORING),
     cost: { ...DEFAULT_COST },
-    waves: { ...DEFAULT_WAVES },
+    waves: structuredClone(DEFAULT_WAVES),
     generatedFrom: null,
   };
 }

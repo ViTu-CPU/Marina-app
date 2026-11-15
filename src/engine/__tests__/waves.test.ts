@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import type { WindClimate } from '../wind';
 import {
+  angleToBoatAxis,
   bearingOf,
   cemWaves,
+  climateSectorWinds,
+  emptySectors,
+  sectorWind,
+  WAVE_SECTORS,
+  waveSectorBearing,
+  waveSectorOf,
+  type WaveSettings,
   convertAveraging,
   DEFAULT_WAVES,
   designWaves,
@@ -93,18 +102,34 @@ describe('CEM wave growth (EM 1110-2-1100 Part II-2), hand-calculated', () => {
   });
 });
 
-describe('wave climate criteria (UFC 4-152-07 Figure 4-1) and the advice', () => {
-  it('limits in metres, quality factors, no 50-year criterion for periods of 2 s or less', () => {
-    expect(waveLimitM('oneYear', 'head', 1.5, 'good')).toBeCloseTo(0.3048, 9);
-    expect(waveLimitM('oneYear', 'beam', 3, 'good')).toBeCloseTo(0.1524, 9);
-    expect(waveLimitM('fiftyYear', 'head', 3, 'good')).toBeCloseTo(0.6096, 9);
-    expect(waveLimitM('fiftyYear', 'beam', 3, 'good')).toBeCloseTo(0.2438, 4);
-    expect(waveLimitM('fiftyYear', 'head', 1.9, 'good')).toBeNull();
-    expect(waveLimitM('oneYear', 'head', 1, 'excellent')).toBeCloseTo(0.2286, 4);
-    expect(waveLimitM('oneYear', 'head', 1, 'moderate')).toBeCloseTo(0.381, 4);
+describe('wave climate criteria and the advice (D47)', () => {
+  it('UFC 4-152-07 Figure 4-1: limits in metres, quality factors, no 50-year criterion for periods of 2 s or less', () => {
+    expect(waveLimitM('oneYear', 'head', 1.5, 'good', 'ufc')).toBeCloseTo(0.3048, 9);
+    expect(waveLimitM('oneYear', 'beam', 3, 'good', 'ufc')).toBeCloseTo(0.1524, 9);
+    expect(waveLimitM('fiftyYear', 'head', 3, 'good', 'ufc')).toBeCloseTo(0.6096, 9);
+    expect(waveLimitM('fiftyYear', 'beam', 3, 'good', 'ufc')).toBeCloseTo(0.2438, 4);
+    expect(waveLimitM('fiftyYear', 'head', 1.9, 'good', 'ufc')).toBeNull();
+    expect(waveLimitM('oneYear', 'head', 1, 'excellent', 'ufc')).toBeCloseTo(0.2286, 4);
+    expect(waveLimitM('oneYear', 'head', 1, 'moderate', 'ufc')).toBeCloseTo(0.381, 4);
   });
 
-  it('bearings and head or beam seas (I86)', () => {
+  it('AS 3962-2001 Table 4.2 (the default): head 0.6 / 0.3, oblique 0.4 / 0.3, beam 0.25 / 0.15 m; below 2 s 0.3 m once a year', () => {
+    expect(waveLimitM('fiftyYear', 'head', 3, 'good')).toBeCloseTo(0.6, 12);
+    expect(waveLimitM('oneYear', 'head', 3, 'good')).toBeCloseTo(0.3, 12);
+    expect(waveLimitM('fiftyYear', 'oblique', 3, 'good')).toBeCloseTo(0.4, 12);
+    expect(waveLimitM('oneYear', 'oblique', 3, 'good')).toBeCloseTo(0.3, 12);
+    expect(waveLimitM('fiftyYear', 'beam', 3, 'good')).toBeCloseTo(0.25, 12);
+    expect(waveLimitM('oneYear', 'beam', 3, 'good')).toBeCloseTo(0.15, 12);
+    // Short waves: 1-year 0.3 m for head and beam seas alike (oblique assumed the same, I90); no 50-year limit.
+    for (const heading of ['head', 'oblique', 'beam'] as const) {
+      expect(waveLimitM('oneYear', heading, 1.5, 'good')).toBeCloseTo(0.3, 12);
+      expect(waveLimitM('fiftyYear', heading, 1.5, 'good')).toBeNull();
+    }
+    expect(waveLimitM('fiftyYear', 'beam', 3, 'moderate')).toBeCloseTo(0.3125, 12);
+    expect(waveLimitM('fiftyYear', 'head', 3, 'excellent')).toBeCloseTo(0.45, 12);
+  });
+
+  it('bearings and headings: AS 3962 (22.5°) and UFC (45°)', () => {
     expect(bearingOf({ x: 0, y: 1 })).toBeCloseTo(0, 9);
     expect(bearingOf({ x: 1, y: 0 })).toBeCloseTo(90, 9);
     expect(bearingOf({ x: -1, y: -1 })).toBeCloseTo(225, 9);
@@ -112,8 +137,15 @@ describe('wave climate criteria (UFC 4-152-07 Figure 4-1) and the advice', () =>
     expect(headingFor(0, 90)).toBe('head');
     expect(headingFor(0, 270)).toBe('head');
     expect(headingFor(0, 0)).toBe('beam');
+    expect(headingFor(0, 45)).toBe('oblique');
     expect(headingFor(30, 100)).toBe('head'); // 20° off the boat axis (120°)
-    expect(headingFor(30, 170)).toBe('beam'); // 50° off
+    expect(headingFor(30, 170)).toBe('oblique'); // 50° off
+    expect(headingFor(30, 30)).toBe('beam');
+    expect(headingFor(0, 112.5)).toBe('head'); // exactly 22.5°
+    expect(headingFor(0, 157.5)).toBe('beam'); // exactly 67.5°
+    expect(headingFor(30, 100, 'ufc')).toBe('head');
+    expect(headingFor(30, 170, 'ufc')).toBe('beam');
+    expect(angleToBoatAxis(0, 315)).toBeCloseTo(45, 9);
   });
 
   it('advice: none, floating (waves shorter than 18 m), fixed, unknown', () => {
@@ -129,21 +161,83 @@ describe('wave climate criteria (UFC 4-152-07 Figure 4-1) and the advice', () =>
     expect(protectionAdvice([check(false, 18.1)])).toBe('fixed');
     expect(protectionAdvice([check(null, 5)])).toBe('unknown');
   });
+});
 
-  it('assessment: entered events, pier headings, checks for the headings that occur', () => {
+describe('direction sectors (D47)', () => {
+  const withFetch = (fetches: Record<number, number>, patch: Partial<WaveSettings> = {}): WaveSettings => ({
+    ...structuredClone(DEFAULT_WAVES),
+    sectors: emptySectors().map((x, k) => ({ ...x, fetch: fetches[k] ?? 0 })),
+    ...patch,
+  });
+
+  it('sectors of 45° centred on N, NE, …', () => {
+    expect(WAVE_SECTORS).toEqual(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
+    expect(waveSectorOf(0)).toBe(0);
+    expect(waveSectorOf(22.4)).toBe(0);
+    expect(waveSectorOf(22.6)).toBe(1);
+    expect(waveSectorOf(337.6)).toBe(0);
+    expect(waveSectorOf(-90)).toBe(6);
+    expect(waveSectorBearing(3)).toBe(135);
+  });
+
+  it('nothing entered, or no wind: no assessment', () => {
     expect(waveAssessment(DEFAULT_WAVES, 4, [])).toBeNull();
-    const s = { ...DEFAULT_WAVES, fetch: 2000, fetchFrom: 90, wind1: 15, wind50: 22 };
+    expect(waveAssessment(withFetch({ 2: 2000 }), 4, [])).toBeNull();
+  });
+
+  it('only sectors with a fetch; the common winds; each sector its own depth; several bad directions', () => {
+    const s = withFetch({ 2: 2000, 4: 500, 6: 0 }, { wind1: 15, wind50: 22 });
+    s.sectors[4]!.depth = 1;
     const a = waveAssessment(s, 4, [{ id: 'P1', bearing: 0 }])!;
-    expect(a.piers).toEqual([{ id: 'P1', bearing: 0, heading: 'head' }]);
-    expect(a.events.map((e) => e.event)).toEqual(['oneYear', 'fiftyYear']);
-    expect(a.checks.every((c) => c.heading === 'head')).toBe(true);
-    // 50 years: Hm0 0.53 m, Tp 1.7 s ≤ 2 s → no criterion; 1 year (15 m/s): above 0.30 m?
-    const one = a.checks.find((c) => c.event === 'oneYear')!;
-    expect(one.waves.hm0).toBeGreaterThan(0.3048);
-    expect(one.ok).toBe(false);
-    expect(a.checks.find((c) => c.event === 'fiftyYear')!.ok).toBeNull();
+    expect(a.sectors.map((x) => x.sector)).toEqual([2, 4]);
+    expect(a.sectors[1]!.depth).toBe(1);
+    // E: the same waves as the single-fetch test before D47 (2 km, 4 m, 22 m/s): Hm0 0.53 m, Tp 1.7 s.
+    const e = a.sectors[0]!;
+    expect(e.events.find((x) => x.event === 'fiftyYear')!.waves.hm0).toBeCloseTo(0.535, 3);
+    expect(e.events.every((x) => x.source === 'common')).toBe(true);
+    // Pier N–S: waves from E are head seas, from S beam seas.
+    expect(e.headings).toEqual(['head']);
+    expect(a.sectors[1]!.headings).toEqual(['beam']);
+    expect(a.piers[0]!.headings).toEqual({ 2: 'head', 4: 'beam' });
+    // 1-year waves from E (15 m/s, 2 km) exceed 0.3 m; from S (500 m, 1 m deep) beam seas exceed 0.15 m? Both are reported.
+    expect(e.status).toBe('exceeds');
+    expect(a.bad).toContain(2);
     expect(a.advice).toBe('floating');
-    // Without piers both headings are checked.
-    expect(new Set(waveAssessment(s, 4, [])!.checks.map((c) => c.heading))).toEqual(new Set(['head', 'beam']));
+  });
+
+  it('winds: the sector’s own entry before the wind climate before the common wind; the climate takes the largest of three 22.5° sectors', () => {
+    const sector = (one: number | null, fifty: number | null) => ({ rose: [0, 0, 0, 0, 0], annualMax: [], oneYear: one, fiftyYear: fifty });
+    const climate: WindClimate = {
+      source: 'test',
+      requested: { lat: 60, lon: 25 },
+      cell: { lat: 60, lon: 25 },
+      startYear: 2000,
+      endYear: 2029,
+      hours: 1,
+      fetchedOn: '2026-11-15',
+      averagingS: 3600,
+      sectors: Array.from({ length: 16 }, (_, i) => sector(10 + i * 0.1, i === 15 ? null : 20 + i * 0.1)),
+    };
+    // N (k = 0) overlaps 16-sectors 15, 0 and 1.
+    expect(climateSectorWinds(climate, 0).oneYear).toBeCloseTo(11.5, 9);
+    expect(climateSectorWinds(climate, 0).fiftyYear).toBeCloseTo(20.1, 9);
+    // E (k = 2) overlaps 3, 4, 5.
+    expect(climateSectorWinds(climate, 2).oneYear).toBeCloseTo(10.5, 9);
+    const s = withFetch({ 0: 1000 }, { wind1: 30, wind50: 30, climate });
+    expect(sectorWind(s, 0, 'oneYear')).toEqual({ wind: 11.5, averagingS: 3600, source: 'climate' });
+    s.sectors[0]!.wind1 = 12;
+    expect(sectorWind(s, 0, 'oneYear')).toEqual({ wind: 12, averagingS: 600, source: 'sector' });
+    expect(sectorWind({ ...s, climate: null }, 0, 'fiftyYear')).toEqual({ wind: 30, averagingS: 600, source: 'common' });
+  });
+
+  it('without piers all three headings are checked; UFC has two', () => {
+    const s = withFetch({ 1: 3000 }, { wind1: 12, wind50: 20 });
+    expect(waveAssessment(s, 4, [])!.sectors[0]!.headings).toEqual(['head', 'oblique', 'beam']);
+    expect(waveAssessment({ ...s, criteria: 'ufc' }, 4, [])!.sectors[0]!.headings).toEqual(['head', 'beam']);
+  });
+
+  it('AS 3962 mooring piles in double berths: 1-year waves over 0.3 m or 50-year head seas over 0.4 m', () => {
+    expect(waveAssessment(withFetch({ 2: 300 }, { wind1: 8, wind50: 12 }), 4, [])!.doubleBerthPiles).toBe(false);
+    expect(waveAssessment(withFetch({ 2: 5000 }, { wind1: 15, wind50: 22 }), 4, [])!.doubleBerthPiles).toBe(true);
   });
 });

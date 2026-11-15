@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEMO_PROJECTS } from '../../engine/demos';
-import { DEFAULT_WAVES } from '../../engine/waves';
+import { DEFAULT_WAVES, emptySectors } from '../../engine/waves';
 import { loadProjectFromStorage, saveProjectToStorage, STORAGE_KEY, type StorageLike } from '../persistence';
 import { APP_ID, DISCLAIMER, parseProject, serializeProject } from '../projectFile';
 import { createAppStore } from '../store';
@@ -175,17 +175,30 @@ describe('project file (SPEC §2: JSON export/import)', () => {
         (p as Record<string, unknown>).waves = { fetch: 2500, fetchFrom: 450, fetchDepth: null, wind1: 15, wind50: 22, windAveragingS: 3600, quality: 'excellent' };
       }),
     );
+    // Before D47: the single fetch goes to the sector of its direction (450° = 90° = E); UFC files open with AS 3962.
+    const sectors = emptySectors();
+    sectors[2]!.fetch = 2500;
     expect(set.ok && set.project.waves).toEqual({
-      fetch: 2500,
-      fetchFrom: 90,
+      sectors,
       fetchDepth: null,
       wind1: 15,
       wind50: 22,
       windAveragingS: 3600,
       quality: 'excellent',
+      criteria: 'as3962',
       location: null,
       climate: null,
     });
+    // D47: sectors and criteria are kept; wrong sector count or negative fetch refused.
+    const own = emptySectors();
+    own[0] = { fetch: 1200, depth: 3, wind1: null, wind50: 25 };
+    own[5]!.fetch = 400;
+    const kept = parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { sectors: own, criteria: 'ufc' })));
+    expect(kept.ok && kept.project.waves.sectors).toEqual(own);
+    expect(kept.ok && kept.project.waves.criteria).toBe('ufc');
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { sectors: own.slice(0, 7) }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { sectors: own.map((x) => ({ ...x, fetch: -5 })) }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { criteria: 'pianc' }))).ok).toBe(false);
     // D41: position and fetched wind climate are kept.
     const sector = { rose: [0.01, 0.02, 0, 0, 0], annualMax: [12, 14], oneYear: 11.5, fiftyYear: null };
     const climate = {

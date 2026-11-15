@@ -1,7 +1,7 @@
 /**
  * Wind rose of a fetched wind climate (D41): 16 sectors, stacked by speed class (ordinal blue
- * ramp, validated with the dataviz checks), radius = share of hours. The fetch sector is
- * outlined. Each sector has a native tooltip; the table next to it is the table view.
+ * ramp, validated with the dataviz checks), radius = share of hours. The sectors behind the
+ * wave directions that exceed the criteria are outlined (D47). Each sector has a native tooltip; the table next to it is the table view.
  */
 import { sectorBearing, SPEED_CLASSES, type WindClimate } from '../../engine/wind';
 
@@ -11,7 +11,7 @@ const LABELS = ['N', 'E', 'S', 'W'];
 export const speedClassLabel = (i: number): string =>
   i < SPEED_CLASSES.length - 1 ? `${SPEED_CLASSES[i]}–${SPEED_CLASSES[i + 1]} m/s` : `≥ ${SPEED_CLASSES[i]} m/s`;
 
-export function WindRose({ climate, highlight, percent }: { climate: WindClimate; highlight: number | null; percent: (share: number) => string }) {
+export function WindRose({ climate, highlight, percent }: { climate: WindClimate; highlight: readonly number[]; percent: (share: number) => string }) {
   const size = 220;
   const c = size / 2;
   const radius = c - 22;
@@ -67,7 +67,7 @@ export function WindRose({ climate, highlight, percent }: { climate: WindClimate
               acc += share;
               return <path key={i} d={wedge(bearing, r0, r(acc))} fill={SPEED_COLORS[i]} stroke="#ffffff" strokeWidth={1} />;
             })}
-            {highlight === k && totals[k]! > 0 && <path d={wedge(bearing, 0, r(totals[k]!))} fill="none" stroke="#ea580c" strokeWidth={2} />}
+            {highlight.includes(k) && totals[k]! > 0 && <path d={wedge(bearing, 0, r(totals[k]!))} fill="none" stroke="#ea580c" strokeWidth={2} />}
           </g>
         );
       })}
