@@ -379,11 +379,13 @@ parameter is shown with its source or marked **assumption**.
    on sand, 0.9 t as wedges on clay and 0.7 t on sand; anchors per metre of pier 1.55, 0.83,
    0.17 and 0.13 t (before: 1.61, 0.86, 0.18, 0.13 t); wedge chains about 44 m (clay) and 40 m
    (sand). The total hardly changes; the peak loads at the heads are spread over all lines.
-10. **Stern buoys (D36, I78–I82).** One sinker per buoy, straight below it: factor × boat
-   weight (default 3) or the anchor of Top Marine's selection table (§9.13); chain max(h + 1 m,
-   2 h) at high water, at least the table's size, MBL ≥ SF × top tension under the boat's
-   stern-on wind. On the demos (clay) the friction method gives 0.7–3.1 t per buoy, the table
-   0.5–1.0 t and factor 3 3.8–24.7 t; the published rules differ by a factor of about 25.
+10. **Stern buoys (D36, D37, I78–I85).** One sinker per buoy, straight below it, from Svenska
+   Båtunionen's table by boat displacement (default; §9.14), Top Marine's table (§9.13) or factor
+   × boat weight; one row up in an exposed harbour; chain max(1.41 × design depth, depth at high
+   water + 0.8 m), at least the table's size, MBL ≥ SF × top tension under the boat's stern-on
+   wind. On the demos (clay, default classes) Båtunionen gives 514–2 057 kg per buoy, Top Marine
+   500–1 000 kg, the friction method 963–4 063 kg (short, steep chain) and 3 × boat weight
+   3 800–24 700 kg.
 7. **Ice**: pontoons that stay in the water over winter (owner decision D17) get a warning:
    ice loads are not calculated. Suppliers allow freezing but not moving ice.
 8. **Water level**: high and low water relative to the design depth are parameters. For
@@ -701,4 +703,83 @@ the 500 kg sinker at their package component prices (rows `buoy-topmarine-40/60/
 `anchor-topmarine-500`); Top Marine's chains and shackles are not added because their breaking
 loads are not published (the tool chooses chains by breaking load; the existing shackle rows are
 load-rated).
+
+### 9.14 Other sources on stern buoys (read 2026-11-15)
+
+The owner asked what other sources say (DECISIONS D37). Read in full:
+
+- **Svenska Båtunionen, *Hamnhandboken* version 1 (2016)**, §2.31–2.33
+  ([PDF](https://batunionen.se/wp-content/uploads/2020/01/hamnhandboken-version-1-2016.compressed.pdf)),
+  the Swedish boating union's guide *"för planering, projektering, byggande och drift av hamnar för
+  fritidsbåtar"*. The 2022 edition (smbf.org) has the same section 2.33 but its link no longer works.
+  Quality: a national association's planning handbook for exactly this mooring; no derivation given.
+  - §2.31 *Förtöjning mellan brygga och boj*: *"bör undvikas om vattendjupet är större än 5-6 meter.
+    Vid större vattendjup blir bojkättingen så lång att båtarnas svängning i sidled blir ett
+    svårbemästrat problem."*
+  - §2.32: the stern line is taut; *"en sänkning av vattenståndet från 3,0 till 2,5 meter medför att
+    bojen kommer ca 0,4 meter närmare bryggan. (Beräknat med lutning av 1:1 på boj-kättingen.)"*;
+    *"Avståndet mellan båt och boj bör dock inte överstiga 1,4 gånger båtlängden."*; *"Då skillnaden
+    mellan normal högvattenyta och normal lågvattenyta inte överstiger ca 1,3 meter, kan bojkättingen
+    ges en lutning av 1:1 (= 45°)"*, otherwise *"beräknas från fall till fall"*; *"Kättingens längd bör
+    tillåta att bojen kan lyftas med centrum ca 0,8 meter över normal högvattenyta."*; *"Vid större
+    vattendjup bör varje boj förankras i två ankartyngder."*; manoeuvring width between the piers B:
+    *"enbart avståndet mellan bojtyngderna räknas som fritt manöverområde … Minimibredden kan sättas
+    till ca 2,5 gånger båtlängden men bör vara minst 20 meter."*
+  - Tabell 1 (minimum dimensions), A = pier – sinker, m, for boat lengths < 6 / 5–8 / 7–10 / 9–12 m:
+    depth 2,0 m: 10,5 / 12,5 / 15,0 / 17,5; each further metre of depth + 1,0 m (6,0 m: 14,5 / 16,5 /
+    19,0 / 21,5); B 20 / 20 / 25 / 30 m. So A ≈ the class's longest boat + depth + 0,5–1,5 m.
+  - Tabell 2, berth width for every mooring type: beam < 2,5 m → 3,3 m; 2,5–3,0 → 3,3–3,8;
+    3,1–3,9 → 3,9–4,6; 4,0–5,0 → 4,7–5,7 m (+ about 10 % where there is room, − 0,2 m in a sheltered,
+    cramped harbour). That is 0,7–0,8 m wider than the beam; the tool's default beam clearance is
+    0,5 m (an assumption).
+  - §2.33 Tabell 3 *Dimensionering av boj, bojkätting och bojtyngd*: *"Båtens deplacement, ton"* 2,0 /
+    5,0 / 8,0 / 10,0 → *"Boj, bärförmåga"* 0,45 / 0,70 / 1,00 / 1,20 kN (45 / 70 / 100 / 120 kp),
+    *"Bojkätting, godsdiameter mm"* 10 / 13 / 16 / 16 *"(Vid utsatt läge ökas angivna dimensioner ett
+    steg)"*, *"Bojtyngdens vikt i vatten, kg"* 300 / 700 / 1000 / 1200, square sinker 0,7 / 0,9 / 1,1 /
+    1,1 m, height 0,3 / 0,45 / 0,5 / 0,6 m. *"Bojen är en viktig ryckdämpare. Den skall gott och väl bära
+    kättingtyngden men bör inte vara större än att den kan dras under ytan vid kraftig belastning."*
+- **M. A. Ranta & P. Ranta, "Poijukiinnitys", *Rakenteiden Mekaniikka* 47 (2), 2014, 80–90**
+  ([PDF](https://rmseura.aalto.fi/rmlehti/2014/nro2/RakMek_47_2_2014_4.pdf)), peer-reviewed, Aalto
+  University: catenary theory of a swing mooring (the same as step 4 of §5). Sliding condition
+  µ₀ [ζMg − H sinh(x₁/a)] ≥ H (no safety factor); concrete ζ = 0,44–0,60; *"poijukettingin pituuden
+  tulisi olla vähintään kaksi kertaa veden syvyys eli z ≥ 2"* (for holding: a short chain lifts the
+  sinker). Its Taulukko 1, from *Veneilyn Aapinen* (Finnboat): boat 0,5 / 2,0 / 4,0 t → sinker 200 /
+  300 / 600 kg. Worked example: a 300 kg sinker (ζ = 0,6, µ₀ = 0,5) with a short chain (8,0 m in 5,2 m of water)
+  starts to move at 17,7 m/s (20,7 m/s counting the horizontal pull only) on a boat of 3,36 m² with
+  C_D = 0,8.
+- **Rockport Harbormaster (Massachusetts), Mooring Regulations**
+  ([page](https://www.harbormasters.org/rockport/mooring.shtml)), swing moorings on an exposed coast:
+  minimum deadweight (submerged) 10–17 ft 1 000 lb, 18–26 ft 1 500 lb, 27–35 ft 3 000 lb, 36–45 ft
+  4 000 lb, 45–55 ft 5 000 lb; *"Concrete = required weight /.55"*. In concrete in air: 825 / 1 237 /
+  2 474 / 3 299 kg.
+- **OCEL Consultants NZ, *Swing Mooring Design Report* for Waikato and Bay of Plenty Regional
+  Councils** ([PDF](https://www.boprc.govt.nz/media/456922/ocel-swing-mooring-design-report-v2.pdf)),
+  an engineering report (AS/NZS 1170, AS 3962 windage, 32 m/s 30-s gust at 5 m): concrete blocks 1 t
+  (≤ 7 m), 2 t (7,1–12 m), 4 t (12,1–15 m) in air, FS ≥ 2 counting passive earth pressure; *"For a
+  2,000 kg concrete weight … the submerged weight is 1,146 kg. The resistance can then be as low as
+  2.3 kN"* by friction on a thin soft layer, but embedded in soft silt *"total 34.5 kN"*; chain FS
+  MBL/QS ≈ 10.
+- **Search results only (not read; snippets):** Newport Beach CA (sinker 500 lb for 20 ft to
+  2 000 lb for 45 ft), Fairhaven MA (mushroom weight = length × beam in lb), Barnstable MA (chain
+  3 × depth at high tide), Cape Elizabeth ME (heavy chain 1,5 × and light chain 1,0 × maximum depth),
+  a Finnish retailer (chain about 2 × depth, at least 13–16 mm). Swedish and German searches found
+  no other rule of thumb.
+
+**Comparison, sinker as concrete mass in air (kg):**
+
+| Boat | Båtunionen 2016 | Top Marine table | Ranta & Ranta 2014 | Rockport (swing, by length) | OCEL NZ (swing) | Top Marine 3 × weight |
+|---|---|---|---|---|---|---|
+| 2 t (≈ 6 m) | 514 | 500 | 300 | 1 237 (18–26 ft) | 1 000 | 6 000 |
+| 5 t (≈ 9 m) | 1 200 | 1 000 | – | 2 474 (27–35 ft) | 2 000 | 15 000 |
+| 8 t (≈ 12 m) | 1 714 | 1 000 | – | 3 299 (36–45 ft) | 2 000 | 24 000 |
+
+Swing moorings take the whole boat in every direction on one point; a stern buoy shares the boat
+with the bow lines on the pier, in a harbour. **3–5 × the boat weight is an outlier by a factor of
+about 10–25**; Båtunionen and Top Marine's own table agree within a factor of 2.
+
+**Chain length and buoy distance:** Båtunionen 1:1 (√2 × depth) with the buoy at A ≈ length + depth
++ 0,5–1,5 m; Suomen Laiturikauppa depth + 3 m (+ 1 m in a cramped harbour) with A = length + depth;
+Top Marine 2 × depth (or maximum depth + 1 m) with length + 3 × depth. The geometry has to match: a
+taut chain of length c·h lets the buoy move √(c² − 1)·h towards the pier (1:1 → h; 2 × depth →
+1,73 h). Longer chains (Ranta & Ranta's ≥ 2 × depth) are a holding argument for swing moorings.
 

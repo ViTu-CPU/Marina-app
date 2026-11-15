@@ -314,7 +314,7 @@ function anchoring(v: unknown): AnchoringParams {
   if (v === undefined) return structuredClone(DEFAULT_ANCHORING);
   const o = obj(v, 'anchoring');
   const d = DEFAULT_ANCHORING;
-  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod'>): number =>
+  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed'>): number =>
     o[key] === undefined ? d[key] : num(o[key], `anchoring.${key}`);
   const f = o.friction === undefined ? {} : obj(o.friction, 'anchoring.friction');
   const mu = (k: Seabed) => (f[k] === undefined ? d.friction[k] : num(f[k], `anchoring.friction.${k}`));
@@ -342,8 +342,11 @@ function anchoring(v: unknown): AnchoringParams {
     anchorType: o.anchorType === undefined ? d.anchorType : oneOf(o.anchorType, ['block', 'wedge'] as const, 'anchoring.anchorType'),
     buoySinkerMethod:
       o.buoySinkerMethod === undefined ? d.buoySinkerMethod : oneOf(o.buoySinkerMethod, ['factor', 'table'] as const, 'anchoring.buoySinkerMethod'),
+    buoyTable: o.buoyTable === undefined ? d.buoyTable : oneOf(o.buoyTable, ['batunionen', 'topMarine'] as const, 'anchoring.buoyTable'),
+    buoyExposed: o.buoyExposed === undefined ? d.buoyExposed : bool(o.buoyExposed, 'anchoring.buoyExposed'),
     buoySinkerFactor: pick('buoySinkerFactor'),
     buoyChainFactor: pick('buoyChainFactor'),
+    buoyLift: pick('buoyLift'),
     waterDensity: pick('waterDensity'),
     concreteDensity: pick('concreteDensity'),
     steelDensity: pick('steelDensity'),
@@ -357,6 +360,7 @@ function anchoring(v: unknown): AnchoringParams {
   if (Object.values(result.friction).some((x) => x <= 0)) fail('anchoring.friction values must be positive');
   if (result.buoySinkerFactor <= 0) fail('anchoring.buoySinkerFactor must be positive');
   if (result.buoyChainFactor <= 0) fail('anchoring.buoyChainFactor must be positive');
+  if (result.buoyLift < 0) fail('anchoring.buoyLift must not be negative');
   return result;
 }
 

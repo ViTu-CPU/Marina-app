@@ -35,6 +35,7 @@ export function computeCostModel(project: Project, layout: Layout, builtIn: Pric
     priceList,
     vatPct,
     pierFreeboard: choices.pontoonFreeboard,
+    buoyDepthFactor: project.params.buoyDepthFactor,
   });
   const estimate = costEstimate({ layout, site: project.site, priceList, choices, anchoring });
   return { priceList, imported: project.cost.priceList !== null, vatPct, choices, anchoring, estimate };

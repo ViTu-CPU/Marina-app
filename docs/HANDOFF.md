@@ -12,7 +12,7 @@ suomeksi, UI pysyy englanniksi.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D37, I83, U25).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D38, I86, U25).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013,
   AS 3962) – kaikki on alustavaa ja vaatii pätevän suunnittelijan tarkastuksen.
@@ -68,15 +68,17 @@ Kolmannessa istunnossa (omistajan päätökset D25–D32):
    Poijun etäisyyskerroin (I78): oletus 1 (Suomen Laiturikauppa), Top Marine 3.
 15. **Peräpoijujen mitoitus (D36, I79–I82)**: veneluokissa paino (t), tyhjä = arvio pituudesta
    (Top Marinen purjevenetaulukko). Poijupaino = 3 × veneen paino (omistajan valinta) tai
-   Top Marinen valintataulukko; ketju 2 × syvyys ylävedellä, vähintään taulukon koko ja kestää
-   perätuulen; poiju (40/60/120 l) taulukon kantavuuden mukaan. Hinnastoon Top Marinen poijut ja
-   500 kg betonipaino. **Huom.** Top Marinen oma taulukko antaa noin 25 kertaa kevyemmät painot
-   kuin 3 × -sääntö (demot: 3 430 t vs. 229 t, ankkurointi 1,20 M€ vs. 0,49 M€; sormilaiturit
-   0,36 M€). Oletus odottaa omistajan vahvistusta.
+   Top Marinen valintataulukko. Hinnastoon Top Marinen poijut ja 500 kg betonipaino.
+16. **Muut lähteet ja uudet oletukset (D37, I83–I85, RESEARCH §9.14)**: omistaja pyysi arvioimaan
+   itse. Oletuksena nyt Svenska Båtunionenin Hamnhandboken 2016 (taulukko 3: paino vedessä
+   300–1 200 kg, ketju 10–16 mm, poiju 45–120 kp; avoin satama = koko ylöspäin), ketju
+   max(1,41 × syvyys, ylävesi + 0,8 m), etäisyyskerroin 1 säilyy. Varoitukset: syvyys > 5 m,
+   vedenkorkeusvaihtelu > 1,3 m, poiju > 1,4 × veneen pituus. 3 × paino -sääntöä ei tue mikään
+   muu lähde (10–25 kertaa muita raskaampi). Demot: painot 379 t, ankkurointi 513 301 €.
 
 ## Avoimet asiat, ehdotettu järjestys
-0. **Vahvista peräpoijun painon oletus** (D36): 3 × veneen paino vai Top Marinen taulukko, ja
-   poijun etäisyyskerroin (1 vai 3, I78).
+0. **Väylä poijurivien välissä** (Båtunionen: ≥ 2,5 × veneen pituus, ≥ 20 m painojen välissä) ja
+   **paikkaleveys** (Båtunionen taulukko 2: 0,7–0,8 m veneen leveyttä enemmän, nyt 0,5 m oletus).
 1. Paalujen ja Marinetekin tuotteiden hinnat puuttuvat (pyydä tarjous).
 2. Hinnaston aukot: A-Laiturit G40 -ketjujen murtokuorma (kysyttävä toimittajalta);
    asennuksen tuntimenekit, työveneen päivähinta ja Marinetekin hinnat ovat oletuksia.

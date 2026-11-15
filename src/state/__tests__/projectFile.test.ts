@@ -125,18 +125,43 @@ describe('project file (SPEC §2: JSON export/import)', () => {
         delete a.buoySinkerMethod;
         delete a.buoySinkerFactor;
         delete a.buoyChainFactor;
+        delete a.buoyTable;
+        delete a.buoyExposed;
+        delete a.buoyLift;
       }),
     );
-    expect(old.ok && [old.project.params.buoyDepthFactor, old.project.anchoring.buoySinkerMethod, old.project.anchoring.buoySinkerFactor, old.project.anchoring.buoyChainFactor]).toEqual([1, 'factor', 3, 2]);
+    expect(
+      old.ok && [
+        old.project.params.buoyDepthFactor,
+        old.project.anchoring.buoySinkerMethod,
+        old.project.anchoring.buoySinkerFactor,
+        old.project.anchoring.buoyChainFactor,
+        old.project.anchoring.buoyTable,
+        old.project.anchoring.buoyExposed,
+        old.project.anchoring.buoyLift,
+      ],
+    ).toEqual([1, 'table', 3, 1.41, 'batunionen', false, 0.8]);
     expect(old.ok && old.project.boatClasses.every((c) => c.weight === undefined)).toBe(true);
     const set = parseProject(
       fileWith((p) => {
         (p.boatClasses as Record<string, unknown>[])[0]!.weight = 2.5;
         (p.params as Record<string, unknown>).buoyDepthFactor = 3;
-        Object.assign(p.anchoring as Record<string, unknown>, { buoySinkerMethod: 'table', buoySinkerFactor: 5, buoyChainFactor: 3 });
+        Object.assign(p.anchoring as Record<string, unknown>, { buoySinkerMethod: 'factor', buoySinkerFactor: 5, buoyChainFactor: 2, buoyTable: 'topMarine', buoyExposed: true, buoyLift: 1 });
       }),
     );
-    expect(set.ok && [set.project.boatClasses[0]!.weight, set.project.params.buoyDepthFactor, set.project.anchoring.buoySinkerMethod, set.project.anchoring.buoySinkerFactor, set.project.anchoring.buoyChainFactor]).toEqual([2.5, 3, 'table', 5, 3]);
+    expect(
+      set.ok && [
+        set.project.boatClasses[0]!.weight,
+        set.project.params.buoyDepthFactor,
+        set.project.anchoring.buoySinkerMethod,
+        set.project.anchoring.buoySinkerFactor,
+        set.project.anchoring.buoyChainFactor,
+        set.project.anchoring.buoyTable,
+        set.project.anchoring.buoyExposed,
+        set.project.anchoring.buoyLift,
+      ],
+    ).toEqual([2.5, 3, 'factor', 5, 2, 'topMarine', true, 1]);
+    expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).buoyExposed = 'yes'))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p.boatClasses as Record<string, unknown>[])[0]!.weight = 0))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).buoySinkerMethod = 'guess'))).ok).toBe(false);
   });

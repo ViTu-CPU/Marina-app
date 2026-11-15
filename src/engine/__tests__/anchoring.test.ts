@@ -112,8 +112,9 @@ describe('chain line (catenary)', () => {
       buoyChainFactor: 3,
     };
     expect(resetAnchoringFactors(own)).toEqual({ ...DEFAULT_ANCHORING, depth: 7, highWater: 1.2, lowWater: 0.6, seabed: 'sand', windSpeed: 25 });
-    // The sinker method of the stern buoys is a choice, like the anchor type (D36).
-    expect(resetAnchoringFactors({ ...own, buoySinkerMethod: 'table' }).buoySinkerMethod).toBe('table');
+    // The stern-buoy method, table and exposure are choices, like the anchor type (D36, D37).
+    const chosen = resetAnchoringFactors({ ...own, buoySinkerMethod: 'factor', buoyTable: 'topMarine', buoyExposed: true });
+    expect([chosen.buoySinkerMethod, chosen.buoyTable, chosen.buoyExposed]).toEqual(['factor', 'topMarine', true]);
   });
 
   it('chain length: factor × depth, at least depth + 1 m', () => {

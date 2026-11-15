@@ -328,13 +328,21 @@ async function waitForServer() {
       await buoys.scrollIntoViewIfNeeded();
       assert.ok(await buoys.isVisible());
       const sinker = () => page.getByText('Heaviest buoy sinker', { exact: true }).locator('xpath=following-sibling::span').textContent();
-      const byFactor = await sinker();
-      await page.getByText('Anchoring parameters', { exact: true }).click();
-      await page.getByRole('combobox', { name: 'Stern-buoy sinker' }).selectOption('table');
-      await page.waitForFunction(() => window.__marina.getState().project.anchoring.buoySinkerMethod === 'table');
+      // Default: Båtunionen's table (D37); 3 × boat weight is far heavier; an exposed harbour one size up.
       const byTable = await sinker();
-      assert.notEqual(byTable, byFactor, `table ${byTable} vs factor ${byFactor}`);
+      await page.getByText('Anchoring parameters', { exact: true }).click();
       await page.getByRole('combobox', { name: 'Stern-buoy sinker' }).selectOption('factor');
+      await page.waitForFunction(() => window.__marina.getState().project.anchoring.buoySinkerMethod === 'factor');
+      const byFactor = await sinker();
+      const kg = (text) => Number(text.replace(/[^\d]/g, ''));
+      assert.ok(kg(byFactor) > kg(byTable), `factor ${byFactor} vs table ${byTable}`);
+      await page.getByRole('combobox', { name: 'Stern-buoy sinker' }).selectOption('table');
+      await page.getByLabel('Exposed harbour (one size up)').check();
+      await page.waitForFunction(() => window.__marina.getState().project.anchoring.buoyExposed === true);
+      // The 12 m class already uses the last row, so the heaviest sinker stays; the plan says so.
+      assert.ok(kg(await sinker()) >= kg(byTable), 'exposed: no lighter sinkers');
+      assert.ok(await page.getByTestId('anchoring-issues').getByText(/one row up for an exposed harbour/).first().isVisible());
+      await page.getByLabel('Exposed harbour (one size up)').uncheck();
       await page.getByText('Anchoring parameters', { exact: true }).click();
       await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('finger');
     });

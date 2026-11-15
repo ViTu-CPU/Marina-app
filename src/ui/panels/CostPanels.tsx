@@ -2,7 +2,7 @@
  * Panels of the anchoring plan and the cost estimate (D23, D24).
  */
 import { useRef } from 'react';
-import { MAX_SPLAY_ANGLE, resetAnchoringFactors, type AnchoringParams, type AnchorType, type BuoySinkerMethod, type Seabed } from '../../engine/anchoring';
+import { MAX_SPLAY_ANGLE, resetAnchoringFactors, type AnchoringParams, type AnchorType, type BuoySinkerMethod, type BuoyTableId, type Seabed } from '../../engine/anchoring';
 import { BOM_GROUPS, seriesNames, type BomGroup } from '../../engine/bom';
 import type { Layout } from '../../engine/model';
 import { parsePriceListFile, priceListToXlsx } from '../../catalog/priceList';
@@ -18,18 +18,39 @@ import { IssueList } from './IssueList';
 const state = () => appStore.getState();
 const SEABEDS: Seabed[] = ['clay', 'sand', 'rock'];
 const ANCHOR_TYPES: AnchorType[] = ['block', 'wedge'];
-const SINKER_METHODS: BuoySinkerMethod[] = ['factor', 'table'];
+const SINKER_METHODS: BuoySinkerMethod[] = ['table', 'factor'];
+const BUOY_TABLES: BuoyTableId[] = ['batunionen', 'topMarine'];
 
-type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod'>;
+type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed'>;
 
 /** D36: sizing of the stern-buoy sinkers and chains; shown when the project has stern buoys. */
 function BuoyFields() {
   const t = useT();
   const method = useAppStore((s) => s.project.anchoring.buoySinkerMethod);
+  const table = useAppStore((s) => s.project.anchoring.buoyTable);
+  const exposed = useAppStore((s) => s.project.anchoring.buoyExposed);
   const shown = useAppStore((s) => s.project.params.berthType === 'sternBuoy' || s.project.layouts.some((l) => l.berths.some((b) => b.buoy)));
   if (!shown) return null;
   return (
     <>
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('anchoring.buoyTable')}
+        <select
+          className="rounded border border-slate-300 px-1 py-0.5 text-sm"
+          value={table}
+          onChange={(e) => state().setAnchoring({ buoyTable: e.target.value as BuoyTableId })}
+        >
+          {BUOY_TABLES.map((x) => (
+            <option key={x} value={x}>
+              {t(`buoyTable.${x}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('anchoring.buoyExposed')}
+        <input type="checkbox" checked={exposed} onChange={(e) => state().setAnchoring({ buoyExposed: e.target.checked })} />
+      </label>
       <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
         {t('anchoring.buoySinkerMethod')}
         <select
@@ -45,7 +66,8 @@ function BuoyFields() {
         </select>
       </label>
       {method === 'factor' && <AnchoringField name="buoySinkerFactor" min={0.1} max={20} step={0.5} />}
-      <AnchoringField name="buoyChainFactor" min={1} max={10} step={0.5} />
+      <AnchoringField name="buoyChainFactor" min={1} max={10} step={0.01} />
+      <AnchoringField name="buoyLift" min={0} max={5} step={0.1} />
     </>
   );
 }

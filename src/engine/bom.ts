@@ -317,14 +317,15 @@ export function costEstimate(input: CostInput): CostEstimate {
     const d = chain?.chainDiameterMm ?? 0;
     if (line.buoy) {
       // A stern buoy: float, sinker and chain with its shackles, as in Top Marine's buoy
-      // packages (no spring, no anode; I81).
+      // packages (no spring, no anode; I81); the shackle one size above the chain (I84).
       buoyLines++;
       const float = smallest('buoy', (p) => p.capacityKg, line.buoy.floatCapacityKg);
       if (float) {
         if ((float.capacityKg ?? 0) < line.buoy.floatCapacityKg - 1e-9) smallFloats++;
         addQty('anchoring', float, 1, line.id);
       }
-      const buoyShackle = smallest('shackle', (p) => p.shackleMm, Math.max(d, line.buoy.shackleMm));
+      // "Sakkelin nimellinen koko on aina suurempi kuin kettingin koko" (Top Marine).
+      const buoyShackle = smallest('shackle', (p) => p.shackleMm, Math.max(d, line.buoy.tableChainMm) + 0.5);
       if (buoyShackle) addQty('anchoring', buoyShackle, par('shackles_per_buoy_line', 1), line.id);
       continue;
     }
