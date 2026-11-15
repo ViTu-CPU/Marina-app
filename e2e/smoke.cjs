@@ -423,6 +423,26 @@ async function waitForServer() {
       await page.getByText('Anchoring parameters', { exact: true }).click();
     });
 
+    await step('report of the selected alternative: printable, and a real PDF from it (U24)', async () => {
+      await page.getByRole('button', { name: 'Report (PDF)', exact: true }).click();
+      const frame = page.frameLocator('iframe[data-testid="report-frame"]');
+      await frame.getByRole('heading', { name: 'Sources and assumptions' }).waitFor({ state: 'attached' });
+      const html = await page.evaluate(() => document.querySelector('iframe[data-testid="report-frame"]').contentDocument.documentElement.outerHTML);
+      assert.ok(html.includes('Preliminary geometric study'), 'disclaimer in the report');
+      assert.ok(html.includes('<img class="map" src="data:image/png'), 'map image in the report');
+      // What the browser's "Save as PDF" gives: print the same HTML to a PDF file.
+      const pdfPage = await page.context().newPage();
+      await pdfPage.setContent(html, { waitUntil: 'load' });
+      const file = path.join(outDir, 'report.pdf');
+      await pdfPage.pdf({ path: file, format: 'A4', printBackground: true });
+      await pdfPage.close();
+      const pdf = fs.readFileSync(file);
+      assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+      const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+      console.log(`        report.pdf: ${pages} pages, ${Math.round(pdf.length / 1024)} kB`);
+      assert.ok(pages >= 2, `expected several pages, got ${pages}`);
+    });
+
     await step('language toggle', async () => {
       await page.getByRole('button', { name: 'FI', exact: true }).click();
       assert.equal(await page.getByRole('heading', { level: 1 }).textContent(), 'Venesataman asettelusuunnittelu');

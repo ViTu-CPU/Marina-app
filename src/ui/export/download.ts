@@ -36,6 +36,30 @@ export function exportPng(filename: string): boolean {
   return true;
 }
 
+/** The canvas as shown, as a PNG data URL at twice the screen resolution; null without a canvas. */
+export const canvasImage = (): string | null => (stage ? stage.toDataURL({ pixelRatio: 2, mimeType: 'image/png' }) : null);
+
+/**
+ * Prints an HTML document from a hidden frame (U24): the browser's print dialog, where the
+ * user can choose "Save as PDF". The frame stays until the next print.
+ */
+export function printHtml(html: string): void {
+  document.querySelector('iframe[data-testid="report-frame"]')?.remove();
+  const frame = document.createElement('iframe');
+  frame.setAttribute('data-testid', 'report-frame');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument;
+  if (!doc) return;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  const images = [...doc.images];
+  void Promise.all(images.map((img) => (img.complete ? Promise.resolve() : new Promise((r) => img.addEventListener('load', r, { once: true })))))
+    .then(() => frame.contentWindow?.print());
+}
+
 export const readFileAsText = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();

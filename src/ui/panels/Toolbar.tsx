@@ -3,7 +3,9 @@ import { DEMO_PROJECTS } from '../../engine/demos';
 import { serializeProject } from '../../state/projectFile';
 import { appStore, needsRegeneration, useAppStore } from '../../state/store';
 import { buildCsv } from '../export/csv';
-import { downloadText, exportPng, readFileAsText, safeFileName } from '../export/download';
+import { canvasImage, downloadText, exportPng, printHtml, readFileAsText, safeFileName } from '../export/download';
+import { buildReportHtml } from '../export/report';
+import { computeCostModel } from '../costModel';
 import { useT } from '../useT';
 import { Button } from './fields';
 
@@ -21,6 +23,17 @@ export function Toolbar() {
   const canRedo = useAppStore((s) => s.future.length > 0);
   const stale = useAppStore((s) => needsRegeneration(s.project));
   const generating = useAppStore((s) => s.generating);
+  /** U24: report of the selected alternative, printed from a hidden frame ("Save as PDF"). */
+  const printReport = () => {
+    const s = state();
+    const layout = s.project.layouts.find((l) => l.id === s.selectedLayoutId);
+    if (!layout) {
+      s.setNotice(t('report.noLayout'));
+      return;
+    }
+    const model = computeCostModel(s.project, layout, s.builtInPriceList);
+    printHtml(buildReportHtml({ project: s.project, layout, model, image: canvasImage(), language: s.language, date: new Date().toISOString().slice(0, 10) }));
+  };
   const hasLayouts = useAppStore((s) => s.project.layouts.length > 0);
 
   const confirmDiscard = (): boolean => isPristine() || window.confirm(t('confirm.discard'));
@@ -109,6 +122,9 @@ export function Toolbar() {
         }
       >
         {t('toolbar.exportCsv')}
+      </Button>
+      <Button disabled={!hasLayouts} title={t('report.printHint')} onClick={printReport}>
+        {t('report.button')}
       </Button>
       <Button onClick={() => state().fitView()}>{t('toolbar.fit')}</Button>
 

@@ -128,6 +128,9 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 
 **Files**
 - Autosave in the browser; project file export/import (JSON).
+- Report of the selected alternative ("Report (PDF)"): map, comparison, inputs, anchoring
+  plan, cost estimate and bill of materials, cost parameters and product sources, with the
+  disclaimer on every page. It opens the browser's print dialog; choose "Save as PDF".
 - PNG export of the canvas and CSV export of the comparison and the berth list. Both
   carry the disclaimer.
 - Undo/redo. English and Finnish UI.
@@ -235,6 +238,6 @@ Not started; listed in the specification as later phases.
 - More berth patterns: side-to, Y-boom, bow-to with stern buoy.
 - Manual editing: rotate and resize piers, add and remove fingers, T- and L-heads.
 - Turning-basin check; better optimisation; local refinement of angle and offset.
-- GeoJSON import in a projected metric CRS; DXF export; PDF report.
+- GeoJSON import in a projected metric CRS; DXF export.
 - Full Finnish localisation, including issue messages.
 - Bathymetry and draught per boat class; map tiles; exposure; cost estimation.
