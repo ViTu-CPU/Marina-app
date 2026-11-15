@@ -14,4 +14,10 @@ describe('length list input (D29)', () => {
     expect(parseLengthList('4, 0')).toBeNull();
     expect(parseLengthList('4,5,6')).toBeNull(); // ambiguous without spaces
   });
+
+  it('allows 0 when asked (gangway positions, D32)', () => {
+    expect(parseLengthList('0; 30')).toBeNull();
+    expect(parseLengthList('0; 30', true)).toEqual([0, 30]);
+    expect(parseLengthList('-1', true)).toBeNull();
+  });
 });

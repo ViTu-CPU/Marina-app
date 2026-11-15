@@ -101,7 +101,7 @@ navigable region, minus piers and row blocks.
 
 ## Anchoring plan and cost estimate (`anchoring.ts`, `bom.ts`)
 
-Derived from a layout, the site and the price list (DECISIONS D23–D31, I47–I72):
+Derived from a layout, the site and the price list (DECISIONS D23–D32, I47–I73):
 
 1. Wind load per pier after UFC 4-152-07 (I54): across the pier the boats are hit bow-on
    (beam × profile height), windward row in full, leeward row 20 %, plus the pier face not
@@ -120,8 +120,8 @@ Derived from a layout, the site and the price list (DECISIONS D23–D31, I47–I
    shielding), with the smallest Marinetek pile guide that holds it; piles are not priced.
 2b. Access pontoon in front of the shore (D28, I64–I66): square lines on the water side only
    (wind towards the wall). The wind pushing it off the wall is split by tributary length
-   between two shore chains at its gangway (assumed at its middle; crossed at θ, to fixings
-   in the wall) and the piers attached to its water-side edge, which add their share to the
+   between two shore chains at each gangway (placed by the user, D32, or one at its middle;
+   crossed at θ, to fixings in the wall) and the piers attached to its water-side edge, which add their share to the
    load their shore-ward lines hold. The wind along the wall goes to the shore chains.
 3. Each line: chain length `k × depth at high water`, catenary with uplift at the anchor;
    cheapest chain with breaking load × ((d − c)/d)² ≥ SF × tension; cheapest anchor with

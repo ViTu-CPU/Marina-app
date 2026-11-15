@@ -190,6 +190,20 @@ describe('cost estimate, hand-calculated', () => {
     expect(estimate.byGroup.gangways).toBe(1200);
   });
 
+  it('gangways of an access pontoon (D32): one per placed gangway, else one', () => {
+    const withAccess = (gangways?: number[]) =>
+      costEstimate({
+        layout: { piers: [pier], fingers, berths },
+        site: { ...site, accessPontoons: [{ id: 'access-1', start: { x: -40, y: 50 }, end: { x: -10, y: 50 }, width: 2, ...(gangways ? { gangways } : {}) }] },
+        priceList: LIST,
+        choices,
+        anchoring,
+      }).lines.find((l) => l.productId === 'g8')!;
+    expect(withAccess().orderQuantity).toBe(2);
+    expect(withAccess([5, 25]).orderQuantity).toBe(3);
+    expect(withAccess([5, 25]).basis).toBe('1 piers from the shore + 2 on access pontoons');
+  });
+
   it('anchoring: chain 2 × 16.5 m + 5 % = 34.7 m; anchors, shackles, springs, anodes = 1 223 €', () => {
     expect(lineFor('c13').quantity).toBeCloseTo(33, 9);
     expect(lineFor('c13').orderQuantity).toBe(34.7);

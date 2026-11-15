@@ -102,6 +102,21 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parsed.ok && parsed.project.anchoring.profileHeightRatio).toBe(0.25);
   });
 
+  it('gangways of an access pontoon (D32): kept when given, missing = none, negative refused', () => {
+    const withPontoon = (gangways: unknown) =>
+      parseProject(
+        fileWith((p) => {
+          const site = p.site as Record<string, unknown>;
+          site.accessPontoons = [{ id: 'access-1', start: { x: 0, y: 2 }, end: { x: 60, y: 2 }, width: 3, ...(gangways === undefined ? {} : { gangways }) }];
+        }),
+      );
+    const none = withPontoon(undefined);
+    expect(none.ok && none.project.site.accessPontoons![0]!.gangways).toBeUndefined();
+    const two = withPontoon([10, 45.5]);
+    expect(two.ok && two.project.site.accessPontoons![0]!.gangways).toEqual([10, 45.5]);
+    expect(withPontoon([-1]).ok).toBe(false);
+  });
+
   it('standard finger lengths: missing in older files → the default; stored sorted and unique (D29)', () => {
     const old = parseProject(fileWith((p) => delete (p.params as Record<string, unknown>).fingerLengths));
     expect(old.ok && old.project.params.fingerLengths).toEqual([5, 6, 7, 8, 10, 12]);

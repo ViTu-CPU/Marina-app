@@ -47,7 +47,7 @@ import { unitPriceVat0, type PriceList, type Product } from './catalog';
 import { add, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
 import type { BoatClass, Finger, Issue, Layout, MainPier, Site, Vec2 } from './model';
 import { pierAxis } from './rows';
-import { accessPontoonsOf, SHORE_TOLERANCE } from './site';
+import { accessPontoonsOf, gangwayPositions, SHORE_TOLERANCE } from './site';
 
 export type Seabed = 'clay' | 'sand' | 'rock';
 
@@ -615,10 +615,12 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     const toLeft = distancePointToPolyline(add(mid, scale(left, a.width / 2)), site.shoreline);
     const toRight = distancePointToPolyline(add(mid, scale(left, -a.width / 2)), site.shoreline);
     item.wallSide = toLeft <= toRight ? 'left' : 'right';
-    const gap = Math.min(toLeft, toRight);
     const waterSign = item.wallSide === 'left' ? -1 : 1;
     const edge = [add(a.start, scale(left, (waterSign * a.width) / 2)), add(a.end, scale(left, (waterSign * a.width) / 2))];
-    const restraints: Restraint[] = [{ id: 'gangway', t: length / 2 }];
+    // Gangways (D32): where the user put them, else one at the middle.
+    const gangways = gangwayPositions(a);
+    const placed = (a.gangways ?? []).length > 0;
+    const restraints: Restraint[] = gangways.map((t, i) => ({ id: `gangway-${i + 1}`, t }));
     for (const pier of piers) {
       const t = dot(sub(pier.start, a.start), along);
       if (t >= -SHORE_TOLERANCE && t <= length + SHORE_TOLERANCE && distancePointToPolyline(pier.start, edge) <= SHORE_TOLERANCE) {
@@ -633,11 +635,22 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       const pier = piers.find((x) => x.id === r.id);
       if (pier) pier.axialFromShore += shares[i]!;
     });
-    shoreSets.push({ item, at: length / 2, plan: gap / Math.cos(theta), offshore: shares[0]!, alongWall: k * a.width * freeboard });
+    gangways.forEach((t, i) => {
+      // Gap from the wall-side edge at the gangway to the shoreline.
+      const gap = distancePointToPolyline(add(add(a.start, scale(along, t)), scale(left, (-waterSign * a.width) / 2)), site.shoreline);
+      // The wind along the wall (the pontoon's end) is shared equally by the gangways (I73).
+      shoreSets.push({ item, at: t, plan: gap / Math.cos(theta), offshore: shares[i]!, alongWall: (k * a.width * freeboard) / gangways.length });
+    });
+    const where = placed
+      ? `2 shore chains at each of its ${gangways.length === 1 ? 'gangway' : `${gangways.length} gangways`} (at ${gangways.map((t) => `${t.toFixed(1)} m`).join(', ')} from its first point)`
+      : '2 shore chains at its gangway (assumed at its middle)';
+    const label = (r: Restraint) => (!r.id.startsWith('gangway-') ? r.id : placed ? `shore chains at ${r.t.toFixed(1)} m` : 'shore chains');
     warn(
       'ACCESS_PONTOON_SHORE_CHAINS',
-      `Access pontoon ${a.id}: chains on the water side only. Off the wall it is held by 2 shore chains at its gangway (assumed at its middle) and by the piers attached to it, each for the wind on its share of the pontoon's length: ${restraints
-        .map((r, i) => `${r.id === 'gangway' ? 'shore chains' : r.id} ${(shares[i]! / 1000).toFixed(1)} kN`)
+      `Access pontoon ${a.id}: chains on the water side only. Off the wall it is held by ${where} and by the piers attached to it, each for the wind on its share of the pontoon's length: ${restraints
+        .map((r, i) => ({ r, share: shares[i]! }))
+        .sort((x, y) => x.r.t - y.r.t)
+        .map(({ r, share }) => `${label(r)} ${(share / 1000).toFixed(1)} kN`)
         .join(', ')}. The fixings in the wall and the joints between the pontoons are not checked.`,
       a.id,
     );
@@ -761,19 +774,20 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     // Shore chains at the gangway: two, crossed at the splay angle, from the wall-side edge
     // to the wall. Off the wall they share the load (÷ 2 cos θ); along the wall one holds
     // each direction (÷ sin θ).
-    const set = shoreSets.find((x) => x.item === item);
-    if (set) {
+    shoreSets
+      .filter((x) => x.item === item)
+      .forEach((set, g) => {
       const wallSign = item.wallSide === 'left' ? 1 : -1;
       const offshoreH = set.offshore / 2 / Math.cos(theta);
       const alongH = theta > 0 ? set.alongWall / Math.sin(theta) : 0;
-      if (theta === 0 && set.alongWall > 0) unheld.push(item.id);
+      if (theta === 0 && set.alongWall > 0 && !unheld.includes(item.id)) unheld.push(item.id);
       const H = Math.max(offshoreH, alongH);
       const shore = chooseShoreChain(H, set.plan, p, priceList, vatPct);
       const half = (set.plan * Math.sin(theta)) / 2;
       for (const sign of [-1, 1]) {
         const fix = at(set.at + sign * half, (wallSign * item.width) / 2);
         const dir = add(scale(left, wallSign * Math.cos(theta)), scale(along, -sign * Math.sin(theta)));
-        const id = `${item.id}-S${sign < 0 ? 1 : 2}`;
+        const id = `${item.id}-S${2 * g + (sign < 0 ? 1 : 2)}`;
         lines.push({
           id,
           holdsId: item.id,
@@ -796,7 +810,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
         });
         if (!shore.product) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(shore.tension / 1000).toFixed(1)} kN with the safety factor; shore chain ${id} has no chain.`, item.id);
       }
-    }
+      });
   }
 
   // D31: fingers longer than `fingerPileMinLength` are moored with an end pile (Marinetek).

@@ -75,6 +75,26 @@ export function distancePointToRing(p: Vec2, ring: Polygon): number {
   return best;
 }
 
+/** The point of an open polyline nearest to `p`. */
+export function closestPointOnPolyline(p: Vec2, line: Polyline): Vec2 {
+  if (line.length === 1) return line[0]!;
+  let best = Infinity;
+  let point = line[0]!;
+  for (let i = 0; i + 1 < line.length; i++) {
+    const a = line[i]!;
+    const ab = sub(line[i + 1]!, a);
+    const len2 = dot(ab, ab);
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, dot(sub(p, a), ab) / len2));
+    const q = add(a, scale(ab, t));
+    const d = distance(p, q);
+    if (d < best) {
+      best = d;
+      point = q;
+    }
+  }
+  return point;
+}
+
 /** Shortest distance from `p` to an open polyline. */
 export function distancePointToPolyline(p: Vec2, line: Polyline): number {
   if (line.length === 1) return distance(p, line[0]!);

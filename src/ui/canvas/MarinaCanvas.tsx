@@ -9,10 +9,10 @@ import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Image as KonvaImage, Layer, Line, Rect, Shape, Stage, Text } from 'react-konva';
-import { centroid, distance, dot, sub } from '../../engine/geometry';
+import { add, centroid, distance, dot, sub } from '../../engine/geometry';
 import type { BackgroundImage, BoatClass, Layout, Polygon, Site, Vec2 } from '../../engine/model';
 import { pierAxis } from '../../engine/rows';
-import { pierPolygon } from '../../engine/site';
+import { gangwayLinks, pierPolygon } from '../../engine/site';
 import { appStore, useAppStore, type LayerId, type Selection, type ToolId } from '../../state/store';
 import { OSM_ATTRIBUTION } from '../../state/geo';
 import { gridStep, panBy, scaleBar, screenToWorld, visibleBounds, worldToScreen, zoomAt, type Size, type View } from '../../state/view';
@@ -32,6 +32,7 @@ const COLORS = {
   shoreline: '#15803d',
   entrance: '#f59e0b',
   access: '#6b7280',
+  gangway: '#b45309',
   chain: '#92400e',
   anchor: '#78350f',
   obstacle: '#1f2937',
@@ -117,6 +118,22 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
               listening={false}
             />
           ) : null,
+        )}
+      {layers.piers &&
+        (site.accessPontoons ?? []).flatMap((p) =>
+          // D32: each gangway as a mark across the pontoon and on to the shoreline, so it shows
+          // at any zoom.
+          gangwayLinks(p, site.shoreline).map((g, i) => (
+            <Line
+              key={`${p.id}-gangway-${i}`}
+              points={flat([add(g.centre, sub(g.centre, g.from)), g.from, g.to])}
+              stroke={COLORS.gangway}
+              strokeWidth={4}
+              strokeScaleEnabled={false}
+              lineCap="butt"
+              listening={false}
+            />
+          )),
         )}
       {layers.shoreline && hasEntrance(site) && (
         <Line points={flat([site.entrance.a, site.entrance.b])} stroke={COLORS.entrance} strokeWidth={5} strokeScaleEnabled={false} lineCap="round" listening={false} />

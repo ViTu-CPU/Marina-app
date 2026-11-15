@@ -14,7 +14,7 @@ import { DEFAULT_VAT_PCT, parameter, unitPriceVat0, type PriceList, type Product
 import { distance, distancePointToPolyline } from './geometry';
 import type { CostSettings, Layout, Params, Site } from './model';
 import { rowFrame, toLocalRect } from './rows';
-import { accessPontoonsOf, SHORE_TOLERANCE } from './site';
+import { accessPontoonsOf, gangwayPositions, SHORE_TOLERANCE } from './site';
 
 export type BomGroup = 'pontoons' | 'fingers' | 'gangways' | 'anchoring' | 'fittings' | 'labour' | 'plant';
 export const BOM_GROUPS: BomGroup[] = ['pontoons', 'fingers', 'gangways', 'anchoring', 'fittings', 'labour', 'plant'];
@@ -277,11 +277,12 @@ export function costEstimate(input: CostInput): CostEstimate {
   const fromShore = layout.piers.filter(
     (p) => site.shoreline.length >= 2 && distancePointToPolyline(p.start, site.shoreline) <= SHORE_TOLERANCE + p.width / 2,
   ).length;
-  const gangways = fromShore + accessPontoonsOf(site).length;
+  const accessGangways = accessPontoonsOf(site).reduce((n, a) => n + gangwayPositions(a).length, 0);
+  const gangways = fromShore + accessGangways;
   const wantedGangway = par('gangway_length_m', 6);
   const gangway = pickByLength(gangwayProducts, wantedGangway, vat);
   if (gangways > 0 && gangway) {
-    addQty('gangways', gangway.product, gangways, `${fromShore} piers from the shore + ${accessPontoonsOf(site).length} access pontoons`);
+    addQty('gangways', gangway.product, gangways, `${fromShore} piers from the shore + ${accessGangways} on access pontoons`);
     if (!gangway.longEnough) notes.push(`No gangway of "${choices.gangwaySeries}" is ${fmt(wantedGangway)} m long; the longest is used.`);
   }
 

@@ -6,6 +6,7 @@ import {
   boundingBox,
   boxPolygon,
   clipSegmentToRegion,
+  closestPointOnPolyline,
   convexInsideRegion,
   distance,
   distancePointToPolyline,
@@ -15,6 +16,7 @@ import {
   regionArea,
   regionFromPolygon,
   scale,
+  sub,
   type Region,
 } from './geometry';
 import { bufferRegion, differenceRegions, unionRegions } from './geometryOps';
@@ -29,6 +31,34 @@ export const SHORE_TOLERANCE = 0.5;
 /** The site's access pontoons (D21) that have a length and a width. */
 export const accessPontoonsOf = (site: Site): AccessPontoon[] =>
   (site.accessPontoons ?? []).filter((p) => p.width > 0 && distance(p.start, p.end) > EPS);
+
+/**
+ * Gangway positions of an access pontoon along its centreline from `start`, m (D32): the
+ * given ones, clamped to the pontoon, sorted and unique; its middle when none are given.
+ */
+export function gangwayPositions(p: AccessPontoon): number[] {
+  const length = distance(p.start, p.end);
+  const given = (p.gangways ?? []).filter((t) => Number.isFinite(t)).map((t) => Math.min(length, Math.max(0, t)));
+  return given.length > 0 ? [...new Set(given)].sort((a, b) => a - b) : [length / 2];
+}
+
+/**
+ * Each gangway of an access pontoon (D32) as the shortest link from the pontoon's edge facing
+ * the shore to the shoreline: from, to and its length (the gap), m. Empty without a shoreline.
+ */
+export function gangwayLinks(p: AccessPontoon, shoreline: Polyline): { t: number; centre: Vec2; from: Vec2; to: Vec2; gap: number }[] {
+  const length = distance(p.start, p.end);
+  if (shoreline.length < 2 || !(length > 0)) return [];
+  const along = scale(sub(p.end, p.start), 1 / length);
+  const left = { x: -along.y, y: along.x };
+  return gangwayPositions(p).map((t) => {
+    const centre = add(p.start, scale(along, t));
+    const edges = [add(centre, scale(left, p.width / 2)), add(centre, scale(left, -p.width / 2))];
+    const from = distancePointToPolyline(edges[0]!, shoreline) <= distancePointToPolyline(edges[1]!, shoreline) ? edges[0]! : edges[1]!;
+    const to = closestPointOnPolyline(from, shoreline);
+    return { t, centre, from, to, gap: distance(from, to) };
+  });
+}
 
 /**
  * Lines a main pier may start from: the shoreline and both long edges of every access

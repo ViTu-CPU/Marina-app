@@ -106,7 +106,16 @@ function site(v: unknown): Site {
             const e = obj(item, p);
             const width = num(e.width, `${p}.width`);
             if (width <= 0) fail(`${p}.width must be positive`);
-            return { id: str(e.id, `${p}.id`), start: vec(e.start, `${p}.start`), end: vec(e.end, `${p}.end`), width };
+            // Extension (D32): gangway positions; missing = one at the middle.
+            const gangways = e.gangways === undefined ? [] : arr(e.gangways, `${p}.gangways`).map((x, k) => num(x, `${p}.gangways[${k}]`));
+            if (gangways.some((x) => x < 0)) fail(`${p}.gangways must not be negative`);
+            return {
+              id: str(e.id, `${p}.id`),
+              start: vec(e.start, `${p}.start`),
+              end: vec(e.end, `${p}.end`),
+              width,
+              ...(gangways.length > 0 ? { gangways } : {}),
+            };
           }),
         }),
   };

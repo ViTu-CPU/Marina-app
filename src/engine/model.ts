@@ -58,6 +58,11 @@ export interface AccessPontoon {
   end: Vec2;
   /** Width, m. */
   width: number;
+  /**
+   * Extension (D32): gangway positions along the centreline from `start`, m. Missing or
+   * empty: one gangway at the middle.
+   */
+  gangways?: number[];
 }
 
 export interface Site {

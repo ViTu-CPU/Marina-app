@@ -116,6 +116,8 @@ export const en = {
   'param.orientationFixed': 'Fixed (° from north)',
   'param.fairwayFactor': 'Fairway width ÷ boat length',
   'param.fingerLengths': 'Standard finger lengths (m; empty = exact)',
+  'site.gangways': 'Gangways at (m from its first point)',
+  'site.gangwaysMiddle': 'empty = one at the middle',
   'param.fairwayMin': 'Min fairway width (m)',
   'param.obstacleClearance': 'Obstacle clearance (m)',
   'param.assumption': 'Defaults are assumptions for a first study, not values from a standard.',

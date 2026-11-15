@@ -61,8 +61,8 @@ function SiteSection() {
   const language = useAppStore((s) => s.language);
   const hint = TOOLS.find((x) => x.id === tool)?.hint ?? (tool === 'calibrate' ? 'hint.calibrate' : null);
 
-  /** `width` is set for access pontoons, whose width can be edited here (D21). */
-  const objects: { key: string; label: string; width?: number }[] = [];
+  /** `width` and `gangways` are set for access pontoons, edited here (D21, D32). */
+  const objects: { key: string; label: string; width?: number; gangways?: number[] }[] = [];
   if (site.water.length > 0) objects.push({ key: 'water', label: t('site.water') });
   if (site.shoreline.length > 0) objects.push({ key: 'shoreline', label: t('site.shoreline') });
   if (hasEntrance(site)) objects.push({ key: 'entrance', label: t('site.entrance') });
@@ -71,6 +71,7 @@ function SiteSection() {
       key: `access:${p.id}`,
       label: `${t('site.accessPontoon')} (${p.id}), ${formatLength(distance(p.start, p.end), language)} m`,
       width: p.width,
+      gangways: p.gangways ?? [],
     });
   }
   for (const o of site.obstacles) objects.push({ key: `obstacle:${o.id}`, label: `${t(`kind.${o.kind}`)} (${o.id})` });
@@ -153,7 +154,34 @@ function SiteSection() {
                   {t('site.delete')}
                 </button>
               </li>
-            ))}
+            )).flatMap((li, i) => {
+              const o = objects[i]!;
+              if (o.gangways === undefined) return [li];
+              return [
+                li,
+                <li key={`${o.key}:gangways`} className="pb-1 pl-2">
+                  <LengthListField
+                    label={`${t('site.gangways')} (${o.key.slice('access:'.length)})`}
+                    value={o.gangways}
+                    allowZero
+                    placeholder={t('site.gangwaysMiddle')}
+                    onChange={(gangways) =>
+                      state().updateSite(
+                        (s) => ({
+                          ...s,
+                          accessPontoons: (s.accessPontoons ?? []).map((p) => {
+                            if (`access:${p.id}` !== o.key) return p;
+                            const { gangways: _old, ...rest } = p;
+                            return gangways.length > 0 ? { ...rest, gangways } : rest;
+                          }),
+                        }),
+                        { coalesce: `${o.key}:gangways` },
+                      )
+                    }
+                  />
+                </li>,
+              ];
+            })}
           </ul>
         )}
       </div>

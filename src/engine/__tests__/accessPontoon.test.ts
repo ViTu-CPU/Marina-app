@@ -3,7 +3,7 @@ import { DEFAULT_BOAT_CLASSES, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../defa
 import { generateLayouts } from '../generate';
 import { evaluateLayout } from '../layout';
 import type { AccessPontoon, BoatClass, Site } from '../model';
-import { connectionLines, prepareSite } from '../site';
+import { connectionLines, gangwayLinks, gangwayPositions, prepareSite } from '../site';
 import { IssueCode } from '../validate';
 
 /**
@@ -82,6 +82,28 @@ describe('access pontoon in front of a high quay wall (D21)', () => {
     const issue = evaluated.issues.find((i) => i.code === IssueCode.ACCESS_PONTOON_FAR_FROM_SHORE);
     expect(issue?.elementId).toBe('access-1');
     expect(issue?.message).toContain('20.0 m');
+  });
+
+  it('gangways (D32): positions and links to the shore; the distance is checked at placed gangways', () => {
+    // Middle by default; given ones clamped, sorted and unique.
+    expect(gangwayPositions(pontoon)).toEqual([30]);
+    expect(gangwayPositions({ ...pontoon, gangways: [70, 10, 10, -5] })).toEqual([0, 10, 60]);
+    // From the edge facing the shore (y = 1) straight to the shoreline (y = 0): 1 m.
+    const [g] = gangwayLinks({ ...pontoon, gangways: [12] }, site.shoreline);
+    expect(g!.from).toEqual({ x: 12, y: 1 });
+    expect(g!.to).toEqual({ x: 12, y: 0 });
+    expect(g!.gap).toBeCloseTo(1, 9);
+    // A pontoon running away from the shore: 0.5 m off it at x = 0, 20.5 m at x = 40.
+    const slanted: AccessPontoon = { id: 'access-1', start: { x: 0, y: 2 }, end: { x: 40, y: 22 }, width: 3 };
+    const far = (gangways?: number[]) => {
+      const s = basin([{ ...slanted, ...(gangways ? { gangways } : {}) }]);
+      return evaluateLayout({ id: 'L', name: 'L', strategy: 'manual', piers: [], fingers: [], berths: [], modified: false }, prepareSite(s, PARAMS), FIVE_M_ONLY, PARAMS).issues.some(
+        (i) => i.code === IssueCode.ACCESS_PONTOON_FAR_FROM_SHORE,
+      );
+    };
+    expect(far()).toBe(false); // the shortest gap anywhere is small
+    expect(far([5])).toBe(false);
+    expect(far([40])).toBe(true); // a gangway placed near the far end
   });
 
   it('a pier that overlaps the pontoon is an error', () => {

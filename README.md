@@ -116,8 +116,8 @@ fairway in front of every berth, connection to the entrance, pier connected to t
   by breaking load and required mass; anchor type concrete block (friction) or concrete wedge
   (Pearl Harbor type, published capacities). Main piers of 10 m or more get two crossed chains
   at their head; fingers longer than 12 m get an end pile (Marinetek; not priced). An access pontoon in front of the shore has
-  chains on the water side only and is held off the wall by two shore chains at its gangway
-  and by the piers attached to it. All factors are editable; a quantity estimate, not a
+  chains on the water side only and is held off the wall by two shore chains at each of its
+  gangways (placed by the user, or one at its middle) and by the piers attached to it. All factors are editable; a quantity estimate, not a
   mooring design.
 - Bill of materials and cost estimate: pontoon modules, fingers, gangways, anchoring
   hardware, fittings, labour and plant, with site overheads, contingency, VAT 25.5 % on the

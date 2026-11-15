@@ -369,6 +369,37 @@ describe('anchoring plan of a pier', () => {
       expect(plan2.issues.find((i) => i.code === 'ACCESS_PONTOON_SHORE_CHAINS')?.message).toMatch(/shore chains 14\.5 kN, P2 9\.7 kN\./);
     });
 
+    it('gangways placed by the user (D32): 2 shore chains at each, load shared by tributary length', () => {
+      // Gangways at 20 and 80 m (x = −30 and 30), a pier at t = 70: tributary lengths 0…45,
+      // 45…75 and 75…100 m → 10 890, 7 260 and 6 050 N (shown as 6.0 kN: 6.05 rounds down in
+      // binary). Along the wall 726 N, half per gangway.
+      const pier2: MainPier = { id: 'P2', start: { x: 20, y: 3.5 }, end: { x: 20, y: 33.5 }, width: 3, locked: false, origin: 'manual' };
+      const plan4 = anchoringPlan({
+        layout: { piers: [pier2], berths: [] },
+        site: { ...site, accessPontoons: [{ ...access, gangways: [80, 20] }] },
+        classes: [boat],
+        params,
+        priceList: LIST,
+        vatPct: 25.5,
+        pierFreeboard: 0.5,
+      });
+      const shore = plan4.lines.filter((l) => l.fixing === 'wall');
+      expect(shore.map((l) => l.id)).toEqual(['access-1-S1', 'access-1-S2', 'access-1-S3', 'access-1-S4']);
+      for (const l of shore.slice(0, 2)) {
+        expect(l.horizontalKn).toBeCloseTo(10.89 / 2 / Math.SQRT1_2, 6);
+        expect(Math.abs(l.fix.x + 30)).toBeCloseTo(0.25, 9);
+      }
+      for (const l of shore.slice(2)) {
+        expect(l.horizontalKn).toBeCloseTo(6.05 / 2 / Math.SQRT1_2, 6);
+        expect(Math.abs(l.fix.x - 30)).toBeCloseTo(0.25, 9);
+      }
+      expect(plan4.loads.find((l) => l.id === 'P2')!.axialFromShoreKn).toBeCloseTo(0.726 + 7.26, 6);
+      expect(plan4.issues.find((i) => i.code === 'ACCESS_PONTOON_SHORE_CHAINS')?.message).toContain(
+        '2 shore chains at each of its 2 gangways (at 20.0 m, 80.0 m from its first point)',
+      );
+      expect(plan4.issues.find((i) => i.code === 'ACCESS_PONTOON_SHORE_CHAINS')?.message).toContain('shore chains at 20.0 m 10.9 kN, P2 7.3 kN, shore chains at 80.0 m 6.0 kN');
+    });
+
     it('without a shoreline: anchored on both sides like a pier', () => {
       const plan3 = anchoringPlan({
         layout: { piers: [], berths: [] },

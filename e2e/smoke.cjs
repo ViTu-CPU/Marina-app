@@ -277,7 +277,7 @@ async function waitForServer() {
       await page.screenshot({ path: path.join(outDir, 'app.png') });
     });
 
-    await step('access pontoon in front of a quay wall: piers start from its edge, shore chains hold it (D21, D28)', async () => {
+    await step('access pontoon in front of a quay wall: piers start from its edge, shore chains at its gangways hold it (D21, D28, D32)', async () => {
       await page.getByRole('combobox', { name: 'Load example' }).selectOption('rectBasin');
       await tool('Access pontoon');
       let s = await state();
@@ -305,6 +305,10 @@ async function waitForServer() {
       const fixings = page.getByText('Wall fixings of shore chains', { exact: true });
       await fixings.scrollIntoViewIfNeeded();
       assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), '2');
+      // Two gangways placed by hand (D32): 2 shore chains each.
+      await page.getByLabel(`Gangways at (m from its first point) (${pontoon.id})`, { exact: true }).fill('20; 150');
+      await page.waitForFunction(() => (window.__marina.getState().project.site.accessPontoons[0].gangways ?? []).length === 2);
+      assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), '4');
       await page.screenshot({ path: path.join(outDir, 'access-pontoon.png') });
     });
 

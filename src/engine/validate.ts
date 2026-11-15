@@ -24,7 +24,7 @@ import { bufferRegion, differenceRegions } from './geometryOps';
 import type { Berth, BoatClass, Feasibility, Finger, Issue, MainPier, Params, Polygon } from './model';
 import { localRectToPolygon } from './patterns';
 import { layoutRows, pierAxis, toLocalRect, type RowInfo } from './rows';
-import { accessPontoonsOf, distanceToConnection, pierPolygon, SHORE_TOLERANCE, type PreparedSite } from './site';
+import { accessPontoonsOf, distanceToConnection, gangwayLinks, pierPolygon, SHORE_TOLERANCE, type PreparedSite } from './site';
 
 export interface LayoutElements {
   piers: MainPier[];
@@ -287,10 +287,15 @@ export function operationalIssues(
   if (prepared.site.shoreline.length >= 2) {
     for (const p of accessPontoonsOf(prepared.site)) {
       const ring = pierPolygon(p.start, p.end, p.width);
-      const gap = Math.min(
-        ...ring.map((v) => distancePointToPolyline(v, prepared.site.shoreline)),
-        ...prepared.site.shoreline.map((v) => distancePointToPolyline(v, [...ring, ring[0]!])),
-      );
+      // With gangways placed by the user (D32), the gap at each of them; otherwise the
+      // shortest gap anywhere along the pontoon.
+      const gap =
+        (p.gangways ?? []).length > 0
+          ? Math.max(...gangwayLinks(p, prepared.site.shoreline).map((g) => g.gap))
+          : Math.min(
+              ...ring.map((v) => distancePointToPolyline(v, prepared.site.shoreline)),
+              ...prepared.site.shoreline.map((v) => distancePointToPolyline(v, [...ring, ring[0]!])),
+            );
       if (gap > MAX_GANGWAY_LENGTH) {
         warn(
           IssueCode.ACCESS_PONTOON_FAR_FROM_SHORE,

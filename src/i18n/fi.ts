@@ -118,6 +118,8 @@ export const fi: Partial<Record<StringKey, string>> = {
   'param.orientationFixed': 'Kiinteä (° pohjoisesta)',
   'param.fairwayFactor': 'Väylän leveys ÷ veneen pituus',
   'param.fingerLengths': 'Aisojen vakiopituudet (m; tyhjä = tarkka)',
+  'site.gangways': 'Kulkusillat kohdissa (m ensimmäisestä pisteestä)',
+  'site.gangwaysMiddle': 'tyhjä = yksi keskellä',
   'param.fairwayMin': 'Väylän vähimmäisleveys (m)',
   'param.obstacleClearance': 'Etäisyys esteisiin (m)',
   'param.assumption': 'Oletusarvot ovat alustavan tarkastelun oletuksia, eivät standardien arvoja.',
