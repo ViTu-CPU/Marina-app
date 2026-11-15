@@ -29,22 +29,32 @@ export const DEFAULT_PIER_SERIES = 'premier2700';
 
 const EPS = 1e-6;
 
+/**
+ * At most this many modules shorter than the longest in one pier (I89): "Use longest possible
+ * pontoon if possible (20m) when making long piers" — the length is made up with the longest
+ * module and finished with one or two shorter ones.
+ */
+export const MAX_SHORT_MODULES = 2;
+
 /** Module lengths of a combination, longest first. */
 const sum = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0);
 
-/** Every combination of the module lengths up to `max` m (counts per length), as sorted lists, longest first. */
-function combinations(lengths: readonly number[], max: number): number[][] {
+/**
+ * Every combination of the module lengths up to `max` m with at most `maxShort` modules shorter
+ * than the longest, as sorted lists, longest first.
+ */
+function combinations(lengths: readonly number[], max: number, maxShort = MAX_SHORT_MODULES): number[][] {
   const sorted = [...new Set(lengths.filter((l) => l > 0))].sort((a, b) => b - a);
   const out: number[][] = [];
-  const walk = (i: number, acc: number[], total: number) => {
+  const walk = (i: number, acc: number[], total: number, short: number) => {
     if (i === sorted.length) {
       if (acc.length > 0) out.push(acc);
       return;
     }
     const l = sorted[i]!;
-    for (let n = 0; total + n * l <= max + EPS; n++) walk(i + 1, [...acc, ...Array<number>(n).fill(l)], total + n * l);
+    for (let n = 0; total + n * l <= max + EPS && (i === 0 || short + n <= maxShort); n++) walk(i + 1, [...acc, ...Array<number>(n).fill(l)], total + n * l, i === 0 ? short : short + n);
   };
-  walk(0, [], 0);
+  walk(0, [], 0, 0);
   return out;
 }
 
@@ -61,8 +71,8 @@ function preferred(a: number[], b: number[]): number {
  * longer than `need` m. Ties: fewer modules, then longer ones. Null when not even the shortest
  * module fits in `max`.
  */
-export function moduleCombination(need: number, max: number, lengths: readonly number[]): number[] | null {
-  const all = combinations(lengths, max);
+export function moduleCombination(need: number, max: number, lengths: readonly number[], maxShort = MAX_SHORT_MODULES): number[] | null {
+  const all = combinations(lengths, max, maxShort);
   if (all.length === 0) return null;
   const up = all.filter((c) => sum(c) >= need - EPS);
   if (up.length > 0) {
@@ -77,12 +87,15 @@ export function moduleCombination(need: number, max: number, lengths: readonly n
 export const combinationLength = (modules: readonly number[]): number => sum(modules);
 
 /**
- * The modules a pier of `length` m is built from: the exact combination when there is one (within
- * 5 cm), else the shortest that covers it. Empty without module lengths.
+ * The modules a pier of `length` m is built from: the generator's combination (at most two short
+ * modules) when it matches within 5 cm, else any exact one, else the shortest that covers it. Empty
+ * without module lengths.
  */
 export function pierModules(length: number, lengths: readonly number[]): number[] {
   if (lengths.length === 0 || !(length > 0)) return [];
-  return moduleCombination(length - 0.05, Math.max(length + 0.05, length * 2), lengths) ?? [];
+  const max = Math.max(length + 0.05, length * 2);
+  const exact = (c: number[] | null) => (c && Math.abs(combinationLength(c) - length) <= 0.05 ? c : null);
+  return exact(moduleCombination(length - 0.05, max, lengths)) ?? exact(moduleCombination(length - 0.05, max, lengths, Infinity)) ?? moduleCombination(length - 0.05, max, lengths) ?? [];
 }
 
 /** Positions of the joints between the modules along a pier from its shore end, m (longest modules at the shore). */

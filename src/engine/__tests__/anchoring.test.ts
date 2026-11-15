@@ -191,10 +191,13 @@ describe('anchoring plan of a pier', () => {
    * Along (boats broadside, 10 · 1.5 = 15 m²): pier end 3 · 0.5 = 1.5 m² + first boat 15 m²
    *   + 3 · 0.2 · 15 = 9 m² → 25.5 m² → 12 342 N.
    * The same from the shore (all boats alike).
-   * Pairs: max(2, ⌈30/12⌉ + 1) = 4 at 0.5, 10, 20 and 29.5 m; the stations up to 15 m are splayed
-   * towards the head, the others towards the shore (I60): 4 + 4 lines, splay 45°.
-   * Across: the 4 lines of one side, 14 036 / 4 / cos 45° = 4 962.5 N.
-   * Along: the 4 lines splayed one way, 12 342 / 4 / sin 45° = 4 363.6 N → across governs.
+   * Stations (D46, I96): no module lengths given, so joints every 12 m: 12 and 24 m. At the shore end
+   * (0.5 m) one chain per side splayed towards the head; at each joint on each side one towards the
+   * head and one towards the shore (X pattern): 2 + 2 · 4 = 10 lines, 5 anchored on each side, 6
+   * splayed towards the head and 4 towards the shore, θ = 45°.
+   * Across: the 5 lines of one side, 14 036 / 5 / cos 45° = 3 970.0 N.
+   * Along from the sea: the 6 head-ward lines, 12 342 / 6 / sin 45° = 2 909.0 N → across governs them;
+   * from the shore: the 4 shore-ward lines, 12 342 / 4 / sin 45° = 4 363.6 N → along governs them.
    */
   const pier: MainPier = { id: 'P1', start: { x: 0, y: 0 }, end: { x: 0, y: 30 }, width: 3, locked: false, origin: 'manual' };
   const boat: BoatClass = { id: 'b10', name: '10 m', length: 10, beam: 3.5, color: '#000', share: 1, count: 0 };
@@ -237,13 +240,20 @@ describe('anchoring plan of a pier', () => {
     expect(p2.loads[0]!.axialFromShoreKn).toBeCloseTo(11.41272, 6);
   });
 
-  it('8 crossed lines splayed 45° towards the ends of the pier (D25, I60)', () => {
-    expect(plan.lines).toHaveLength(8);
-    expect(plan.lines.filter((l) => l.splay === 'head')).toHaveLength(4);
+  const ACROSS = 14036 / 5 / Math.SQRT1_2 / 1000;
+  const FROM_SHORE = 12342 / 4 / Math.SQRT1_2 / 1000;
+
+  it('10 crossed lines: an X at every joint, towards the head at the shore end (D46)', () => {
+    expect(plan.lines).toHaveLength(10);
+    expect(plan.lines.filter((l) => l.splay === 'head')).toHaveLength(6);
     expect(plan.lines.filter((l) => l.splay === 'shore')).toHaveLength(4);
+    // Stations: 0.5 m (2 lines), 12 m and 24 m (4 lines each).
+    const stations = [...new Set(plan.lines.map((l) => Math.round(l.fix.y * 10) / 10))].sort((x, y) => x - y);
+    expect(stations).toEqual([0.5, 12, 24]);
+    expect(plan.lines.filter((l) => Math.abs(l.fix.y - 0.5) < 1e-9).every((l) => l.splay === 'head')).toBe(true);
     for (const l of plan.lines) {
-      expect(l.horizontalKn).toBeCloseTo(4.96248, 5);
-      expect(l.governs).toBe('across');
+      expect(l.horizontalKn).toBeCloseTo(l.splay === 'head' ? ACROSS : FROM_SHORE, 5);
+      expect(l.governs).toBe(l.splay === 'head' ? 'across' : 'along');
       // Fixed on one edge and anchored beyond the other: chains cross under the pier.
       expect(Math.sign(l.fix.x)).toBe(-Math.sign(l.anchor.x));
       expect(Math.abs(l.anchor.x)).toBeGreaterThan(1.5);
@@ -252,28 +262,39 @@ describe('anchoring plan of a pier', () => {
       const dy = l.anchor.y - l.fix.y;
       expect(Math.abs(dy)).toBeCloseTo(dx, 9);
       expect(Math.sign(dy)).toBe(l.splay === 'head' ? 1 : -1);
-      // The shore half points to the head and the head half to the shore: no anchor lies
-      // behind the shore end or beyond the head.
-      expect(l.splay === 'head' ? l.fix.y <= 15 : l.fix.y > 15).toBe(true);
-      expect(l.anchor.y).toBeGreaterThan(0);
-      expect(l.anchor.y).toBeLessThan(30);
+    }
+    // At a joint both sides have both directions: the chains of neighbouring joints cross.
+    for (const t of [12, 24]) {
+      const at = plan.lines.filter((l) => Math.abs(l.fix.y - t) < 1e-9);
+      expect(new Set(at.map((l) => `${Math.sign(l.fix.x)}${l.splay}`)).size).toBe(4);
     }
   });
 
+  it('joints at the module joints when the module lengths are given (D44, D46)', () => {
+    // A 32.1 m pier of 19.90 + 12.20 m modules: one joint at 19.9 m → 2 + 4 lines.
+    const p32: MainPier = { ...pier, end: { x: 0, y: 32.1 } };
+    const m = anchoringPlan({ layout: { piers: [p32], berths }, site, classes: [boat], params, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5, moduleLengths: [19.9, 16.05, 12.2] });
+    expect(m.lines).toHaveLength(6);
+    expect([...new Set(m.lines.map((l) => Math.round(l.fix.y * 10) / 10))].sort((x, y) => x - y)).toEqual([0.5, 19.9]);
+  });
+
   it('a small splay angle leaves the wind along the pier governing', () => {
-    // θ = 12°: across 14 036 / 4 / cos 12° = 3 587.4 N; along 12 342 / 4 / sin 12° = 14 840.4 N.
+    // θ = 12°: across 14 036 / 5 / cos 12° = 2 870.0 N; from the sea 12 342 / 6 / sin 12° = 9 893.6 N;
+    // from the shore 12 342 / 4 / sin 12° = 14 840.4 N.
     const p12 = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params: { ...params, splayAngle: 12 }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
     for (const l of p12.lines) {
-      expect(l.horizontalKn).toBeCloseTo(14.8404, 4);
+      expect(l.horizontalKn).toBeCloseTo(l.splay === 'head' ? 9.8936 : 14.8404, 4);
       expect(l.governs).toBe('along');
     }
   });
 
   it('square lines (0°) do not hold the wind along the pier, and say so', () => {
+    // One line per side at each station (0.5, 12, 24 m): 14 036 / 3 = 4 678.7 N.
     const p0 = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params: { ...params, splayAngle: 0 }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+    expect(p0.lines).toHaveLength(6);
     for (const l of p0.lines) {
       expect(l.splay).toBe('none');
-      expect(l.horizontalKn).toBeCloseTo(3.509, 6);
+      expect(l.horizontalKn).toBeCloseTo(4.678667, 6);
       expect(l.anchor.y).toBeCloseTo(l.fix.y, 9);
     }
     expect(p0.issues.find((i) => i.code === 'ALONG_PIER_LOAD_NOT_HELD')?.message).toMatch(/^The wind along P1 is not held/);
@@ -284,23 +305,23 @@ describe('anchoring plan of a pier', () => {
     const line = plan.lines[0]!;
     expect(line.chainId).toBe('c13');
     expect(line.chainLength).toBeCloseTo(4 * (4 + 1.5), 9);
-    // 22 m of 13 mm chain in 5.5 m of water: a = 4 962.5 / 26.55 = 187 m needs 45.7 m to touch
-    // the bottom, so the chain hangs and lifts the anchor.
-    const H = 14036 / 4 / Math.SQRT1_2;
+    // 22 m of 13 mm chain in 5.5 m of water: a = 3 970 / 26.55 = 150 m needs 41 m to touch the
+    // bottom, so the chain hangs and lifts the anchor.
+    const H = 14036 / 5 / Math.SQRT1_2;
     const hanging = chainLine(5.5, 22, H, 3.1 * 9.81 * (1 - 1000 / 7850));
     expect(hanging.touchesBottom).toBe(false);
     expect(line.upliftKn).toBeCloseTo(hanging.uplift / 1000, 9);
-    expect(line.requiredAnchorKg).toBeCloseTo(requiredAnchorMass(H, hanging.uplift, params), 6);
-    // On sand 1.5 · (4 962.5 / 0.6 + V) / (9.81 · 0.583) = 2 168 kg + uplift → one 3 000 kg anchor.
-    expect(line.requiredAnchorKg).toBeGreaterThan(2168);
-    expect(line.requiredAnchorKg).toBeLessThan(3000);
-    expect(line.anchorId).toBe('a3000');
+    const mass = requiredAnchorMass(H, hanging.uplift, params);
+    expect(line.requiredAnchorKg).toBeCloseTo(mass, 6);
+    // On sand 1.5 · (3 970 / 0.6 + V) / (9.81 · 0.583) = 1 735 kg + uplift.
+    expect(mass).toBeGreaterThan(1735);
+    expect(line.anchorId).toBe(mass <= 2000 ? 'a2000' : 'a3000');
     expect(line.anchorCount).toBe(1);
     expect(plan.issues.some((i) => i.code === 'SEVERAL_ANCHORS')).toBe(false);
     expect(plan.issues.some((i) => i.code === 'ANCHORING_NOT_A_DESIGN')).toBe(true);
-    // On clay (μ 0.3) twice that, 4 336 kg + uplift: two 3 000 kg anchors per line.
+    // On clay (μ 0.3) about twice that, over 3 000 kg: two 3 000 kg anchors per line.
     const onClay = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params: { ...params, seabed: 'clay' }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
-    expect(onClay.lines[0]!.requiredAnchorKg).toBeGreaterThan(4336);
+    expect(onClay.lines[0]!.requiredAnchorKg).toBeGreaterThan(3470);
     expect(onClay.lines[0]!.anchorId).toBe('a3000');
     expect(onClay.lines[0]!.anchorCount).toBe(2);
     expect(onClay.issues.some((i) => i.code === 'SEVERAL_ANCHORS')).toBe(true);
@@ -425,12 +446,12 @@ describe('anchoring plan of a pier', () => {
     const withTips: AnchoringParams = { ...DEFAULT_ANCHORING, seabed: 'sand' };
 
     it('a pier of 10 m or more gets two crossed chains at its head, splayed outwards', () => {
-      // As above, plus the tip pair: across 14 036 / (4 + 1) / cos 45° = 3 970.0 N; wind from
-      // the sea shared by 4 + 2 head-ward lines, 12 342 / 6 / sin 45° = 2 909.0 N; wind from the
-      // shore by the 4 shore-ward lines, 12 342 / 4 / sin 45° = 4 363.6 N (governs those).
+      // As above, plus the tip pair: 6 lines anchored on each side, across 14 036 / 6 / cos 45° =
+      // 3 308.3 N; wind from the sea shared by 6 + 2 head-ward lines, 12 342 / 8 / sin 45° = 2 181.8 N;
+      // wind from the shore by the 4 shore-ward lines, 4 363.6 N (governs those).
       const planT = anchoringPlan({ layout: { piers: [pier], berths }, site, classes: [boat], params: withTips, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
-      expect(planT.lines).toHaveLength(10);
-      const across = 14036 / 5 / Math.SQRT1_2 / 1000;
+      expect(planT.lines).toHaveLength(12);
+      const across = 14036 / 6 / Math.SQRT1_2 / 1000;
       const tips = planT.lines.filter((l) => l.role === 'tip');
       expect(tips.map((l) => l.id)).toEqual(['P1-T1', 'P1-T2']);
       for (const l of tips) {
@@ -507,13 +528,16 @@ describe('anchoring plan of a pier', () => {
   });
 
   it('anchors outside the water area are reported', () => {
-    // The lines fixed on the right edge are anchored about 15 m left of the pier (span 21.3 m at
-    // 45°); with the water ending 10 m left of it their 4 anchors lie on land.
+    // The lines fixed on the right edge are anchored about 15 m left of the pier (span ≈ 21 m at
+    // 45°); with the water ending 10 m left of it their anchors lie on land, and so do the anchors of
+    // shore-ward chains that reach behind the shore end (y < 0).
     const tight = { ...site, water: [{ x: -10, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: -10, y: 100 }] };
     const plan2 = anchoringPlan({ layout: { piers: [pier], berths }, site: tight, classes: [boat], params, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+    const outside = plan2.lines.filter((l) => l.anchor.x < -10 || l.anchor.y < 0).length;
+    expect(outside).toBeGreaterThanOrEqual(5);
     const issue = plan2.issues.find((i) => i.code === 'ANCHOR_OUTSIDE_WATER');
-    expect(issue?.message).toMatch(/^4 anchors lie outside the water area/);
-    expect(plan.issues.some((i) => i.code === 'ANCHOR_OUTSIDE_WATER')).toBe(false);
+    expect(issue?.message).toMatch(new RegExp(`^${outside} anchors lie outside the water area`));
+    expect(plan.issues.some((i) => i.code === 'ANCHOR_OUTSIDE_WATER')).toBe(plan.lines.some((l) => l.anchor.y < 0));
   });
 
   it('is deterministic', () => {
@@ -533,13 +557,13 @@ describe('anchoring plan of a pier', () => {
     // The 22 m rule length leaves the 13 mm chain at about 11° (above the limit), so it is
     // lengthened to the shortest 0.1 m step within 5°.
     const lateral = wedge.lines[0]!;
-    const H = 14036 / 4 / Math.SQRT1_2;
+    const H = 14036 / 5 / Math.SQRT1_2;
     expect(lateral.chainId).toBe('c13');
     expect(upliftAngle(H, chainLine(5.5, 22, H, w13).uplift)).toBeGreaterThan(5);
     expect(lateral.chainLength).toBeGreaterThan(22);
     expect(upliftAngle(H, chainLine(5.5, lateral.chainLength - 0.1, H, w13).uplift)).toBeGreaterThan(5);
-    // 4 962.5 N → 506.0 kg: the 1 000 kg anchor, the lightest in the list.
-    expect(lateral.requiredAnchorKg).toBeCloseTo(506.0, 1);
+    // 3 970.0 N → 404.8 kg: the 1 000 kg anchor, the lightest in the list.
+    expect(lateral.requiredAnchorKg).toBeCloseTo(404.8, 1);
     expect(lateral.anchorId).toBe('a1000');
     expect(wedge.issues.some((i) => i.code === 'WEDGE_ANCHORS')).toBe(true);
   });

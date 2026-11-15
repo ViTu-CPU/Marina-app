@@ -24,6 +24,10 @@ describe('pier modules (D44, I89)', () => {
     expect(moduleCombination(32.5, 32.5, PREMIER)).toEqual([19.9, 12.2]);
     // Shorter than one module: none.
     expect(moduleCombination(10, 10, PREMIER)).toBeNull();
+    // At most two modules shorter than the longest (I89): 118 m → 5 × 19.9 + 16.05 = 115.55 m, not
+    // 19.9 + 8 × 12.2 = 117.5 m.
+    expect(moduleCombination(118, 118, PREMIER)).toEqual([19.9, 19.9, 19.9, 19.9, 19.9, 16.05]);
+    expect(moduleCombination(118, 118, PREMIER, Infinity)).toEqual([19.9, 12.2, 12.2, 12.2, 12.2, 12.2, 12.2, 12.2, 12.2]);
   });
 
   it('with target counts: the shortest combination that holds the berths within the available length', () => {
@@ -39,6 +43,8 @@ describe('pier modules (D44, I89)', () => {
     expect(jointPositions(99.5, PREMIER).map((x) => Math.round(x * 10) / 10)).toEqual([19.9, 39.8, 59.7, 79.6]);
     // A manually set length: the covering combination.
     expect(pierModules(30, PREMIER)).toEqual([19.9, 12.2]);
+    // An exact length with more short modules (a manual pier) is still decomposed exactly.
+    expect(pierModules(117.5, PREMIER)).toHaveLength(9);
     expect(pierModules(30, [])).toEqual([]);
   });
 

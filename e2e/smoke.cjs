@@ -156,7 +156,8 @@ async function waitForServer() {
       const p = toScreen(s, mid);
       await page.mouse.move(p.x, p.y);
       await page.mouse.down();
-      for (let i = 1; i <= 8; i++) await page.mouse.move(p.x + i * 4, p.y);
+      // Far enough sideways to run into the neighbouring rows (how far depends on the generated layout).
+      for (let i = 1; i <= 16; i++) await page.mouse.move(p.x + i * 6, p.y);
       await page.mouse.up();
       s = await state();
       const moved = s.project.layouts.find((l) => l.id === s.selectedLayoutId);

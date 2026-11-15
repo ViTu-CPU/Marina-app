@@ -53,6 +53,7 @@
 import { unitPriceVat0, type PriceList, type Product } from './catalog';
 import { add, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
 import type { BoatClass, Finger, Issue, Layout, MainPier, Site, Vec2 } from './model';
+import { jointPositions } from './modules';
 import { pierAxis } from './rows';
 import { accessPontoonsOf, gangwayPositions, SHORE_TOLERANCE } from './site';
 
@@ -430,6 +431,8 @@ export interface AnchoringInput {
   pierFreeboard?: number | null;
   /** Stern buoys: distance factor of the layout (`Params.buoyDepthFactor`), for the 1.4 L check. */
   buoyDepthFactor?: number;
+  /** D46: module lengths of the piers (`Params.pierModuleLengths`); empty or missing = joints every `lineSpacing`. */
+  moduleLengths?: readonly number[];
 }
 
 export interface ChainLine {
@@ -639,6 +642,20 @@ export function chooseAnchor(mass: number, list: PriceList, vatPct: number, maxP
   return { product: heaviest, count: Math.ceil(mass / heaviest.anchorMassKg!) };
 }
 
+/** Stations at the ends of a pontoon lie this far in from them, m. */
+const STATION_INSET = 0.5;
+
+/**
+ * Joints of a pier of any length (no modules, I96): every `spacing` m from the shore end, short of
+ * the head by more than 1 m.
+ */
+export function evenJoints(length: number, spacing: number): number[] {
+  const out: number[] = [];
+  if (!(spacing > 0)) return out;
+  for (let t = spacing; t < length - 1; t += spacing) out.push(t);
+  return out;
+}
+
 /** A straight floating pontoon to be held: a main pier or an access pontoon. */
 interface Held {
   id: string;
@@ -752,6 +769,7 @@ function pierLoads(pier: MainPier, layout: AnchoringInput['layout'], classes: Bo
 /** Anchoring plan of a layout. Deterministic; positions in plan view. */
 export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   const { layout, site, classes, params: p, priceList, vatPct } = input;
+  const moduleLengths = input.moduleLengths ?? [];
   const freeboard = input.pierFreeboard ?? p.pontoonFreeboard;
   const q = 0.5 * p.airDensity * p.windSpeed ** 2;
   const issues: Issue[] = [];
@@ -888,63 +906,79 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   };
 
   for (const item of held) {
-    const { length, along, left } = pierAxis({ ...item, locked: false, origin: 'manual' });
+    const { length, along: pierAlong, left } = pierAxis({ ...item, locked: false, origin: 'manual' });
+    const along = pierAlong;
     if (!(length > 0)) continue;
     loads.push({ id: item.id, lateralKn: item.lateral / 1000, axialFromSeaKn: item.axialFromSea / 1000, axialFromShoreKn: item.axialFromShore / 1000 });
-    const pairs = Math.max(2, Math.ceil(length / p.lineSpacing) + 1);
-    const at = (t: number, lateral: number) => add(add(item.start, scale(along, t)), scale(left, lateral));
-    const angle = item.splayed ? theta : 0;
-    const stations = Array.from({ length: pairs }, (_, i) => Math.min(length - 0.5, Math.max(0.5, (i * length) / (pairs - 1))));
-    /** Stations in the shore half (and the middle one) are splayed towards the head (I60). */
-    const splayOf = (t: number): AnchorLine['splay'] => (angle === 0 ? 'none' : t <= length / 2 + 1e-9 ? 'head' : 'shore');
-    const count = { head: 0, shore: 0, none: 0 };
-    for (const t of stations) count[splayOf(t)] += 2;
-    // D30: a main pier at least `tipAnchorMinLength` long gets two crossed chains at its head,
-    // splayed outwards (anchors beyond the head). They hold wind from the sea with the other
-    // head-ward lines and count as one more station across.
-    const tip = item.splayed && length >= p.tipAnchorMinLength - 1e-9;
-    if (tip) count[angle === 0 ? 'none' : 'head'] += 2;
-    // Across: the lines of one side share the load. Along: the lines splayed against the wind
-    // share it (wind from the sea pushes the pier shorewards: the 'head' lines hold).
-    const acrossH = item.lateral / (pairs + (tip ? 1 : 0)) / Math.cos(angle);
-    const alongH = (splay: AnchorLine['splay']): number => {
-      if (splay === 'none') return 0;
-      const force = splay === 'head' ? item.axialFromSea : item.axialFromShore;
-      return force > 0 ? force / count[splay] / Math.sin(angle) : 0;
-    };
-    if (item.splayed && Math.max(item.axialFromSea, item.axialFromShore) > 0 && (angle === 0 || count.head === 0 || count.shore === 0)) {
-      unheld.push(item.id);
-    }
-
-    const addLine = (fix: Vec2, direction: Vec2, splay: AnchorLine['splay'], role: AnchorLine['role'], id: string) => {
-      const alongLoad = alongH(splay);
-      seabedLine({
-        id,
-        holdsId: item.id,
-        role,
-        splay,
-        governs: alongLoad > acrossH ? 'along' : 'across',
-        fix,
-        direction,
-        H: Math.max(acrossH, alongLoad),
-        minSpan: (item.width + 1) / Math.cos(angle),
-      });
-    };
-
-    let n = 0;
-    for (const t of stations) {
-      const splay = splayOf(t);
-      const towards = scale(along, splay === 'shore' ? -Math.sin(angle) : Math.sin(angle));
-      // Fixed on the left edge, anchored on the right (holds against wind from the right) and
-      // vice versa. In front of a wall only the line anchored on the water side (D28).
-      if (item.wallSide !== 'right') addLine(at(t, item.width / 2), add(scale(left, -Math.cos(angle)), towards), splay, 'side', `${item.id}-A${++n}`);
-      if (item.wallSide !== 'left') addLine(at(t, -item.width / 2), add(scale(left, Math.cos(angle)), towards), splay, 'side', `${item.id}-A${++n}`);
-    }
-    if (tip) {
-      const splay: AnchorLine['splay'] = angle === 0 ? 'none' : 'head';
-      const out = scale(along, Math.sin(angle));
-      addLine(at(length, item.width / 2), add(scale(left, -Math.cos(angle)), out), splay, 'tip', `${item.id}-T1`);
-      addLine(at(length, -item.width / 2), add(scale(left, Math.cos(angle)), out), splay, 'tip', `${item.id}-T2`);
+    const minSpan = (angle: number) => (item.width + 1) / Math.cos(angle);
+    const at = (t: number, lateral: number) => add(add(item.start, scale(pierAlong, t)), scale(left, lateral));
+    if (item.splayed) {
+      // D46: chains from every module joint (and the ends), as in the owner's reference drawing:
+      // at a joint, on each side one chain splayed towards the head and one towards the shore, so
+      // that the chains of neighbouring joints cross; at the shore end only towards the head (the
+      // shore lies behind it); at the head the tip pair (D30), outwards. Each chain is fixed on one
+      // edge and anchored beyond the other (crossed under the pier).
+      const angle = theta;
+      const joints = moduleLengths.length > 0 ? jointPositions(length, moduleLengths) : evenJoints(length, p.lineSpacing);
+      interface Spec {
+        t: number;
+        splay: 'head' | 'shore';
+        anchoredOn: 'left' | 'right';
+        role: 'side' | 'tip';
+      }
+      const specs: Spec[] = [];
+      const both = (t: number, splay: Spec['splay'], role: Spec['role']) => specs.push({ t, splay, anchoredOn: 'right', role }, { t, splay, anchoredOn: 'left', role });
+      both(Math.min(STATION_INSET, length / 2), 'head', 'side');
+      // Square chains (θ = 0) would double up at a joint: one per side there.
+      for (const j of joints) {
+        both(j, 'head', 'side');
+        if (angle > 0) both(j, 'shore', 'side');
+      }
+      const tip = length >= p.tipAnchorMinLength - 1e-9;
+      if (tip) both(length, 'head', 'tip');
+      const perSide = specs.filter((x) => x.anchoredOn === 'right').length;
+      const count = { head: specs.filter((x) => x.splay === 'head').length, shore: specs.filter((x) => x.splay === 'shore').length };
+      // Across: the lines anchored on the windward side share the load. Along: the lines splayed
+      // against the wind share it (wind from the sea pushes the pier shorewards: 'head' lines hold).
+      const acrossH = item.lateral / perSide / Math.cos(angle);
+      const alongH = (splay: Spec['splay']): number => {
+        const force = splay === 'head' ? item.axialFromSea : item.axialFromShore;
+        return force > 0 && angle > 0 && count[splay] > 0 ? force / count[splay] / Math.sin(angle) : 0;
+      };
+      if (Math.max(item.axialFromSea, item.axialFromShore) > 0 && (angle === 0 || (item.axialFromSea > 0 && count.head === 0) || (item.axialFromShore > 0 && count.shore === 0))) {
+        unheld.push(item.id);
+      }
+      let n = 0;
+      let k = 0;
+      for (const x of specs) {
+        const along = alongH(x.splay);
+        const towards = scale(pierAlong, x.splay === 'shore' ? -Math.sin(angle) : Math.sin(angle));
+        const fixSign = x.anchoredOn === 'right' ? 1 : -1;
+        seabedLine({
+          id: x.role === 'tip' ? `${item.id}-T${++k}` : `${item.id}-A${++n}`,
+          holdsId: item.id,
+          role: x.role,
+          splay: angle === 0 ? 'none' : x.splay,
+          governs: along > acrossH ? 'along' : 'across',
+          fix: at(x.t, (fixSign * item.width) / 2),
+          direction: add(scale(left, -fixSign * Math.cos(angle)), towards),
+          H: Math.max(acrossH, along),
+          minSpan: minSpan(angle),
+        });
+      }
+    } else {
+      // Access pontoons (I64): square lines, one per station on each side, at `lineSpacing`; in
+      // front of a wall only the line anchored on the water side (D28).
+      const pairs = Math.max(2, Math.ceil(length / p.lineSpacing) + 1);
+      const stations = Array.from({ length: pairs }, (_, i) => Math.min(length - STATION_INSET, Math.max(STATION_INSET, (i * length) / (pairs - 1))));
+      const acrossH = item.lateral / pairs;
+      let n = 0;
+      for (const t of stations) {
+        const line = (fixSign: 1 | -1) =>
+          seabedLine({ id: `${item.id}-A${++n}`, holdsId: item.id, role: 'side', splay: 'none', governs: 'across', fix: at(t, (fixSign * item.width) / 2), direction: scale(left, -fixSign), H: acrossH, minSpan: minSpan(0) });
+        if (item.wallSide !== 'right') line(1);
+        if (item.wallSide !== 'left') line(-1);
+      }
     }
 
     // Shore chains at the gangway: two, crossed at the splay angle, from the wall-side edge
