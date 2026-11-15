@@ -24,6 +24,7 @@ import {
   type FillSideOptions,
 } from '../engine/edit';
 import { generateLayouts, type Diagnostic } from '../engine/generate';
+import { generationIsAsync, startGeneration, type GenerationRun } from './generation';
 import { boundingBox, distance, ensureCounterClockwise, type Box } from '../engine/geometry';
 import { evaluateLayout } from '../engine/layout';
 import {
@@ -205,6 +206,10 @@ export interface AppState {
   setBuiltInPriceList: (list: PriceList | null, error?: string | null) => void;
 
   generate: () => void;
+  /** Stops a generation running in the worker (U23); the alternatives stay as they were. */
+  cancelGeneration: () => void;
+  /** True while the worker computes alternatives (U23). */
+  generating: boolean;
   selectLayout: (id: string | null) => void;
   setPreferredLayout: (id: string | null) => void;
   setBerthRemoved: (layoutId: string, berthId: string, removed: boolean) => void;
@@ -270,10 +275,19 @@ function withEvaluatedLayouts(project: Project): Project {
 
 export function createAppStore(initial: Project = emptyProject()): StoreApi<AppState> {
   const editContext = makeEditContext();
+  /** The generation running in the worker, if any (U23). */
+  let currentRun: GenerationRun | null = null;
 
   return createStore<AppState>()((set, get) => {
-    const resetSession = (project: Project) => ({
+    const resetSession = (project: Project) => {
+      // A new or opened project stops a generation of the previous one.
+      currentRun?.cancel();
+      currentRun = null;
+      return sessionFor(project);
+    };
+    const sessionFor = (project: Project) => ({
       project,
+      generating: false,
       past: [],
       future: [],
       coalesceKey: null,
@@ -384,19 +398,44 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
 
       generate: () => {
         const { project } = get();
-        const result = generateLayouts({
-          site: project.site,
-          boatClasses: project.boatClasses,
-          params: project.params,
-          objective: project.objective,
-        });
-        get().commit((p) => ({
-          ...p,
-          layouts: result.layouts,
-          preferredLayoutId: null,
-          generatedFrom: result.layouts.length > 0 ? inputFingerprint(p) : null,
-        }));
-        set({ diagnostics: result.diagnostics, selectedLayoutId: result.layouts[0]?.id ?? null, selection: null });
+        const input = { site: project.site, boatClasses: project.boatClasses, params: project.params, objective: project.objective };
+        // The input as it was when generation started: if the user changes it meanwhile, the
+        // "Regenerate" hint shows once the result arrives.
+        const fingerprint = inputFingerprint(project);
+        const apply = (result: ReturnType<typeof generateLayouts>) => {
+          get().commit((p) => ({
+            ...p,
+            layouts: result.layouts,
+            preferredLayoutId: null,
+            generatedFrom: result.layouts.length > 0 ? fingerprint : null,
+          }));
+          set({ diagnostics: result.diagnostics, selectedLayoutId: result.layouts[0]?.id ?? null, selection: null, generating: false });
+        };
+        if (!generationIsAsync()) {
+          apply(generateLayouts(input));
+          return;
+        }
+        currentRun?.cancel();
+        const run = startGeneration(input);
+        currentRun = run;
+        set({ generating: true });
+        run.result.then(
+          (result) => {
+            if (currentRun !== run) return;
+            currentRun = null;
+            apply(result);
+          },
+          (error: unknown) => {
+            if (currentRun !== run) return;
+            currentRun = null;
+            set({ generating: false, notice: `Generation failed: ${error instanceof Error ? error.message : String(error)}` });
+          },
+        );
+      },
+      cancelGeneration: () => {
+        currentRun?.cancel();
+        currentRun = null;
+        set({ generating: false });
       },
       selectLayout: (id) => set({ selectedLayoutId: id, selection: null }),
       setPreferredLayout: (id) => get().commit((p) => ({ ...p, preferredLayoutId: id })),

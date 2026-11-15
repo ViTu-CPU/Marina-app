@@ -12,7 +12,7 @@ suomeksi, UI pysyy englanniksi.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D33, I74, U23).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D33, I74, U24).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013,
   AS 3962) – kaikki on alustavaa ja vaatii pätevän suunnittelijan tarkastuksen.
@@ -58,6 +58,8 @@ Kolmannessa istunnossa (omistajan päätökset D25–D32):
    ensimmäisestä pisteestä (tyhjä = yksi keskellä); jokaisella kaksi rantaketjua, kuorma
    kuormitusleveyden mukaan; tuoteluettelo laskee kulkusillat; kartalla ruskea merkki.
 11. **Selkeys (U21, U22)**: samanlaiset varoitukset yhdeksi riviksi (avattava); kartan selite.
+12. **Tehostus (U23)**: generointi Web Workerissa (sivu ei jäädy, peruutus); kirjastot omissa
+   tiedostoissaan (kokonaiskoko ennallaan, välimuisti tehostuu).
 
 ## Avoimet asiat, ehdotettu järjestys
 1. Paalujen ja Marinetekin tuotteiden hinnat puuttuvat (pyydä tarjous).

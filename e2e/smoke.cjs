@@ -68,6 +68,11 @@ async function waitForServer() {
     });
     const centre = (poly) => ({ x: poly.reduce((a, p) => a + p.x, 0) / poly.length, y: poly.reduce((a, p) => a + p.y, 0) / poly.length });
     const tool = (name) => page.getByRole('button', { name, exact: true }).click();
+    /** Click Generate and wait for the worker's result (U23). */
+    const generate = async () => {
+      await page.getByRole('button', { name: 'Generate', exact: true }).click();
+      await page.waitForFunction(() => !window.__marina.getState().generating && window.__marina.getState().project.layouts.length > 0, null, { timeout: 20000 });
+    };
     const download = async (buttonName) => {
       const [d] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: buttonName, exact: true }).click()]);
       const file = path.join(outDir, d.suggestedFilename());
@@ -117,7 +122,7 @@ async function waitForServer() {
     });
 
     await step('generate layouts and compare them', async () => {
-      await page.getByRole('button', { name: 'Generate', exact: true }).click();
+      await generate();
       await page.getByTestId('alternative').first().waitFor();
       const count = await page.getByTestId('alternative').count();
       assert.ok(count >= 2, `expected several alternatives, got ${count}`);
@@ -254,14 +259,22 @@ async function waitForServer() {
       assert.equal((await state()).project.background, null);
     });
 
-    await step('both demo projects give at least 3 alternatives in under 2 seconds', async () => {
+    await step('both demo projects give at least 3 alternatives in under 2 seconds, computed in a Web Worker (U23)', async () => {
       for (const id of ['rectBasin', 'irregularBay']) {
         await page.getByRole('combobox', { name: 'Load example' }).selectOption(id);
-        const ms = await page.evaluate(() => {
+        const { ms, async } = await page.evaluate(async () => {
+          const store = window.__marina;
           const t0 = performance.now();
-          window.__marina.getState().generate();
-          return performance.now() - t0;
+          store.getState().generate();
+          // U23: the worker computes while the page keeps running.
+          const async = store.getState().generating;
+          await new Promise((resolve) => {
+            const check = () => (store.getState().generating ? setTimeout(check, 5) : resolve());
+            check();
+          });
+          return { ms: performance.now() - t0, async };
         });
+        assert.ok(async, 'generation runs in a Web Worker');
         const s = await state();
         console.log(`        ${id}: ${s.project.layouts.length} alternatives in ${ms.toFixed(0)} ms`);
         assert.ok(s.project.layouts.length >= 3);
@@ -275,6 +288,16 @@ async function waitForServer() {
         }
       }
       await page.screenshot({ path: path.join(outDir, 'app.png') });
+      // Cancel (U23): the alternatives stay as they were.
+      const cancelled = await page.evaluate(() => {
+        const store = window.__marina;
+        const before = store.getState().project.layouts.map((l) => l.id).join();
+        store.getState().generate();
+        const running = store.getState().generating;
+        store.getState().cancelGeneration();
+        return { running, after: store.getState().generating, same: store.getState().project.layouts.map((l) => l.id).join() === before };
+      });
+      assert.deepEqual(cancelled, { running: true, after: false, same: true });
     });
 
     await step('access pontoon in front of a quay wall: piers start from its edge, shore chains at its gangways hold it (D21, D28, D32)', async () => {
@@ -290,7 +313,7 @@ async function waitForServer() {
       const [pontoon] = s.project.site.accessPontoons;
       assert.ok(pontoon, 'pontoon drawn');
       assert.ok(Math.abs(pontoon.start.y - 2.5) < 0.6 && Math.abs(pontoon.end.y - 2.5) < 0.6);
-      await page.getByRole('button', { name: 'Generate', exact: true }).click();
+      await generate();
       s = await state();
       assert.ok(s.project.layouts.length >= 1);
       const edge = Math.max(pontoon.start.y, pontoon.end.y) + pontoon.width / 2;
@@ -340,7 +363,7 @@ async function waitForServer() {
 
     await step('anchoring plan and cost estimate from the built-in price list; legend and grouped warnings; BOM and price list export (D23, D24, U21, U22)', async () => {
       await page.getByRole('combobox', { name: 'Load example' }).selectOption('rectBasin');
-      await page.getByRole('button', { name: 'Generate', exact: true }).click();
+      await generate();
       // The built-in price list is loaded at start-up.
       await page.waitForFunction(() => window.__marina.getState().builtInPriceList !== null, null, { timeout: 10000 });
       const total = page.getByText('Total VAT 0 %', { exact: true });

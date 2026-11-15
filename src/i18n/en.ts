@@ -136,6 +136,8 @@ export const en = {
   'legend.wallFixing': 'Wall fixing of a shore chain',
   'legend.pile': 'End pile of a long finger',
   'legend.issue': 'Element with an issue',
+  'toolbar.generating': 'Generating…',
+  'toolbar.cancel': 'Cancel',
   'issues.similar': 'similar',
   'issues.showAll': 'show all',
   'issues.hide': 'hide',

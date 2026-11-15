@@ -190,12 +190,16 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   [usage policy](https://operations.osmfoundation.org/policies/tiles/) allows light use
   only; a widely used deployment would need another tile source. There is no GeoJSON import.
 - Issue messages and a few notices are in English also in the Finnish UI.
-- Layout generation runs on the main thread; the page is unresponsive while it runs
-  (about one second for the examples in the test environment).
+- Layout generation runs in a Web Worker (about one second for the examples in the test
+  environment); the page stays responsive and the run can be cancelled, but there is no
+  progress percentage.
 - Browser storage is small. A large background image is not autosaved; it is kept in
   saved project files.
 - Made for desktop browsers with a mouse. Touch input is not supported.
-- The JavaScript bundle is about 0.9 MB (0.27 MB gzipped), mostly the geometry library.
+- The JavaScript is about 1.06 MB (about 0.31 MB gzipped), split into the app and the
+  libraries (React, Konva, JSTS), plus a 0.32 MB worker loaded at the first generation. The
+  geometry library is needed on the main thread too (validation after edits), so it is not
+  loaded lazily.
 
 ## Tests
 

@@ -20,6 +20,7 @@ export function Toolbar() {
   const canUndo = useAppStore((s) => s.past.length > 0);
   const canRedo = useAppStore((s) => s.future.length > 0);
   const stale = useAppStore((s) => needsRegeneration(s.project));
+  const generating = useAppStore((s) => s.generating);
   const hasLayouts = useAppStore((s) => s.project.layouts.length > 0);
 
   const confirmDiscard = (): boolean => isPristine() || window.confirm(t('confirm.discard'));
@@ -81,10 +82,18 @@ export function Toolbar() {
       </Button>
 
       <span className="mx-1 h-5 w-px bg-slate-300" />
-      <Button variant="primary" onClick={() => state().generate()}>
+      <Button variant="primary" onClick={() => state().generate()} disabled={generating}>
         {stale ? t('toolbar.regenerate') : t('toolbar.generate')}
       </Button>
-      {stale && (
+      {generating && (
+        <>
+          <span role="status" className="animate-pulse rounded bg-sky-100 px-2 py-0.5 text-xs text-sky-900">
+            {t('toolbar.generating')}
+          </span>
+          <Button onClick={() => state().cancelGeneration()}>{t('toolbar.cancel')}</Button>
+        </>
+      )}
+      {stale && !generating && (
         <span role="status" className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
           {t('toolbar.regenerateHint')}
         </span>

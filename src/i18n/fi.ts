@@ -138,6 +138,8 @@ export const fi: Partial<Record<StringKey, string>> = {
   'legend.wallFixing': 'Rantaketjun seinäkiinnike',
   'legend.pile': 'Pitkän sormen päätypaalu',
   'legend.issue': 'Kohde, jossa ongelma',
+  'toolbar.generating': 'Generoidaan…',
+  'toolbar.cancel': 'Peruuta',
   'issues.similar': 'samanlaista',
   'issues.showAll': 'näytä kaikki',
   'issues.hide': 'piilota',
