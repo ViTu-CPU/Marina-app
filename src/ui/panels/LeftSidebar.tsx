@@ -505,7 +505,7 @@ function BoatClassesSection() {
   );
 }
 
-type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths'>;
+type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth'>;
 
 function ParamField({ name, min, max, step }: { name: NumericParam; min: number; max: number; step?: number }) {
   const t = useT();

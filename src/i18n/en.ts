@@ -136,6 +136,7 @@ export const en = {
   'legend.gangway': 'Gangway',
   'legend.finger': 'Finger',
   'legend.boom': 'Boom (Y-boom berth)',
+  'legend.buoy': 'Stern buoy',
   'legend.slot': 'Berth (slot)',
   'legend.boat': 'Boat (colour of its class)',
   'legend.chain': 'Anchor chain',

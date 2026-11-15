@@ -155,7 +155,7 @@ const BERTH_TYPES = ['finger', 'yBoom', 'sternBuoy'] as const;
 function params(v: unknown): Params {
   const o = obj(v, 'params');
   // Missing keys take their defaults, so files from older versions stay readable.
-  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths'>): number =>
+  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth'>): number =>
     o[key] === undefined ? DEFAULT_PARAMS[key] : num(o[key], `params.${key}`);
   const boatsPerBay = o.boatsPerBay === undefined ? DEFAULT_PARAMS.boatsPerBay : o.boatsPerBay;
   if (boatsPerBay !== 1 && boatsPerBay !== 2) fail('params.boatsPerBay must be 1 or 2');
@@ -237,6 +237,7 @@ function layout(v: unknown, i: number): Layout {
       ...(e.type === undefined ? {} : { type: oneOf(e.type, BERTH_TYPES, `${q}.type`) }),
       slot: polygon(e.slot, `${q}.slot`),
       boat: polygon(e.boat, `${q}.boat`),
+      ...(e.buoy === undefined ? {} : { buoy: vec(e.buoy, `${q}.buoy`) }),
       removed: bool(e.removed, `${q}.removed`),
       issues: [],
     };

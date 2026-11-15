@@ -119,11 +119,21 @@ export function emptyProject(): Project {
  * Fingerprint of everything the generator depends on. Boat names and colours, the
  * objective and the project name are left out: changing them needs no regeneration.
  */
-export function inputFingerprint(project: Pick<Project, 'site' | 'boatClasses' | 'params'>): string {
+/**
+ * The parameters the engine runs with: the project's, plus the anchoring design depth for
+ * stern-buoy berths (D35), which is not stored in the parameters.
+ */
+export function engineParams(project: Pick<Project, 'params'> & { anchoring?: { depth: number } }): Params {
+  return project.anchoring ? { ...project.params, waterDepth: project.anchoring.depth } : project.params;
+}
+
+export function inputFingerprint(project: Pick<Project, 'site' | 'boatClasses' | 'params'> & { anchoring?: { depth: number } }): string {
   const text = JSON.stringify({
     site: project.site,
     classes: project.boatClasses.map((c) => [c.id, c.length, c.beam, c.share, c.count]),
     params: project.params,
+    // The depth places stern buoys (D35); for other berth types it does not change a layout.
+    ...(project.params.berthType === 'sternBuoy' && project.anchoring ? { depth: project.anchoring.depth } : {}),
   });
   // FNV-1a, 32 bit: short and stable; collisions would only hide the "Regenerate" hint.
   let hash = 0x811c9dc5;
@@ -258,7 +268,7 @@ function makeEditContext(): (project: Project) => EditContext {
         prepared: prepareSite(project.site, project.params),
       };
     }
-    return { prepared: cache.prepared, classes: project.boatClasses, params: project.params };
+    return { prepared: cache.prepared, classes: project.boatClasses, params: engineParams(project) };
   };
 }
 
@@ -398,7 +408,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
 
       generate: () => {
         const { project } = get();
-        const input = { site: project.site, boatClasses: project.boatClasses, params: project.params, objective: project.objective };
+        const input = { site: project.site, boatClasses: project.boatClasses, params: engineParams(project), objective: project.objective };
         // The input as it was when generation started: if the user changes it meanwhile, the
         // "Regenerate" hint shows once the result arrives.
         const fingerprint = inputFingerprint(project);

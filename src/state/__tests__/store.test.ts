@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { IRREGULAR_BAY_SITE } from '../../engine/demos';
-import { createAppStore, emptyProject, HISTORY_LIMIT, inputFingerprint, needsRegeneration } from '../store';
+import { createAppStore, emptyProject, engineParams, HISTORY_LIMIT, inputFingerprint, needsRegeneration } from '../store';
 
 const demoStore = () => {
   const store = createAppStore();
@@ -142,6 +142,16 @@ describe('generation and the Regenerate hint (SPEC §8)', () => {
     expect(inputFingerprint(a)).toBe(inputFingerprint({ ...a, name: 'x' } as typeof a));
     expect(inputFingerprint(a)).not.toBe(inputFingerprint({ ...a, site: IRREGULAR_BAY_SITE }));
     expect(inputFingerprint(a)).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it('the design depth counts for stern-buoy berths only, and reaches the engine (D35)', () => {
+    const a = emptyProject();
+    const deeper = { ...a, anchoring: { ...a.anchoring, depth: a.anchoring.depth + 2 } };
+    expect(inputFingerprint(deeper)).toBe(inputFingerprint(a));
+    const buoys = { ...a, params: { ...a.params, berthType: 'sternBuoy' as const } };
+    expect(inputFingerprint({ ...buoys, anchoring: deeper.anchoring })).not.toBe(inputFingerprint(buoys));
+    expect(engineParams(deeper).waterDepth).toBe(a.anchoring.depth + 2);
+    expect('waterDepth' in a.params).toBe(false);
   });
 });
 

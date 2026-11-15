@@ -26,6 +26,8 @@ export interface BayBerth {
   slot: LocalRect;
   /** Simplified boat outline inside the slot. */
   boat: LocalRect;
+  /** Stern buoy of a stern-buoy berth (D35), in row-local coordinates. */
+  buoy?: { s: number; d: number };
 }
 
 /** One bay: the berths between two dividers, plus those dividers. */

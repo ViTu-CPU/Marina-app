@@ -138,6 +138,7 @@ export const fi: Partial<Record<StringKey, string>> = {
   'legend.gangway': 'Kulkusilta',
   'legend.finger': 'Aisa / sormi',
   'legend.boom': 'Puomi (Y-puomipaikka)',
+  'legend.buoy': 'Peräpoiju',
   'legend.slot': 'Venepaikka',
   'legend.boat': 'Vene (luokan väri)',
   'legend.chain': 'Ankkuriketju',

@@ -70,7 +70,8 @@ async function waitForServer() {
     const tool = (name) => page.getByRole('button', { name, exact: true }).click();
     /** Click Generate and wait for the worker's result (U23). */
     const generate = async () => {
-      await page.getByRole('button', { name: 'Generate', exact: true }).click();
+      // "Regenerate" when the inputs changed since the last run.
+      await page.getByRole('button', { name: /^(Generate|Regenerate)$/ }).click();
       await page.waitForFunction(() => !window.__marina.getState().generating && window.__marina.getState().project.layouts.length > 0, null, { timeout: 20000 });
     };
     const download = async (buttonName) => {
@@ -300,7 +301,7 @@ async function waitForServer() {
       assert.deepEqual(cancelled, { running: true, after: false, same: true });
     });
 
-    await step('Y-boom berths: booms for small boats, fingers for large ones (D33, D34)', async () => {
+    await step('berth types: Y-boom (booms and fingers) and stern buoy (D33–D35)', async () => {
       await page.getByRole('combobox', { name: 'Load example' }).selectOption('rectBasin');
       await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('yBoom');
       await generate();
@@ -309,6 +310,13 @@ async function waitForServer() {
       assert.ok(best.berths.every((b) => b.type === 'yBoom'), 'all berths are Y-boom berths');
       assert.ok(best.fingers.some((f) => f.kind === 'boom') && best.fingers.some((f) => !f.kind), 'booms and fingers');
       assert.equal(best.stats.issueCounts.error, 0);
+      // Stern buoys (D35): no fingers; each buoy at boat length + design depth, inside its slot.
+      await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('sternBuoy');
+      await generate();
+      const sb = (await state()).project.layouts[0];
+      assert.equal(sb.fingers.length, 0);
+      assert.ok(sb.berths.length > 0 && sb.berths.every((b) => b.type === 'sternBuoy' && b.buoy), 'stern-buoy berths with buoys');
+      assert.equal(sb.stats.issueCounts.error, 0);
       await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('finger');
     });
 

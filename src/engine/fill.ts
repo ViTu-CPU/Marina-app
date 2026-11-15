@@ -492,6 +492,7 @@ export function rowsToElements(pierId: string, rows: FilledRow[]): PierFill {
             ...(berthType === 'finger' ? {} : { type: berthType }),
             slot: localRectToPolygon(shiftRect(b.slot, bay.s), frame).map(roundVec),
             boat: localRectToPolygon(shiftRect(b.boat, bay.s), frame).map(roundVec),
+            ...(b.buoy ? { buoy: roundVec(add(add(frame.origin, scale(frame.along, b.buoy.s + bay.s)), scale(frame.outward, b.buoy.d))) } : {}),
             removed: false,
             issues: [],
           });

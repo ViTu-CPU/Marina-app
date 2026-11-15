@@ -72,8 +72,9 @@ npx playwright install chromium
   calibration needed.
 - Background image (aerial photo or map screenshot) with two-point scale calibration,
   rotation and opacity.
-- Berth types: finger piers (two boats per finger) or Y-boom berths (one boat between light
-  booms, fingers for boats too long for a boom), as the project default and per pier side.
+- Berth types: finger piers (two boats per finger), Y-boom berths (one boat between light
+  booms, fingers for boats too long for a boom) or stern-buoy berths (bow to the pier, buoy
+  at boat length + water depth), as the project default and per pier side.
 - Access pontoons: empty pontoon metres, e.g. in front of a high quay wall; main piers
   start from their edges.
 - Two built-in examples: a rectangular basin and an irregular bay.
@@ -237,7 +238,7 @@ The engine takes plain JSON and returns plain JSON, and is deterministic.
 
 Not started; listed in the specification as later phases.
 
-- More berth patterns: side-to and bow-to with stern buoy (Y-boom berths are done).
+- More berth patterns: side-to (Y-boom and stern-buoy berths are done).
 - Manual editing: rotate and resize piers, add and remove fingers, T- and L-heads.
 - Turning-basin check; better optimisation; local refinement of angle and offset.
 - GeoJSON import in a projected metric CRS; DXF export.

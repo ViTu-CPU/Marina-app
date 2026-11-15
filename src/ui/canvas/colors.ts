@@ -15,6 +15,7 @@ export const COLORS = {
   pierLocked: '#111827',
   finger: '#9ca3af',
   boom: '#0f766e',
+  buoy: '#ea580c',
   slot: '#64748b',
   issue: '#dc2626',
   selection: '#2563eb',

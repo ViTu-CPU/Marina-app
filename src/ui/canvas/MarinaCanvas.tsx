@@ -122,6 +122,12 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
   );
 });
 
+/** Middle of the boat's edge nearest to its stern buoy (D35). */
+function sternPoint(boat: Vec2[], buoy: Vec2): Vec2 {
+  const [a, b] = [...boat].sort((p, q) => distance(p, buoy) - distance(q, buoy));
+  return a && b ? centroid([a, b]) : buoy;
+}
+
 /**
  * D23: chains (lines) and concrete anchors (squares, about 1.2 m) of the anchoring plan;
  * shore chains end at a wall fixing (small circle, D28); end piles of long fingers (D31).
@@ -221,6 +227,13 @@ const LayoutShapes = memo(function LayoutShapes({ layout, classes, layers, selec
             )}
             {layers.boats && !b.removed && (
               <Line points={flat(b.boat)} closed fill={color.get(b.boatClassId) ?? '#94a3b8'} listening={false} />
+            )}
+            {/* D35: the stern buoy and the line from the boat's stern to it. */}
+            {layers.boats && !b.removed && b.buoy && (
+              <>
+                <Line points={flat([sternPoint(b.boat, b.buoy), b.buoy])} stroke={COLORS.buoy} strokeWidth={1} dash={[2, 2]} strokeScaleEnabled={false} listening={false} />
+                <Circle x={b.buoy.x} y={b.buoy.y} radius={0.4} fill={COLORS.buoy} listening={false} />
+              </>
             )}
           </Group>
         );

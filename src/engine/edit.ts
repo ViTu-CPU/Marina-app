@@ -24,6 +24,7 @@ import { differenceRegions, unionRegions } from './geometryOps';
 import { evaluateLayout } from './layout';
 import type { Berth, BerthType, BoatClass, Finger, Layout, MainPier, Params, PierSide, Polygon, Vec2 } from './model';
 import { localRectToPolygon, patternFor } from './patterns';
+import { sternBuoyDistance } from './patterns/sternBuoy';
 import { MAX_BOAT_PIER_GAP } from './patterns/fingerPier';
 import { layoutRows, pierAxis, rowFrame, toLocalRect } from './rows';
 import { pierPolygon, type PreparedSite } from './site';
@@ -70,7 +71,9 @@ export function movePier(layout: Layout, pierId: string, delta: Vec2, ctx: EditC
         p.id === pierId ? { ...p, start: roundVec(add(p.start, delta)), end: roundVec(add(p.end, delta)) } : p,
       ),
       fingers: layout.fingers.map((f) => (f.pierId === pierId ? { ...f, shape: shift(f.shape) } : f)),
-      berths: layout.berths.map((b) => (b.pierId === pierId ? { ...b, slot: shift(b.slot), boat: shift(b.boat) } : b)),
+      berths: layout.berths.map((b) =>
+        b.pierId === pierId ? { ...b, slot: shift(b.slot), boat: shift(b.boat), ...(b.buoy ? { buoy: roundVec(add(b.buoy, delta)) } : {}) } : b,
+      ),
     },
     ctx,
   );
@@ -209,10 +212,15 @@ export function setBerthClass(layout: Layout, berthId: string, classId: string, 
   const sideGap = params.beamClearance / 2;
   const hull = { s0: slot.s0 + sideGap, s1: slot.s1 - sideGap, d0: gap, d1: gap + boat.length };
   const toPolygon = (r: typeof slot) => localRectToPolygon(r, frame).map(roundVec);
+  // A stern buoy moves with the new boat length (D35).
+  const buoy =
+    berth.type === 'sternBuoy'
+      ? { buoy: roundVec(add(add(frame.origin, scale(frame.along, (slot.s0 + slot.s1) / 2)), scale(frame.outward, sternBuoyDistance(boat, params)))) }
+      : {};
   return reevaluate(
     {
       ...layout,
-      berths: layout.berths.map((b) => (b.id === berthId ? { ...b, boatClassId: classId, slot: toPolygon(slot), boat: toPolygon(hull) } : b)),
+      berths: layout.berths.map((b) => (b.id === berthId ? { ...b, boatClassId: classId, slot: toPolygon(slot), boat: toPolygon(hull), ...buoy } : b)),
     },
     ctx,
   );

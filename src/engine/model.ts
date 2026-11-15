@@ -127,6 +127,11 @@ export interface Params {
   boomLengths: number[];
   /** Extension (D34): boom width, m. */
   boomWidth: number;
+  /**
+   * Extension (D35): design water depth for stern-buoy berths, m. Not stored: set from the
+   * anchoring design depth (D16) whenever the engine runs.
+   */
+  waterDepth?: number;
   /** 1 = finger between every boat, 2 = two boats share a bay. */
   boatsPerBay: 1 | 2;
   /** Total extra width per boat in a berth, m. */
@@ -196,6 +201,8 @@ export interface Berth {
   slot: Polygon;
   /** Simplified top-view boat rectangle inside the slot. */
   boat: Polygon;
+  /** Extension (D35): position of the stern buoy of a stern-buoy berth. */
+  buoy?: Vec2;
   removed: boolean;
   issues: Issue[];
 }
