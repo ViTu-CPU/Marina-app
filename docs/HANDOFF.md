@@ -20,7 +20,7 @@ suomeksi, UI pysyy englanniksi.
   "ESTIMATE". Kysy minulta, jos tarvitset jotain parempaan tulokseen.
 
 ## Tilanne (2026-11-15, kolmannen istunnon jälkeen)
-Testit 381/381, e2e 20 vaihetta. Aiemmin tehty: tutkimus (RESEARCH.md), venepaikat
+Testit 403/403, e2e 21 vaihetta (PR #1 yhdistetty mainiin). Aiemmin tehty: tutkimus (RESEARCH.md), venepaikat
 kappalemäärinä (D20), rantaponttoni (D21), muokkaus (D22), hinnasto data/hinnasto.xlsx (D19),
 ankkurointisuunnitelma (D23), tuoteluettelo + kustannusarvio (D24), UFC-tuulikuorma ja
 lähteistetyt oletukset (I54–I57), kiila-ankkurit (I59).
