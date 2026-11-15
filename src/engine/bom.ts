@@ -42,6 +42,8 @@ export interface BomLine {
 export interface ResolvedChoices {
   pontoonSeries: string | null;
   fingerSeries: string | null;
+  /** Series for the booms of Y-boom berths (D34). */
+  boomSeries: string | null;
   gangwaySeries: string | null;
   /** Freeboard of the chosen pontoon series, m (for the anchoring wind area), or null. */
   pontoonFreeboard: number | null;
@@ -112,6 +114,7 @@ export function resolveChoices(list: PriceList, cost: CostSettings, params: Para
     chosen && seriesNames(list, category).includes(chosen) ? chosen : auto();
   const pontoonSeries = pick(cost.pontoonSeries, 'pontoon', () => closestByWidth(list, 'pontoon', params.mainPierWidth, vat));
   const fingerSeries = pick(cost.fingerSeries, 'finger', () => closestByWidth(list, 'finger', params.fingerWidth, vat));
+  const boomSeries = pick(cost.boomSeries ?? '', 'finger', () => closestByWidth(list, 'finger', params.boomWidth, vat));
   const wanted = parameter(list, 'gangway_length_m', 6);
   const gangwaySeries = pick(cost.gangwaySeries, 'gangway', () => {
     let best: { name: string; price: number } | null = null;
@@ -128,6 +131,7 @@ export function resolveChoices(list: PriceList, cost: CostSettings, params: Para
   return {
     pontoonSeries,
     fingerSeries,
+    boomSeries,
     gangwaySeries,
     pontoonFreeboard: freeboards.length > 0 ? Math.max(...freeboards) : null,
   };
@@ -255,22 +259,27 @@ export function costEstimate(input: CostInput): CostEstimate {
 
   // --- Fingers -------------------------------------------------------------------------
   const fingerProducts = choices.fingerSeries ? seriesOf(list, 'finger', choices.fingerSeries) : [];
+  // Booms of Y-boom berths (D34) from their own series.
+  const boomProducts = choices.boomSeries ? seriesOf(list, 'finger', choices.boomSeries) : [];
   const pierById = new Map(layout.piers.map((p) => [p.id, p]));
   let fingerCount = 0;
-  let tooShort = 0;
+  const tooShort = { finger: 0, boom: 0 };
   for (const f of layout.fingers) {
     const pier = pierById.get(f.pierId);
     if (!pier) continue;
     const r = toLocalRect(f.shape, rowFrame(pier, 'left'));
     const needed = r.d1 - r.d0;
-    const fit = pickByLength(fingerProducts, needed, vat);
+    const boom = f.kind === 'boom';
+    const fit = pickByLength(boom ? boomProducts : fingerProducts, needed, vat);
     if (!fit) continue;
-    if (!fit.longEnough) tooShort++;
-    addQty('fingers', fit.product, 1, `finger ${fmt(needed)} m`);
+    if (!fit.longEnough) tooShort[boom ? 'boom' : 'finger']++;
+    addQty('fingers', fit.product, 1, `${boom ? 'boom' : 'finger'} ${fmt(needed)} m`);
     fingerCount++;
   }
-  if (layout.fingers.length > 0 && fingerProducts.length === 0) notes.push('No finger series in the price list: the fingers are not priced.');
-  if (tooShort > 0) notes.push(`${tooShort} fingers are longer than the longest product of "${choices.fingerSeries}"; the longest is used.`);
+  if (layout.fingers.some((f) => f.kind !== 'boom') && fingerProducts.length === 0) notes.push('No finger series in the price list: the fingers are not priced.');
+  if (layout.fingers.some((f) => f.kind === 'boom') && boomProducts.length === 0) notes.push('No boom series in the price list: the booms are not priced.');
+  if (tooShort.finger > 0) notes.push(`${tooShort.finger} fingers are longer than the longest product of "${choices.fingerSeries}"; the longest is used.`);
+  if (tooShort.boom > 0) notes.push(`${tooShort.boom} booms are longer than the longest product of "${choices.boomSeries}"; the longest is used.`);
 
   // --- Gangways: one per pier that starts at the shoreline, one per access pontoon -----
   const gangwayProducts = choices.gangwaySeries ? seriesOf(list, 'gangway', choices.gangwaySeries) : [];

@@ -52,7 +52,7 @@ import type {
   Site,
   Vec2,
 } from './model';
-import { fingerPierPattern, localRectToPolygon, type BerthPattern } from './patterns';
+import { localRectToPolygon, patternFor, type BerthPattern } from './patterns';
 import { buildReachGrid, isSwept, reachableCells, type OccupiedBox, type ReachGrid } from './reach';
 import { layoutRows, pierAxis, rowFrame, toLocalRect } from './rows';
 import { rankLayouts } from './score';
@@ -997,7 +997,7 @@ function meanBerthAdvance(classes: BoatClass[], params: Params, pattern: BerthPa
   );
 }
 
-export function generateLayouts(input: GenerateInput, pattern: BerthPattern = fingerPierPattern): GenerateResult {
+export function generateLayouts(input: GenerateInput, pattern: BerthPattern = patternFor(input.params.berthType)): GenerateResult {
   const { site, params } = input;
   // With target counts (D20) the classes carry the shares implied by the counts, and the
   // counts become upper limits.

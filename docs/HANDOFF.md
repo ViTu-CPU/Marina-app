@@ -12,7 +12,7 @@ suomeksi, UI pysyy englanniksi.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D33, I74, U25).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D35, I76, U25).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013,
   AS 3962) – kaikki on alustavaa ja vaatii pätevän suunnittelijan tarkastuksen.
@@ -20,7 +20,7 @@ suomeksi, UI pysyy englanniksi.
   "ESTIMATE". Kysy minulta, jos tarvitset jotain parempaan tulokseen.
 
 ## Tilanne (2026-11-15, kolmannen istunnon jälkeen)
-Testit 357/357, e2e 19 vaihetta. Aiemmin tehty: tutkimus (RESEARCH.md), venepaikat
+Testit 366/366, e2e 20 vaihetta. Aiemmin tehty: tutkimus (RESEARCH.md), venepaikat
 kappalemäärinä (D20), rantaponttoni (D21), muokkaus (D22), hinnasto data/hinnasto.xlsx (D19),
 ankkurointisuunnitelma (D23), tuoteluettelo + kustannusarvio (D24), UFC-tuulikuorma ja
 lähteistetyt oletukset (I54–I57), kiila-ankkurit (I59).
@@ -62,6 +62,9 @@ Kolmannessa istunnossa (omistajan päätökset D25–D32):
    tiedostoissaan (kokonaiskoko ennallaan, välimuisti tehostuu).
 13. **Raportti (U24)**: "Report (PDF)" avaa tulostusikkunan valitun vaihtoehdon raportista
    (kuva, vertailu, lähtötiedot, ankkurointi, kustannukset, lähteet); "Tallenna PDF-tiedostona".
+14. **Venepaikkatyypit (D33, D34, I74–I75)**: projektin oletustyyppi ja sivukohtainen tyyppi
+   täytössä; Y-puomi (Marinetekin puomit 5–7 m, 0,4 m; pidemmille veneille kiinnityssormi).
+   Peräpoiju tulossa (omistajan päätökset: poijut paikan sisällä, poijupaino veneen painosta).
 
 ## Avoimet asiat, ehdotettu järjestys
 1. Paalujen ja Marinetekin tuotteiden hinnat puuttuvat (pyydä tarjous).

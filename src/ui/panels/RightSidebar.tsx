@@ -1,8 +1,9 @@
 /** Right sidebar (SPEC §8): alternatives, selection, comparison table, issues. */
 import { useState } from 'react';
 import { boundingBox } from '../../engine/geometry';
-import type { Feasibility, Issue, Layout, MainPier, PierSide } from '../../engine/model';
+import type { BerthType, Feasibility, Issue, Layout, MainPier, PierSide } from '../../engine/model';
 import { IssueList } from './IssueList';
+import { BERTH_TYPE_OPTIONS } from '../berthTypes';
 import { pierAxis } from '../../engine/rows';
 import { pierPolygon } from '../../engine/site';
 import { appStore, useAppStore } from '../../state/store';
@@ -107,10 +108,12 @@ function FillSides({ layout, pier }: { layout: Layout; pier: MainPier }) {
   const t = useT();
   const classes = useAppStore((s) => s.project.boatClasses);
   const shoreOffset = useAppStore((s) => s.project.params.shoreOffset);
+  const projectType = useAppStore((s) => s.project.params.berthType);
   const [classId, setClassId] = useState<string>('');
   const [emptyLength, setEmptyLength] = useState<number>(shoreOffset);
+  const [berthType, setBerthType] = useState<BerthType>(projectType);
   const fill = (side: PierSide) =>
-    state().fillPierSide(layout.id, pier.id, side, { classId: classId === '' ? null : classId, emptyLength });
+    state().fillPierSide(layout.id, pier.id, side, { classId: classId === '' ? null : classId, emptyLength, berthType });
   return (
     <div className="space-y-1 rounded border border-slate-200 p-1.5">
       <div className="text-xs font-medium text-slate-500">{t('selection.fillTitle')}</div>
@@ -125,6 +128,16 @@ function FillSides({ layout, pier }: { layout: Layout; pier: MainPier }) {
           {classes.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('fill.berthType')}
+        <select className="max-w-[11rem] rounded border border-slate-300 px-1 py-0.5 text-sm" value={berthType} onChange={(e) => setBerthType(e.target.value as BerthType)}>
+          {BERTH_TYPE_OPTIONS.map((b) => (
+            <option key={b} value={b}>
+              {t(`berthType.${b}`)}
             </option>
           ))}
         </select>

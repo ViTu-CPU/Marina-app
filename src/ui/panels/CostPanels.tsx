@@ -295,6 +295,14 @@ export function CostSection({ layout, model }: { layout: Layout; model: CostMode
         options={seriesNames(priceList, 'finger')}
         onChange={(fingerSeries) => state().setCost({ fingerSeries })}
       />
+      {layout.fingers.some((f) => f.kind === 'boom') && (
+        <SeriesSelect
+          label={t('cost.boomSeries')}
+          value={cost.boomSeries ?? ''}
+          options={seriesNames(priceList, 'finger')}
+          onChange={(boomSeries) => state().setCost({ boomSeries })}
+        />
+      )}
       <SeriesSelect
         label={t('cost.gangwaySeries')}
         value={cost.gangwaySeries}
@@ -302,7 +310,8 @@ export function CostSection({ layout, model }: { layout: Layout; model: CostMode
         onChange={(gangwaySeries) => state().setCost({ gangwaySeries })}
       />
       <p className="text-xs text-slate-500">
-        {t('cost.inUse')}: {choices.pontoonSeries ?? '–'} · {choices.fingerSeries ?? '–'} · {choices.gangwaySeries ?? '–'}
+        {t('cost.inUse')}: {choices.pontoonSeries ?? '–'} · {choices.fingerSeries ?? '–'}
+        {layout.fingers.some((f) => f.kind === 'boom') ? ` · ${choices.boomSeries ?? '–'}` : ''} · {choices.gangwaySeries ?? '–'}
       </p>
 
       <div className="space-y-0.5 border-t border-slate-100 pt-1">

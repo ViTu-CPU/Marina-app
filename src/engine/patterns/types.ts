@@ -1,5 +1,5 @@
 import { add, ensureCounterClockwise, scale } from '../geometry';
-import type { BoatClass, Params, Polygon, Vec2 } from '../model';
+import type { BerthType, BoatClass, Params, Polygon, Vec2 } from '../model';
 
 /**
  * A mooring type (SPEC §4). The generator and the validator only talk to this interface,
@@ -16,6 +16,8 @@ export interface LocalRect {
   s1: number;
   d0: number;
   d1: number;
+  /** Dividers only (D34): 'boom' for a light boom; missing = finger. */
+  kind?: 'boom';
 }
 
 export interface BayBerth {
@@ -42,6 +44,8 @@ export interface BayGeometry {
 
 export interface BerthPattern {
   id: string;
+  /** The berth type it lays out (D34). */
+  berthType: BerthType;
   /** How many boats one bay holds at most. */
   boatsPerBay(params: Params): number;
   /** Row depth needed by a boat of this class, measured perpendicular to the pier. */

@@ -117,6 +117,27 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(withPontoon([-1]).ok).toBe(false);
   });
 
+  it('berth types (D34): params, berth types and boom fingers are kept; older files are finger piers', () => {
+    const old = parseProject(
+      fileWith((p) => {
+        const params = p.params as Record<string, unknown>;
+        delete params.berthType;
+        delete params.boomLengths;
+        delete params.boomWidth;
+      }),
+    );
+    expect(old.ok && [old.project.params.berthType, old.project.params.boomLengths, old.project.params.boomWidth]).toEqual(['finger', [5, 6, 7], 0.4]);
+    const y = parseProject(fileWith((p) => ((p.params as Record<string, unknown>).berthType = 'yBoom')));
+    expect(y.ok && y.project.params.berthType).toBe('yBoom');
+    expect(parseProject(fileWith((p) => ((p.params as Record<string, unknown>).berthType = 'raft'))).ok).toBe(false);
+    const file = JSON.parse(serializeProject(generatedProject())) as { project: { layouts: { berths: Record<string, unknown>[]; fingers: Record<string, unknown>[] }[] } };
+    file.project.layouts[0]!.berths[0]!.type = 'yBoom';
+    file.project.layouts[0]!.fingers[0]!.kind = 'boom';
+    const withTypes = parseProject(JSON.stringify(file));
+    expect(withTypes.ok && withTypes.project.layouts[0]!.berths[0]!.type).toBe('yBoom');
+    expect(withTypes.ok && withTypes.project.layouts[0]!.fingers[0]!.kind).toBe('boom');
+  });
+
   it('standard finger lengths: missing in older files → the default; stored sorted and unique (D29)', () => {
     const old = parseProject(fileWith((p) => delete (p.params as Record<string, unknown>).fingerLengths));
     expect(old.ok && old.project.params.fingerLengths).toEqual([5, 6, 7, 8, 10, 12]);

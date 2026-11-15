@@ -300,6 +300,18 @@ async function waitForServer() {
       assert.deepEqual(cancelled, { running: true, after: false, same: true });
     });
 
+    await step('Y-boom berths: booms for small boats, fingers for large ones (D33, D34)', async () => {
+      await page.getByRole('combobox', { name: 'Load example' }).selectOption('rectBasin');
+      await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('yBoom');
+      await generate();
+      const s = await state();
+      const best = s.project.layouts[0];
+      assert.ok(best.berths.every((b) => b.type === 'yBoom'), 'all berths are Y-boom berths');
+      assert.ok(best.fingers.some((f) => f.kind === 'boom') && best.fingers.some((f) => !f.kind), 'booms and fingers');
+      assert.equal(best.stats.issueCounts.error, 0);
+      await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('finger');
+    });
+
     await step('access pontoon in front of a quay wall: piers start from its edge, shore chains at its gangways hold it (D21, D28, D32)', async () => {
       await page.getByRole('combobox', { name: 'Load example' }).selectOption('rectBasin');
       await tool('Access pontoon');

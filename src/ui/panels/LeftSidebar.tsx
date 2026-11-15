@@ -1,7 +1,7 @@
 /** Left sidebar (SPEC §8): project, site tools, boat classes, parameters, objective, layers. */
 import { useRef, useState } from 'react';
 import { distance } from '../../engine/geometry';
-import type { BerthTarget, BoatClass, ObjectiveId, ObstacleKind, Params, ZoneKind } from '../../engine/model';
+import type { BerthTarget, BerthType, BoatClass, ObjectiveId, ObstacleKind, Params, ZoneKind } from '../../engine/model';
 import { targetCount } from '../../engine/targets';
 import type { StringKey } from '../../i18n';
 import { originPlacing, parseLatLon } from '../../state/geo';
@@ -12,6 +12,7 @@ import { calibrateBackground, placeBackground } from '../tools/background';
 import { deleteSiteObject, hasEntrance } from '../tools/sitePaths';
 import { useT } from '../useT';
 import { AnchoringSection } from './CostPanels';
+import { BERTH_TYPE_OPTIONS } from '../berthTypes';
 import { Button, LengthListField, NumberField, Section } from './fields';
 
 const state = () => appStore.getState();
@@ -504,7 +505,7 @@ function BoatClassesSection() {
   );
 }
 
-type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths'>;
+type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths'>;
 
 function ParamField({ name, min, max, step }: { name: NumericParam; min: number; max: number; step?: number }) {
   const t = useT();
@@ -525,8 +526,34 @@ function DockSection() {
   const t = useT();
   const boatsPerBay = useAppStore((s) => s.project.params.boatsPerBay);
   const orientation = useAppStore((s) => s.project.params.orientation);
+  const berthType = useAppStore((s) => s.project.params.berthType);
+  const boomLengths = useAppStore((s) => s.project.params.boomLengths);
   return (
     <Section title={t('section.dock')}>
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('param.berthType')}
+        <select
+          className="max-w-[11rem] rounded border border-slate-300 px-1 py-0.5 text-sm"
+          value={berthType}
+          onChange={(e) => state().setParams({ berthType: e.target.value as BerthType })}
+        >
+          {BERTH_TYPE_OPTIONS.map((b) => (
+            <option key={b} value={b}>
+              {t(`berthType.${b}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {berthType === 'yBoom' && (
+        <>
+          <ParamField name="boomWidth" min={0.1} max={2} step={0.05} />
+          <LengthListField
+            label={t('param.boomLengths')}
+            value={boomLengths}
+            onChange={(v) => state().setParams({ boomLengths: v }, { coalesce: 'param:boomLengths' })}
+          />
+        </>
+      )}
       <ParamField name="mainPierWidth" min={0.5} max={20} />
       <ParamField name="fingerWidth" min={0.1} max={5} />
       <ParamField name="fingerLengthRatio" min={0.1} max={1.5} step={0.05} />

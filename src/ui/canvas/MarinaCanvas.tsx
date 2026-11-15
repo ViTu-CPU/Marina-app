@@ -225,7 +225,8 @@ const LayoutShapes = memo(function LayoutShapes({ layout, classes, layers, selec
           </Group>
         );
       })}
-      {layers.fingers && layout.fingers.map((f) => <Line key={f.id} points={flat(f.shape)} closed fill={COLORS.finger} listening={false} />)}
+      {layers.fingers &&
+        layout.fingers.map((f) => <Line key={f.id} points={flat(f.shape)} closed fill={f.kind === 'boom' ? COLORS.boom : COLORS.finger} listening={false} />)}
       {layers.piers &&
         layout.piers.map((p) => {
           const selected = selection?.kind === 'pier' && selection.id === p.id;

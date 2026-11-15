@@ -41,6 +41,7 @@ const ENTRIES: { layer: LayerId; label: StringKey; swatch: ReactNode }[] = [
   { layer: 'piers', label: 'legend.access', swatch: fill(COLORS.access, COLORS.pier, '3 2') },
   { layer: 'piers', label: 'legend.gangway', swatch: line(COLORS.gangway, 4) },
   { layer: 'fingers', label: 'legend.finger', swatch: fill(COLORS.finger) },
+  { layer: 'fingers', label: 'legend.boom', swatch: fill(COLORS.boom) },
   { layer: 'slots', label: 'legend.slot', swatch: fill('none', COLORS.slot) },
   { layer: 'boats', label: 'legend.boat', swatch: swatch(<rect x={4} y={2} width={W - 8} height={H - 4} rx={3} fill="#34d399" />) },
   { layer: 'anchoring', label: 'legend.chain', swatch: line(COLORS.chain, 1.5, '3 2') },

@@ -22,8 +22,8 @@ import {
 } from './geometry';
 import { differenceRegions, unionRegions } from './geometryOps';
 import { evaluateLayout } from './layout';
-import type { Berth, BoatClass, Finger, Layout, MainPier, Params, PierSide, Polygon, Vec2 } from './model';
-import { fingerPierPattern, localRectToPolygon } from './patterns';
+import type { Berth, BerthType, BoatClass, Finger, Layout, MainPier, Params, PierSide, Polygon, Vec2 } from './model';
+import { localRectToPolygon, patternFor } from './patterns';
 import { MAX_BOAT_PIER_GAP } from './patterns/fingerPier';
 import { layoutRows, pierAxis, rowFrame, toLocalRect } from './rows';
 import { pierPolygon, type PreparedSite } from './site';
@@ -91,6 +91,8 @@ export interface FillSideOptions {
   classId: string | null;
   /** Empty pier length at the shore end, before the first finger, m. */
   emptyLength: number;
+  /** Berth type of the new row (D34); the project's type when missing. */
+  berthType?: BerthType;
 }
 
 /**
@@ -109,7 +111,8 @@ export function fillPierSide(layout: Layout, pierId: string, side: PierSide, opt
   const chosen = options.classId === null ? null : mixed.find((c) => c.id === options.classId);
   if (options.classId !== null && !chosen) return layout;
   const classes = chosen ? [{ ...chosen, share: 1 }] : mixed;
-  const design = rowDesign(classes, ctx.params, fingerPierPattern);
+  const pattern = patternFor(options.berthType ?? ctx.params.berthType);
+  const design = rowDesign(classes, ctx.params, pattern);
   if (!design) return layout;
 
   const berths = layout.berths.filter((b) => !(b.pierId === pierId && b.side === side));
@@ -143,7 +146,7 @@ export function fillPierSide(layout: Layout, pierId: string, side: PierSide, opt
     mix.counts[b.boatClassId]!++;
     mix.total++;
   }
-  const rows = fillPierRows(pier, { prepared, classes, params: ctx.params, pattern: fingerPierPattern, design }, mix, {
+  const rows = fillPierRows(pier, { prepared, classes, params: ctx.params, pattern, design }, mix, {
     sides: [side],
     rowStart: Math.max(0, options.emptyLength),
   });
@@ -200,7 +203,8 @@ export function setBerthClass(layout: Layout, berthId: string, classId: string, 
   const { params } = ctx;
   const frame = rowFrame(pier, berth.side);
   const old = toLocalRect(berth.slot, frame);
-  const slot = { s0: old.s0, s1: old.s0 + boat.beam + params.beamClearance, d0: 0, d1: boat.length + params.lengthClearance };
+  // The slot's depth follows the berth's type (a stern-buoy slot reaches to its buoy, D34).
+  const slot = { s0: old.s0, s1: old.s0 + boat.beam + params.beamClearance, d0: 0, d1: patternFor(berth.type).slotLength(boat, params) };
   const gap = Math.min(MAX_BOAT_PIER_GAP, params.lengthClearance / 2);
   const sideGap = params.beamClearance / 2;
   const hull = { s0: slot.s0 + sideGap, s1: slot.s1 - sideGap, d0: gap, d1: gap + boat.length };

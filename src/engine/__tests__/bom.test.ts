@@ -84,10 +84,12 @@ const byId = (id: string) => LIST.products.find((p) => p.id === id)!;
 
 describe('product choices', () => {
   it('automatic: pontoon and finger series by width, gangway series by price at the wanted length', () => {
-    // Pier width 3.0 m → S3 (not the cheaper 2.4 m series); finger width 0.8 m → F (0.7 m) rather than Boom (0.4 m).
+    // Pier width 3.0 m → S3 (not the cheaper 2.4 m series); finger width 0.8 m → F (0.7 m) rather than Boom (0.4 m);
+    // boom width 0.4 m (Y-boom berths, D34) → Boom.
     expect(resolveChoices(LIST, DEFAULT_COST, DEFAULT_PARAMS)).toEqual({
       pontoonSeries: 'S3',
       fingerSeries: 'F',
+      boomSeries: 'Boom',
       gangwaySeries: 'G',
       pontoonFreeboard: 0.5,
     });
@@ -177,6 +179,20 @@ describe('cost estimate, hand-calculated', () => {
     expect(lineFor('p8').orderQuantity).toBe(1);
     expect(estimate.byGroup.pontoons).toBe(30000);
     expect(estimate.notes.some((n) => n.includes('P1: 30 m in the layout, built from'))).toBe(true);
+  });
+
+  it('booms of Y-boom berths come from the boom series (D34)', () => {
+    const withBoom = costEstimate({
+      layout: { piers: [pier], fingers: fingers.map((f, i) => (i === 2 ? { ...f, kind: 'boom' as const } : f)), berths },
+      site,
+      priceList: LIST,
+      choices,
+      anchoring,
+    });
+    // The 4.0 m divider is a boom → the 6 m boom product (500 €) instead of the 6 m finger.
+    expect(withBoom.lines.find((l) => l.productId === 'boom6')!.orderQuantity).toBe(1);
+    expect(withBoom.lines.find((l) => l.productId === 'boom6')!.basis).toBe('boom 4 m');
+    expect(withBoom.byGroup.fingers).toBe(2 * 1300 + 500);
   });
 
   it('fingers: 7.2 m → 8 m product (×2), 4.0 m → 6 m product = 3 600 €', () => {

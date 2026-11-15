@@ -28,6 +28,7 @@ export function standardFingerLength(target: number, maxLength: number, lengths:
  */
 export const fingerPierPattern: BerthPattern = {
   id: 'fingerPier',
+  berthType: 'finger',
 
   boatsPerBay: (params) => params.boatsPerBay,
 

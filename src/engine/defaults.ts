@@ -17,6 +17,11 @@ export const DEFAULT_PARAMS: Params = {
   // Steel Mooring Fingers FN6000/FN8000/FN10000/FN12000 (6, 8, 10, 12 m) (brochures, modification
   // date 14.11.2014, marinetek.hr, read 2026-11-15).
   fingerLengths: [5, 6, 7, 8, 10, 12],
+  // D34: Y-boom berths use Marinetek's Steel Boat Booms FN500/FN600/FN700 (5, 6, 7 m) and
+  // the decked width 0,4 m of FN600K/FN700K (brochure, marinetek.hr, read 2026-11-15).
+  berthType: 'finger',
+  boomLengths: [5, 6, 7],
+  boomWidth: 0.4,
   boatsPerBay: 2,
   beamClearance: 0.5,
   lengthClearance: 0.5,
@@ -47,4 +52,4 @@ export const DEFAULT_OBJECTIVE: ObjectiveSettings = {
 export const DEFAULT_TOP_N = 5;
 
 /** Default product choices (D24): everything chosen automatically from the built-in price list. */
-export const DEFAULT_COST: CostSettings = { priceList: null, pontoonSeries: '', fingerSeries: '', gangwaySeries: '' };
+export const DEFAULT_COST: CostSettings = { priceList: null, pontoonSeries: '', fingerSeries: '', boomSeries: '', gangwaySeries: '' };

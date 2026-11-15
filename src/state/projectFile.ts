@@ -142,18 +142,20 @@ function boatClasses(v: unknown): BoatClass[] {
   });
 }
 
-/** Extension (D29): standard finger lengths; missing in older files (they take the default). */
-function fingerLengths(v: unknown): number[] {
-  if (v === undefined) return [...DEFAULT_PARAMS.fingerLengths];
-  const list = arr(v, 'params.fingerLengths').map((x, i) => num(x, `params.fingerLengths[${i}]`));
-  if (list.some((x) => !(x > 0))) fail('params.fingerLengths must be positive lengths');
+/** Extension (D29, D34): a list of standard lengths; missing in older files (the default). */
+function lengthList(v: unknown, key: 'fingerLengths' | 'boomLengths'): number[] {
+  if (v === undefined) return [...DEFAULT_PARAMS[key]];
+  const list = arr(v, `params.${key}`).map((x, i) => num(x, `params.${key}[${i}]`));
+  if (list.some((x) => !(x > 0))) fail(`params.${key} must be positive lengths`);
   return [...new Set(list)].sort((a, b) => a - b);
 }
+
+const BERTH_TYPES = ['finger', 'yBoom', 'sternBuoy'] as const;
 
 function params(v: unknown): Params {
   const o = obj(v, 'params');
   // Missing keys take their defaults, so files from older versions stay readable.
-  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths'>): number =>
+  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths'>): number =>
     o[key] === undefined ? DEFAULT_PARAMS[key] : num(o[key], `params.${key}`);
   const boatsPerBay = o.boatsPerBay === undefined ? DEFAULT_PARAMS.boatsPerBay : o.boatsPerBay;
   if (boatsPerBay !== 1 && boatsPerBay !== 2) fail('params.boatsPerBay must be 1 or 2');
@@ -162,7 +164,10 @@ function params(v: unknown): Params {
     mainPierWidth: pick('mainPierWidth'),
     fingerWidth: pick('fingerWidth'),
     fingerLengthRatio: pick('fingerLengthRatio'),
-    fingerLengths: fingerLengths(o.fingerLengths),
+    fingerLengths: lengthList(o.fingerLengths, 'fingerLengths'),
+    berthType: o.berthType === undefined ? DEFAULT_PARAMS.berthType : oneOf(o.berthType, BERTH_TYPES, 'params.berthType'),
+    boomLengths: lengthList(o.boomLengths, 'boomLengths'),
+    boomWidth: pick('boomWidth'),
     boatsPerBay: boatsPerBay as 1 | 2,
     beamClearance: pick('beamClearance'),
     lengthClearance: pick('lengthClearance'),
@@ -214,7 +219,12 @@ function layout(v: unknown, i: number): Layout {
   const fingers = arr(o.fingers, `${p}.fingers`).map((item, k): Finger => {
     const q = `${p}.fingers[${k}]`;
     const e = obj(item, q);
-    return { id: str(e.id, `${q}.id`), pierId: str(e.pierId, `${q}.pierId`), shape: polygon(e.shape, `${q}.shape`) };
+    return {
+      id: str(e.id, `${q}.id`),
+      pierId: str(e.pierId, `${q}.pierId`),
+      shape: polygon(e.shape, `${q}.shape`),
+      ...(e.kind === undefined ? {} : { kind: oneOf(e.kind, ['boom'] as const, `${q}.kind`) }),
+    };
   });
   const berths = arr(o.berths, `${p}.berths`).map((item, k): Berth => {
     const q = `${p}.berths[${k}]`;
@@ -224,6 +234,7 @@ function layout(v: unknown, i: number): Layout {
       pierId: str(e.pierId, `${q}.pierId`),
       side: oneOf(e.side, ['left', 'right'] as const, `${q}.side`),
       boatClassId: str(e.boatClassId, `${q}.boatClassId`),
+      ...(e.type === undefined ? {} : { type: oneOf(e.type, BERTH_TYPES, `${q}.type`) }),
       slot: polygon(e.slot, `${q}.slot`),
       boat: polygon(e.boat, `${q}.boat`),
       removed: bool(e.removed, `${q}.removed`),
@@ -392,11 +403,12 @@ function priceList(v: unknown): PriceList | null {
 function costSettings(v: unknown): CostSettings {
   if (v === undefined) return { ...DEFAULT_COST };
   const o = obj(v, 'cost');
-  const series = (k: 'pontoonSeries' | 'fingerSeries' | 'gangwaySeries') => (o[k] === undefined ? '' : str(o[k], `cost.${k}`));
+  const series = (k: 'pontoonSeries' | 'fingerSeries' | 'boomSeries' | 'gangwaySeries') => (o[k] === undefined ? '' : str(o[k], `cost.${k}`));
   return {
     priceList: priceList(o.priceList),
     pontoonSeries: series('pontoonSeries'),
     fingerSeries: series('fingerSeries'),
+    boomSeries: series('boomSeries'),
     gangwaySeries: series('gangwaySeries'),
   };
 }

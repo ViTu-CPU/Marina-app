@@ -99,6 +99,13 @@ export interface BoatClass {
   count: number;
 }
 
+/**
+ * Extension (D34): mooring type of a berth. 'finger': finger pier (SPEC §4); 'yBoom': one
+ * boat between light booms (aisapaikka), with fingers for boats too long for a boom;
+ * 'sternBuoy': bow to the pier, stern to a buoy (peräpoiju).
+ */
+export type BerthType = 'finger' | 'yBoom' | 'sternBuoy';
+
 /** Extension (D20): how the boat mix is given: target shares or target berth counts. */
 export type BerthTarget = 'share' | 'count';
 
@@ -114,6 +121,12 @@ export interface Params {
    * length at least ratio × boat length that still fits in the slot; empty = no rounding.
    */
   fingerLengths: number[];
+  /** Extension (D34): berth type the generator uses on every pier. */
+  berthType: BerthType;
+  /** Extension (D34): standard boom lengths of Y-boom berths, m; longer boats get fingers. */
+  boomLengths: number[];
+  /** Extension (D34): boom width, m. */
+  boomWidth: number;
   /** 1 = finger between every boat, 2 = two boats share a bay. */
   boatsPerBay: 1 | 2;
   /** Total extra width per boat in a berth, m. */
@@ -165,6 +178,8 @@ export interface Finger {
   id: string;
   pierId: string;
   shape: Polygon;
+  /** Extension (D34): 'boom' for a light boom of Y-boom berths; missing = finger. */
+  kind?: 'boom';
 }
 
 export type PierSide = 'left' | 'right';
@@ -175,6 +190,8 @@ export interface Berth {
   /** Side of the pier when looking from `start` towards `end`. */
   side: PierSide;
   boatClassId: string;
+  /** Extension (D34): mooring type; missing = finger berth. */
+  type?: BerthType;
   /** The water rectangle reserved for the boat (incl. clearances). */
   slot: Polygon;
   /** Simplified top-view boat rectangle inside the slot. */
@@ -306,6 +323,8 @@ export interface CostSettings {
   pontoonSeries: string;
   /** Series used for the fingers; '' = chosen automatically. */
   fingerSeries: string;
+  /** Extension (D34): series used for the booms of Y-boom berths; '' = chosen automatically. */
+  boomSeries: string;
   /** Series used for the gangways from the shore; '' = chosen automatically. */
   gangwaySeries: string;
 }
