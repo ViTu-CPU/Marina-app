@@ -821,7 +821,17 @@ taut chain of length c·h lets the buoy move √(c² − 1)·h towards the pier 
 - **California DBW (2005)** (§9.3): concrete pontoons *"probably should not be considered for marinas
   in open water locations subject to wave heights over 12-14 inches unless designed and built to also
   act as a wave attenuator"*. **Top Marine** (§2.3): HD pontoons allowed wave height 0,5 m, MD 0,3 m.
-- **Open-Meteo** ([terms](https://open-meteo.com/en/terms), search excerpt): free for non-commercial
-  use under 10 000 calls a day, data CC BY 4.0; historical API with ERA5 (0.25°, from 1940) and
-  ERA5-Land (0.1°). For step 2 of the tool (owner: not used commercially, D40).
+- **Open-Meteo** (read 2026-11-15): [terms](https://open-meteo.com/en/terms) *"Less than 10'000 API
+  calls per day, 5'000 per hour and 600 per minute. You may only use the free API services for
+  non-commercial purposes. You accept to the CC-BY 4.0 licence"*; [pricing](https://open-meteo.com/en/pricing)
+  *"Requests for data covering more than 10 weather variables or extending over a period of more
+  than 2 weeks for a single location are considered multiple API calls … 4 weeks of data equals 3.0
+  API calls"*; [Historical Weather API](https://open-meteo.com/en/docs/historical-weather-api): ERA5
+  (0.25°, from 1940), ERA5-Land (0.1°, from 1950), *"Select "ERA5" or "ERA5-Land" for consistent data
+  over multiple decades"*; `cell_selection`: *"land finds a suitable grid-cell on land with similar
+  elevation … sea prefers grid-cells on sea"*; `wind_speed_10m` "Instant"; `timeformat=unixtime`;
+  citations Zippenfenig (2023) and Hersbach et al. (2023), ERA5, doi:10.24381/cds.adbb2d47. A test
+  request returned `access-control-allow-origin: *` (browser use works). Rate limits are per IP:
+  from this development environment's shared address the daily limit was already used up, so the
+  tests use a mocked answer.
 

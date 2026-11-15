@@ -21,6 +21,7 @@
  * the CEM text reads from the figure (1.09 at 5 min, Example II-2-1; 1.2 at 100 s, §(c)).
  */
 import type { Vec2 } from './model';
+import type { WindClimate } from './wind';
 
 const G = 9.81;
 
@@ -202,10 +203,24 @@ export interface WaveSettings {
   /** Averaging time of those winds, s (600 = 10-min mean, 3600 = hourly mean). */
   windAveragingS: number;
   quality: WaveQuality;
+  /** Position for the wind data, degrees; null = the centre of the site on the map. */
+  location: { lat: number; lon: number } | null;
+  /** D41: wind climate fetched for the site, or null. */
+  climate: WindClimate | null;
 }
 
 /** Nothing entered yet; 10-min winds (FMI observations, Eurocode basic wind) and a "good" climate. */
-export const DEFAULT_WAVES: WaveSettings = { fetch: null, fetchFrom: 0, fetchDepth: null, wind1: null, wind50: null, windAveragingS: 600, quality: 'good' };
+export const DEFAULT_WAVES: WaveSettings = {
+  fetch: null,
+  fetchFrom: 0,
+  fetchDepth: null,
+  wind1: null,
+  wind50: null,
+  windAveragingS: 600,
+  quality: 'good',
+  location: null,
+  climate: null,
+};
 
 export interface WaveAssessment {
   depth: number;

@@ -175,7 +175,34 @@ describe('project file (SPEC §2: JSON export/import)', () => {
         (p as Record<string, unknown>).waves = { fetch: 2500, fetchFrom: 450, fetchDepth: null, wind1: 15, wind50: 22, windAveragingS: 3600, quality: 'excellent' };
       }),
     );
-    expect(set.ok && set.project.waves).toEqual({ fetch: 2500, fetchFrom: 90, fetchDepth: null, wind1: 15, wind50: 22, windAveragingS: 3600, quality: 'excellent' });
+    expect(set.ok && set.project.waves).toEqual({
+      fetch: 2500,
+      fetchFrom: 90,
+      fetchDepth: null,
+      wind1: 15,
+      wind50: 22,
+      windAveragingS: 3600,
+      quality: 'excellent',
+      location: null,
+      climate: null,
+    });
+    // D41: position and fetched wind climate are kept.
+    const sector = { rose: [0.01, 0.02, 0, 0, 0], annualMax: [12, 14], oneYear: 11.5, fiftyYear: null };
+    const climate = {
+      source: 'Open-Meteo',
+      requested: { lat: 60.15, lon: 24.95 },
+      cell: { lat: 60.25, lon: 25 },
+      startYear: 2023,
+      endYear: 2024,
+      hours: 17544,
+      fetchedOn: '2026-11-15',
+      averagingS: 3600,
+      sectors: Array.from({ length: 16 }, () => sector),
+    };
+    const withClimate = parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { location: { lat: 60.15, lon: 24.95 }, climate })));
+    expect(withClimate.ok && withClimate.project.waves.location).toEqual({ lat: 60.15, lon: 24.95 });
+    expect(withClimate.ok && withClimate.project.waves.climate).toEqual(climate);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { climate: { ...climate, sectors: [sector] } }))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { fetch: -1 }))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { quality: 'superb' }))).ok).toBe(false);
   });

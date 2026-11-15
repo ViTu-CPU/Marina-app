@@ -12,7 +12,7 @@ suomeksi, UI pysyy englanniksi.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D41, I87, U26).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D42, I89, U26).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013,
   AS 3962) – kaikki on alustavaa ja vaatii pätevän suunnittelijan tarkastuksen.
@@ -83,7 +83,12 @@ Kolmannessa istunnossa (omistajan päätökset D25–D32):
 19. **Aaltoarvio, vaihe 1 (D40, I86, U25)**: työkalupalkin "Waves" avaa ikkunan: pisin avovesimatka,
    suunta, syvyys ja tuulet (1 v, 50 v) → Hm0, Tp, aallonpituus (CEM II-2), UFC 4-152-07:n
    kriteerit (keula/sivu) ja suositus (ei suojausta / kelluva vaimennin < 18 m aallot / kiinteä
-   aallonmurtaja). Ei kaupallinen käyttö → Open-Meteo sallittu (vaihe 2: tuulidata, tuuliruusu).
+   aallonmurtaja). Ei kaupallinen käyttö → Open-Meteo sallittu.
+20. **Tuuliolot, vaihe 2 (D41, I87, I88)**: "Hae tuulidata" hakee Open-Meteosta ERA5-tuulet (meriruutu,
+   oletus 30 viimeistä täyttä vuotta, 5 vuoden palat): tuuliruusu, kerran vuodessa ja 50 vuoden tuuli
+   suunnittain; "Käytä avovesimatkan suunnan tuulia" täyttää aaltolaskennan. Yhteenveto tallentuu
+   projektiin ja raporttiin. Kehitysympäristön jaettu IP oli jo käyttänyt Open-Meteon päiväkiintiön,
+   joten testit käyttävät simuloitua vastausta; oikea haku tehdään käyttäjän selaimesta.
 
 ## Avoimet asiat, ehdotettu järjestys
 1. Paalujen ja Marinetekin tuotteiden hinnat puuttuvat (pyydä tarjous).

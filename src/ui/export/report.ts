@@ -6,6 +6,9 @@
 import type { AnchoringParams } from '../../engine/anchoring';
 import { BOM_GROUPS, type BomGroup } from '../../engine/bom';
 import type { Layout, Params, Project } from '../../engine/model';
+import { pierAxis } from '../../engine/rows';
+import { bearingOf, waveAssessment } from '../../engine/waves';
+import { sectorBearing, sectorOf } from '../../engine/wind';
 import { targetCount } from '../../engine/targets';
 import { translate, type Language, type StringKey } from '../../i18n';
 import { comparisonRows } from '../compare';
@@ -181,6 +184,70 @@ export function buildReportHtml(input: ReportInput): string {
     ]),
   );
   parts.push('</div></div>');
+
+  // D40, D41: wave screening, when the fetch and a wind are entered.
+  const waveResult = waveAssessment(
+    project.waves,
+    project.waves.fetchDepth ?? project.anchoring.depth,
+    layout.piers.map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) })),
+  );
+  if (waveResult) {
+    const w = project.waves;
+    const len = (m: number) => formatLength(m, language);
+    const height = (m: number) => new Intl.NumberFormat(language === 'fi' ? 'fi-FI' : 'en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(m);
+    parts.push(`<h2>${esc(t('waves.title'))}</h2>`);
+    parts.push(
+      kv([
+        [t('waves.fetch'), len(w.fetch!)],
+        [t('waves.fetchFrom'), formatCount(w.fetchFrom, language)],
+        [t('waves.fetchDepth'), len(waveResult.depth)],
+        ...(w.wind1 === null ? [] : [[t('waves.wind1'), len(w.wind1)] as [string, string]]),
+        ...(w.wind50 === null ? [] : [[t('waves.wind50'), len(w.wind50)] as [string, string]]),
+        [t('waves.windAveraging'), t(w.windAveragingS === 3600 ? 'waves.avg3600' : 'waves.avg600')],
+        [t('waves.quality'), t(`waveQuality.${w.quality}`)],
+      ]),
+    );
+    parts.push(
+      table(
+        [t('waves.event'), t('waves.windUsed'), t('waves.duration'), t('waves.hm0'), t('waves.tp'), t('waves.length'), t('waves.limitedBy')],
+        waveResult.events.map((e) => [
+          esc(t(`waveEvent.${e.event}`)),
+          esc(len(e.waves.u10)),
+          esc(formatCount(e.waves.averagingS / 60, language)),
+          esc(height(e.waves.hm0)),
+          esc(len(e.waves.tp)),
+          esc(len(e.waves.wavelength)),
+          esc(t(`waveLimit.${e.waves.limit}`)),
+        ]),
+        [1, 2, 3, 4, 5],
+      ),
+    );
+    parts.push(`<h3>${esc(t('waves.criteria'))}</h3>`);
+    parts.push(
+      table(
+        [t('report.item'), t('waves.event'), t('waves.hm0'), t('report.value')],
+        waveResult.checks.map((c) => [
+          esc(t(`waveHeading.${c.heading}`)),
+          esc(t(`waveEvent.${c.event}`)),
+          esc(`${height(c.waves.hm0)}${c.limit === null ? '' : ` ≤ ${height(c.limit)}`}`),
+          esc(c.ok === null ? t('waves.noCriterion') : c.ok ? t('waves.ok') : t('waves.exceeds')),
+        ]),
+        [2],
+      ),
+    );
+    if (waveResult.piers.length > 0) {
+      parts.push(`<p class="small">${esc(t('waves.piers'))}: ${esc(waveResult.piers.map((p) => `${p.id} ${t(`waveHeading.${p.heading}`).toLowerCase()}`).join(', '))}</p>`);
+    }
+    parts.push(`<div class="disclaimer">${esc(t(`waveAdvice.${waveResult.advice}`))}</div>`);
+    const climate = w.climate;
+    if (climate) {
+      const s = climate.sectors[sectorOf(w.fetchFrom)]!;
+      parts.push(
+        `<p class="small">${esc(t('wind.title'))}: ${esc(climate.source)}; ${esc(t('wind.cell'))} ${climate.cell.lat.toFixed(2)}, ${climate.cell.lon.toFixed(2)}; ${climate.startYear}–${climate.endYear}; ${esc(t('wind.oneYear'))} ${s.oneYear === null ? '–' : esc(len(s.oneYear))}, ${esc(t('wind.fiftyYear'))} ${s.fiftyYear === null ? '–' : esc(len(s.fiftyYear))} (${sectorBearing(sectorOf(w.fetchFrom))}°); ${esc(climate.fetchedOn)}. ${esc(t('wind.note'))}</p>`,
+      );
+    }
+    parts.push(`<p class="small">${esc(t('waves.note'))}</p>`);
+  }
 
   // Anchoring plan and cost estimate.
   if (!model) {

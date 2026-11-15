@@ -80,8 +80,9 @@ npx playwright install chromium
 - Two built-in examples: a rectangular basin and an irregular bay.
 - Wave screening ("Waves"): wind waves from the longest fetch, its direction, the depth and
   extreme winds (USACE Coastal Engineering Manual II-2), checked against the small craft harbour
-  criteria of UFC 4-152-07, with advice on a floating attenuator or a fixed breakwater
-  (preliminary; docs/DECISIONS.md D40).
+  criteria of UFC 4-152-07, with advice on a floating attenuator or a fixed breakwater; wind rose
+  and extreme winds by direction from Open-Meteo (ERA5), non-commercial use (preliminary;
+  docs/DECISIONS.md D40, D41).
 
 **Inputs**
 - Boat classes: length, beam, colour, and either a target share or a target number of

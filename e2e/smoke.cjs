@@ -504,7 +504,37 @@ async function waitForServer() {
       assert.ok((await tool.getByTestId('wave-checks').locator('tbody tr').count()) >= 2);
       const advice = await tool.getByTestId('wave-advice').textContent();
       assert.match(advice, /floating wave attenuator|no wave protection|fixed breakwater/);
-      await page.screenshot({ path: path.join(outDir, 'waves.png') });
+      // D41: wind climate from Open-Meteo (mocked: the test must not depend on the network or its quota).
+      const requests = [];
+      await page.route('https://archive-api.open-meteo.com/**', (route) => {
+        const url = new URL(route.request().url());
+        requests.push(url.searchParams.get('start_date'));
+        const start = Date.parse(`${url.searchParams.get('start_date')}T00:00:00Z`) / 1000;
+        const end = Date.parse(`${url.searchParams.get('end_date')}T23:00:00Z`) / 1000;
+        const time = [];
+        const speed = [];
+        const dir = [];
+        for (let t = start, k = 0; t <= end; t += 3600, k++) {
+          time.push(t);
+          dir.push((k * 37) % 360);
+          speed.push(4 + 10 * Math.sin(k / 97) ** 2 + (k % 1009 === 0 ? 8 : 0));
+        }
+        route.fulfill({ json: { latitude: 60.25, longitude: 25.0, hourly: { time, wind_speed_10m: speed, wind_direction_10m: dir } } });
+      });
+      await tool.getByLabel('Position').fill('60.15, 24.95');
+      await tool.getByLabel('First year').fill('2016');
+      await tool.getByLabel('Last year').fill('2024');
+      await tool.getByRole('button', { name: 'Fetch wind data', exact: true }).click();
+      await tool.getByTestId('wind-rose').waitFor({ timeout: 20000 });
+      assert.deepEqual(requests, ['2016-01-01', '2021-01-01']);
+      assert.equal(await tool.getByTestId('wind-sectors').locator('tbody tr').count(), 16);
+      await tool.getByRole('button', { name: /^Use the winds of the fetch direction/ }).click();
+      const w = await page.evaluate(() => window.__marina.getState().project.waves);
+      assert.ok(w.wind1 > 0 && w.wind50 > w.wind1, `winds ${w.wind1} / ${w.wind50}`);
+      assert.equal(w.windAveragingS, 3600);
+      assert.equal(w.climate.startYear, 2016);
+      await page.unroute('https://archive-api.open-meteo.com/**');
+      await page.screenshot({ path: path.join(outDir, 'waves.png'), fullPage: true });
       await tool.getByRole('button', { name: 'Close', exact: true }).click();
       assert.equal(await page.getByTestId('wave-tool').count(), 0);
     });

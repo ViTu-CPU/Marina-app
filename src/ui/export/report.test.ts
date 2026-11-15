@@ -49,6 +49,38 @@ describe('printable report (U24)', () => {
     for (const u of urls) expect(html).toContain(`href="${u.replace(/&/g, '&amp;')}"`);
   });
 
+  it('wave screening only when entered; then waves, criteria, advice and the wind source (D40, D41)', () => {
+    expect(html).not.toContain(translate('en', 'waves.title'));
+    const sector = { rose: [0.02, 0.02, 0.01, 0, 0], annualMax: [15, 18], oneYear: 14.2, fiftyYear: 21.7 };
+    const withWaves = {
+      ...project,
+      waves: {
+        ...project.waves,
+        fetch: 2000,
+        fetchFrom: 90,
+        wind1: 15,
+        wind50: 22,
+        climate: {
+          source: 'Open-Meteo Historical Weather API, ERA5',
+          requested: { lat: 60.15, lon: 24.95 },
+          cell: { lat: 60.25, lon: 25 },
+          startYear: 1996,
+          endYear: 2025,
+          hours: 262968,
+          fetchedOn: '2026-11-15',
+          averagingS: 3600,
+          sectors: Array.from({ length: 16 }, () => sector),
+        },
+      },
+    };
+    const w = buildReportHtml({ project: withWaves, layout, model, image: null, language: 'en', date: '2026-11-15' });
+    expect(w).toContain(translate('en', 'waves.title'));
+    expect(w).toContain(translate('en', 'waves.criteria'));
+    expect(w).toContain('Open-Meteo Historical Weather API, ERA5');
+    expect(w).toContain('1996–2025');
+    expect(w).toMatch(/waveAdvice|attenuator|no wave protection|breakwater/);
+  });
+
   it('in Finnish; without a price list or an image', () => {
     const fi = buildReportHtml({ project, layout, model: null, image: null, language: 'fi', date: '2026-11-15' });
     expect(fi).toContain('Venesataman alustava layout-tarkastelu');
