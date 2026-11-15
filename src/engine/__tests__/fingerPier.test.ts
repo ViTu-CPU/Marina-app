@@ -31,14 +31,17 @@ describe('finger pier pattern (SPEC §4), hand-calculated', () => {
       expect(width(b.boat)).toBeCloseTo(2.0, 12);
       expect(depth(b.boat)).toBeCloseTo(5.0, 12);
     }
-    // finger | slot | slot | finger along the pier
-    expect(bay.dividers[0]).toEqual({ s0: 0, s1: 0.8, d0: 0, d1: 4 });
+    // finger | slot | slot | finger along the pier; 0.8 × 5.0 = 4.0 m → the shortest Marinetek
+    // model, the 5 m FN500 boom (D29, I70); 5.0 ≤ slot length 5.5.
+    expect(bay.dividers[0]).toEqual({ s0: 0, s1: 0.8, d0: 0, d1: 5 });
     expect(bay.berths[0]!.slot.s0).toBeCloseTo(0.8, 12);
     expect(bay.berths[1]!.slot.s0).toBeCloseTo(3.3, 12);
     expect(bay.dividers[1]!.s0).toBeCloseTo(5.8, 12);
     expect(bay.dividers[1]!.s1).toBeCloseTo(6.6, 12);
-    // Finger length 0.8 × 5.0 = 4.0.
-    expect(depth(bay.dividers[1]!)).toBeCloseTo(4.0, 12);
+    expect(depth(bay.dividers[1]!)).toBeCloseTo(5.0, 12);
+    // Without standard lengths: 0.8 × 5.0 = 4.0.
+    const exact = fingerPierPattern.bay([boat('c5'), boat('c5')], 0, { ...DEFAULT_PARAMS, fingerLengths: [] });
+    expect(depth(exact.dividers[1]!)).toBeCloseTo(4.0, 12);
   });
 
   it('the boat is centred across the slot and sits 0.2 m off the pier', () => {
@@ -68,6 +71,7 @@ describe('finger pier pattern (SPEC §4), hand-calculated', () => {
   });
 
   it('standard finger lengths (D29, I67): the shortest at least the wanted length that fits the slot', () => {
+    // Top Marine's lengths (4–10 m, 10.5, 12 m) as a list other than the default.
     const list = [4, 5, 6, 7, 8, 9, 10, 10.5, 12];
     expect(standardFingerLength(4.0, 5.5, list)).toBe(4); // 5 m boat: 0.8 × 5
     expect(standardFingerLength(5.6, 7.5, list)).toBe(6); // 7 m boat

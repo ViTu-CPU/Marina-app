@@ -13,10 +13,10 @@ export const DEFAULT_PARAMS: Params = {
   mainPierWidth: 3.0,
   fingerWidth: 0.8,
   fingerLengthRatio: 0.8,
-  // D29: standard boom lengths published by Top Marine (venepuomit 4–10 m, käveltävät
-  // venepuomit 10,5 and 12 m; topmarinelaiturit.fi, read 2026-11-14). Marinetek publishes only
-  // ranges ("4.5–8 m" booms, mooring fingers "from 6 to 18 m"), not the single lengths.
-  fingerLengths: [4, 5, 6, 7, 8, 9, 10, 10.5, 12],
+  // D29, I70: Marinetek's standard models: Steel Boat Booms FN500/FN600/FN700 (5, 6, 7 m) and
+  // Steel Mooring Fingers FN6000/FN8000/FN10000/FN12000 (6, 8, 10, 12 m) (brochures, modification
+  // date 14.11.2014, marinetek.hr, read 2026-11-15).
+  fingerLengths: [5, 6, 7, 8, 10, 12],
   boatsPerBay: 2,
   beamClearance: 0.5,
   lengthClearance: 0.5,

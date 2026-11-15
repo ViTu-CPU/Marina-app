@@ -79,7 +79,7 @@ describe('defaults', () => {
       mainPierWidth: 3.0,
       fingerWidth: 0.8,
       fingerLengthRatio: 0.8,
-      fingerLengths: [4, 5, 6, 7, 8, 9, 10, 10.5, 12],
+      fingerLengths: [5, 6, 7, 8, 10, 12],
       boatsPerBay: 2,
       beamClearance: 0.5,
       lengthClearance: 0.5,

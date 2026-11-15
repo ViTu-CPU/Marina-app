@@ -21,8 +21,11 @@ import type { BoatClass, Layout, Site } from '../model';
 import { pierPolygon, prepareSite } from '../site';
 import { IssueCode } from '../validate';
 
-/** The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27). */
-const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5 };
+/**
+ * The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27)
+ * and exact finger lengths, 0.8 × boat length (no standard lengths, D29).
+ */
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [] };
 const inputFor = (site: Site, over: Partial<GenerateInput> = {}): GenerateInput => ({
   site,
   boatClasses: DEFAULT_BOAT_CLASSES,

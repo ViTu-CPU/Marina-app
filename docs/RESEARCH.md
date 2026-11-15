@@ -78,8 +78,11 @@ Source: [marinetek.net/products](https://marinetek.net/products/), read 2026-11-
 Other published facts: All-Concrete and Heavy Duty units "8–20 ton", "50 year design
 lifetime"; anchoring by "Seaflex …, chain and pile mooring"; access bridges "4–12 m
 lengths and widths of 1.2–1.9 m"; mooring fingers "standard lengths range from 6 to 18 m"
-(steel or aluminium); boat booms "4.5–8 m long". Module lengths and prices are not
-published. The six Marinetek catalogue PDFs on NauticExpo returned HTTP 403.
+(steel or aluminium); boat booms "4.5–8 m long". Prices are not published. The six
+Marinetek catalogue PDFs on NauticExpo returned HTTP 403. **Module lengths, finger and boom
+models, sinkers, bridges, fittings and pile guides** are in the brochures on
+[marinetek.hr](https://www.marinetek.hr/en/brochures-and-specifications/), read 2026-11-15
+(§9.12).
 
 ### 2.2 A-Laiturit Oy (Raisio) — full public price list
 
@@ -600,3 +603,47 @@ In the third session (2026-11-14) theseus.fi still answered HTTP 403.
   vaurioiden riski on olemassa talvella"*; pile guides: *"Pohjoismaissa pilarit on purettava joka
   syksy ja laituri nostettava pois vedestä."* Hence chains, not rails or arms, for pontoons that
   stay in the water over winter (D17).
+
+### 9.12 Marinetek brochures (marinetek.hr, read 2026-11-15)
+
+From [Brochures and specifications](https://www.marinetek.hr/en/brochures-and-specifications/)
+(link given by the owner). The single-page brochures carry *"Modification date: 14.11.2014"*;
+several are images only and were read as images. No prices.
+
+- **All-Concrete pontoons** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/All-Concrete-pontoons-2400-3000.pdf)):
+  M2409AC/M2412AC/M2415AC 8,92/11,92/14,92 × 2,4 m (concrete 2,2 m), 7,0/9,5/11,9 t; M2609AC/M2612AC
+  8,92/11,92 × 2,6 m, 7,5/10,0 t; M3009AC/M3012AC/3015AC 8,92/11,92/14,92 × 3,0 m, 7,5/10,9/13,7 t.
+  Height 0,85 m; net capacity 4,6 kN/m² (2,4 and 2,6 m) and 5,0 kN/m² (3,0 m); freeboard 0,46 and
+  0,50 m; *"Strength of joint (kN) 2x180"*; *"The pontoon can be moored by piles or chain or Seaflex
+  through the mooring wells."*
+- **Heavy Duty pontoons** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/HD-pontoons-2700-3300-4300.pdf)):
+  M2712HD/M2715HD 11,92/14,92 × 2,7 m, 10,7/13,4 t, freeboard 0,46 m; M3312HD/M3315HD × 3,3 m,
+  12,2/15,3 t; M4312HD/M4315HD × 4,3 m, 16,4/20,6 t; freeboard 0,50 m; joints 2 × 322 kN; *"fixing
+  rails for fingers"*.
+- **Premier pontoons** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Premier-pontoons-2700-3300.pdf)):
+  12,20/16,05/19,90 m × 2,7 or 3,3 m, height 1,0 m, freeboard 0,56 m, 5,6 kN/m².
+- **Steel Mooring Fingers** FN6000/FN8000/FN10000/FN12000 ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Steel-Mooring-Fingers.pdf)):
+  length 6,0/8,0/10,0/12,0 m, width 0,7 m, total capacity 520/780/1040/1300 kg, joint bolts
+  2×M20/2×M20/4×M20/4×M20; *"Fingers of special lengths and widths are also available."*;
+  *"Standard fingers suit best for pontoons with freeboard up to 0,56 m."*
+- **Steel Boat Booms** FN500/FN600/FN700 (width 0,35 m) and FN600K/FN700K (decked, 0,4 m)
+  ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Steel-Boat-Booms.pdf)): length 5,0/6,0/7,0
+  and 6,0/7,0 m, joint bolts 2×M20, *"Booms of special lengths and widths are also available."*
+- **Concrete products** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Concrete-products.pdf)):
+  chain-mooring sinkers 40, 200, 350, 700, 1 200, 2 000, 2 500, 3 000, 4 000 and 5 000 kg (hot-dip
+  galvanised bar 16–32 mm), Seaflex sinkers 5 000–12 500 kg; shore support elements for marina
+  pontoons 1 500 × 2 000 × 400 mm, 1 600 kg, for bridges up to 1,8 × 12,0 m.
+- **Access bridges** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Access-Bridges.pdf)):
+  timber 1,3 × 4,0/5,0/6,0 m and 1,9 × 5,0/6,0 m; steel (2,5 kN/m²) 1,2 or 1,8 × 6,0/8,0/10,0/12,0 m;
+  aluminium 6–20 m long, 1,2–2,4 m wide.
+- **Fittings** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Fittings.pdf)): *"Anchoring
+  eye for rock 20 mm, 22 mm, Hot dip galvanised"*; chain 10–25 mm; shackles 12–28 mm; steel springs
+  12 and 16 mm; flexible shore fixing 250/500/1000 kg; cleats and bollards 25–100 kN.
+- **Pile guides** G200/G400/G700 ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Pile-Guides.pdf)):
+  G200 for timber pontoons, piles 305–356 mm, *"The design pile load is 20 kN"*; G400 for Heavy Duty
+  pontoons, piles 406–508 mm, 40 kN; G700 *"the strongest standard product"*, for the biggest Heavy
+  Duty pontoons and breakwaters, piles 762–920 mm, 70 kN.
+- **Catalogue "Marinas, Pontoons and Floating Solutions" 2012** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Marinas-Pontoons-and-Floating-Solutions-2012.pdf)),
+  "Boat Moorings" (p. 26–27): *"Light weight mooring Booms are 4-12 m long"*; *"Longer than 12 m
+  Super Yacht and Concrete Fingers are moored with end piles."* (DECISIONS D31.)
+

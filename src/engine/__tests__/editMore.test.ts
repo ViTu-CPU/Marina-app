@@ -7,8 +7,11 @@ import { rowFrame, toLocalRect } from '../rows';
 import { prepareSite } from '../site';
 import { IssueCode } from '../validate';
 
-/** The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27). */
-const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5 };
+/**
+ * The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27)
+ * and exact finger lengths, 0.8 × boat length (no standard lengths, D29).
+ */
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [] };
 /**
  * A 100 m × 80 m basin, shore along the south edge, entrance along the north edge.
  * One pier is drawn by hand from (50, 0) to (50, 60), width 3 m; its left side faces west.
@@ -62,8 +65,8 @@ describe('manual editing (D22)', () => {
 
   it('the other side can hold another class: 13 berths of 12 m', () => {
     expect(both.stats.berthsByClass).toMatchObject({ c5: 16, c12: 13 });
-    // 9 fingers of 4.0 m for the 5 m boats, 8 of 10 m (0.8 × 12 = 9.6 → standard 10 m, D29).
-    expect(both.stats.fingerLength).toBeCloseTo(36 + 8 * 10, 6);
+    // 9 fingers of 4.0 m for the 5 m boats, 8 of 9.6 m for the 12 m boats.
+    expect(both.stats.fingerLength).toBeCloseTo(36 + 8 * 9.6, 6);
     expect(both.feasibility).toBe('operationalOK');
   });
 

@@ -104,7 +104,7 @@ describe('project file (SPEC §2: JSON export/import)', () => {
 
   it('standard finger lengths: missing in older files → the default; stored sorted and unique (D29)', () => {
     const old = parseProject(fileWith((p) => delete (p.params as Record<string, unknown>).fingerLengths));
-    expect(old.ok && old.project.params.fingerLengths).toEqual([4, 5, 6, 7, 8, 9, 10, 10.5, 12]);
+    expect(old.ok && old.project.params.fingerLengths).toEqual([5, 6, 7, 8, 10, 12]);
     const mine = parseProject(fileWith((p) => ((p.params as Record<string, unknown>).fingerLengths = [12, 6, 6, 8])));
     expect(mine.ok && mine.project.params.fingerLengths).toEqual([6, 8, 12]);
     const none = parseProject(fileWith((p) => ((p.params as Record<string, unknown>).fingerLengths = [])));
