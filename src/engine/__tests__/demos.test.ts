@@ -74,11 +74,12 @@ describe('defaults', () => {
     expect(DEFAULT_BOAT_CLASSES.reduce((s, c) => s + c.share, 0)).toBeCloseTo(1, 12);
   });
 
-  it('default parameters match SPEC §4, except the fairway factor (DBW 2005 Table B-2, DECISIONS D27)', () => {
+  it('default parameters match SPEC §4, except the fairway factor (D27) and the standard finger lengths (D29)', () => {
     expect(DEFAULT_PARAMS).toEqual({
       mainPierWidth: 3.0,
       fingerWidth: 0.8,
       fingerLengthRatio: 0.8,
+      fingerLengths: [4, 5, 6, 7, 8, 9, 10, 10.5, 12],
       boatsPerBay: 2,
       beamClearance: 0.5,
       lengthClearance: 0.5,

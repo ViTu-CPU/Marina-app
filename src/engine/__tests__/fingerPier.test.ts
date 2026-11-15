@@ -3,6 +3,7 @@ import { DEFAULT_BOAT_CLASSES, DEFAULT_PARAMS } from '../defaults';
 import { polygonArea } from '../geometry';
 import type { BoatClass, Params } from '../model';
 import { fingerPierPattern, localRectToPolygon, type LocalRect } from '../patterns';
+import { standardFingerLength } from '../patterns/fingerPier';
 
 const boat = (id: string): BoatClass => DEFAULT_BOAT_CLASSES.find((c) => c.id === id)!;
 const width = (r: LocalRect) => r.s1 - r.s0;
@@ -56,11 +57,28 @@ describe('finger pier pattern (SPEC §4), hand-calculated', () => {
     const bay = fingerPierPattern.bay([boat('c5'), boat('c12')], 0, DEFAULT_PARAMS);
     // 0.8 + (2.0 + 0.5) + (3.5 + 0.5) = 7.3
     expect(bay.advance).toBeCloseTo(7.3, 12);
-    // 0.8 × 12.0 = 9.6
-    expect(depth(bay.dividers[0]!)).toBeCloseTo(9.6, 12);
-    expect(depth(bay.dividers[1]!)).toBeCloseTo(9.6, 12);
+    // 0.8 × 12.0 = 9.6 → the standard 10 m (D29)
+    expect(depth(bay.dividers[0]!)).toBeCloseTo(10, 12);
+    expect(depth(bay.dividers[1]!)).toBeCloseTo(10, 12);
     expect(depth(bay.berths[0]!.slot)).toBeCloseTo(5.5, 12);
     expect(depth(bay.berths[1]!.slot)).toBeCloseTo(12.5, 12);
+    // Without a list of standard lengths the finger is exactly 0.8 × 12.0 = 9.6 m.
+    const exact = fingerPierPattern.bay([boat('c5'), boat('c12')], 0, { ...DEFAULT_PARAMS, fingerLengths: [] });
+    expect(depth(exact.dividers[0]!)).toBeCloseTo(9.6, 12);
+  });
+
+  it('standard finger lengths (D29, I67): the shortest at least the wanted length that fits the slot', () => {
+    const list = [4, 5, 6, 7, 8, 9, 10, 10.5, 12];
+    expect(standardFingerLength(4.0, 5.5, list)).toBe(4); // 5 m boat: 0.8 × 5
+    expect(standardFingerLength(5.6, 7.5, list)).toBe(6); // 7 m boat
+    expect(standardFingerLength(7.2, 9.5, list)).toBe(8); // 9 m boat
+    expect(standardFingerLength(9.6, 12.5, list)).toBe(10); // 12 m boat
+    expect(standardFingerLength(12, 15.5, list)).toBe(12); // 15 m boat
+    // Nothing long enough (18 m boat): the wanted length itself, a custom finger.
+    expect(standardFingerLength(14.4, 18.5, list)).toBe(14.4);
+    // A standard length longer than the slot is not used: 3 m boat, slot 3.5 m, wanted 2.4 m.
+    expect(standardFingerLength(2.4, 3.5, list)).toBe(2.4);
+    expect(standardFingerLength(9.6, 12.5, [])).toBe(9.6);
   });
 
   it('boatsPerBay = 1: a finger between every boat', () => {

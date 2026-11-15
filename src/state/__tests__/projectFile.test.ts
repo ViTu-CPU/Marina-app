@@ -102,6 +102,16 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parsed.ok && parsed.project.anchoring.profileHeightRatio).toBe(0.25);
   });
 
+  it('standard finger lengths: missing in older files → the default; stored sorted and unique (D29)', () => {
+    const old = parseProject(fileWith((p) => delete (p.params as Record<string, unknown>).fingerLengths));
+    expect(old.ok && old.project.params.fingerLengths).toEqual([4, 5, 6, 7, 8, 9, 10, 10.5, 12]);
+    const mine = parseProject(fileWith((p) => ((p.params as Record<string, unknown>).fingerLengths = [12, 6, 6, 8])));
+    expect(mine.ok && mine.project.params.fingerLengths).toEqual([6, 8, 12]);
+    const none = parseProject(fileWith((p) => ((p.params as Record<string, unknown>).fingerLengths = [])));
+    expect(none.ok && none.project.params.fingerLengths).toEqual([]);
+    expect(parseProject(fileWith((p) => ((p.params as Record<string, unknown>).fingerLengths = [6, -1]))).ok).toBe(false);
+  });
+
   it('files from before splayed chains open with the default splay angle; it must lie in 0–80° (D25, I61)', () => {
     const parsed = parseProject(fileWith((p) => delete (p.anchoring as Record<string, unknown>).splayAngle));
     expect(parsed.ok && parsed.project.anchoring.splayAngle).toBe(45);

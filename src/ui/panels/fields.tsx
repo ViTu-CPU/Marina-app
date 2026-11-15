@@ -72,6 +72,60 @@ export function NumberField({ label, value, onChange, min, max, step = 0.1, bare
   );
 }
 
+/**
+ * Parses a list of lengths: entries separated by spaces or semicolons, a comma right after an
+ * entry also separates ("4, 5, 10.5"), a comma inside an entry is a decimal comma ("10,5").
+ * Returns sorted unique positive numbers, or null if an entry is not one.
+ */
+export function parseLengthList(text: string): number[] | null {
+  const tokens = text
+    .split(/[;\s]+/)
+    .map((x) => x.replace(/,+$/, ''))
+    .filter((x) => x !== '');
+  const values = tokens.map((x) => Number(x.replace(',', '.')));
+  if (values.some((x) => !Number.isFinite(x) || x <= 0)) return null;
+  return [...new Set(values)].sort((a, b) => a - b);
+}
+
+/**
+ * A list of lengths in metres typed as text ("4, 5, 6, 10.5"); reported only when every
+ * entry is a positive number. Empty = no list.
+ */
+export function LengthListField({ label, value, onChange }: { label: string; value: number[]; onChange: (value: number[]) => void }) {
+  const id = useId();
+  const shown = value.join('; ');
+  const [text, setText] = useState(shown);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setText(shown);
+  }, [shown, focused]);
+  const valid = parseLengthList(text) !== null;
+  return (
+    <div className="space-y-0.5">
+      <label htmlFor={id} className="text-sm text-slate-700">
+        {label}
+      </label>
+      <input
+        id={id}
+        type="text"
+        aria-invalid={!valid}
+        className={`w-full rounded border px-1.5 py-0.5 text-sm tabular-nums ${valid ? 'border-slate-300' : 'border-red-500 bg-red-50'}`}
+        value={text}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          appStore.getState().endCoalescing();
+        }}
+        onChange={(e) => {
+          setText(e.target.value);
+          const next = parseLengthList(e.target.value);
+          if (next && next.join(';') !== value.join(';')) onChange(next);
+        }}
+      />
+    </div>
+  );
+}
+
 export function Button({
   children,
   onClick,

@@ -142,7 +142,8 @@ rules.
 |---|---|---|
 | Main pier width | 3.0 m | |
 | Finger width | 0.8 m | |
-| Finger length ÷ boat length | 0.8 | finger length = 0.8 × length of the longer boat beside it |
+| Finger length ÷ boat length | 0.8 | finger length = 0.8 × length of the longer boat beside it, rounded up to a standard length |
+| Standard finger lengths | 4, 5, 6, 7, 8, 9, 10, 10.5, 12 m | the boom lengths Top Marine publishes (docs/DECISIONS.md D29); empty = exact 0.8 × boat length |
 | Boats per bay | 2 | two boats between a pair of fingers |
 | Beam clearance | 0.5 m | total extra width per boat |
 | Length clearance | 0.5 m | extra slot length |

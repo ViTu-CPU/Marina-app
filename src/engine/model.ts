@@ -104,6 +104,11 @@ export interface Params {
   fingerWidth: number;
   /** Finger length = ratio × boat length (assumption, not a standard). */
   fingerLengthRatio: number;
+  /**
+   * Extension (D29): standard finger (boom) lengths, m. A finger takes the shortest standard
+   * length at least ratio × boat length that still fits in the slot; empty = no rounding.
+   */
+  fingerLengths: number[];
   /** 1 = finger between every boat, 2 = two boats share a bay. */
   boatsPerBay: 1 | 2;
   /** Total extra width per boat in a berth, m. */

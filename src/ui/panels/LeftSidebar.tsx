@@ -12,7 +12,7 @@ import { calibrateBackground, placeBackground } from '../tools/background';
 import { deleteSiteObject, hasEntrance } from '../tools/sitePaths';
 import { useT } from '../useT';
 import { AnchoringSection } from './CostPanels';
-import { Button, NumberField, Section } from './fields';
+import { Button, LengthListField, NumberField, Section } from './fields';
 
 const state = () => appStore.getState();
 
@@ -476,7 +476,7 @@ function BoatClassesSection() {
   );
 }
 
-type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget'>;
+type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths'>;
 
 function ParamField({ name, min, max, step }: { name: NumericParam; min: number; max: number; step?: number }) {
   const t = useT();
@@ -502,6 +502,11 @@ function DockSection() {
       <ParamField name="mainPierWidth" min={0.5} max={20} />
       <ParamField name="fingerWidth" min={0.1} max={5} />
       <ParamField name="fingerLengthRatio" min={0.1} max={1.5} step={0.05} />
+      <LengthListField
+        label={t('param.fingerLengths')}
+        value={useAppStore((s) => s.project.params.fingerLengths)}
+        onChange={(v) => state().setParams({ fingerLengths: v }, { coalesce: 'param:fingerLengths' })}
+      />
       <div className="flex items-center justify-between gap-2 text-sm text-slate-700">
         <span id="boats-per-bay">{t('param.boatsPerBay')}</span>
         <div className="flex gap-1" role="group" aria-labelledby="boats-per-bay">

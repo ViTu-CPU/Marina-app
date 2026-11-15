@@ -62,7 +62,8 @@ describe('manual editing (D22)', () => {
 
   it('the other side can hold another class: 13 berths of 12 m', () => {
     expect(both.stats.berthsByClass).toMatchObject({ c5: 16, c12: 13 });
-    expect(both.stats.fingerLength).toBeCloseTo(36 + 8 * 9.6, 6);
+    // 9 fingers of 4.0 m for the 5 m boats, 8 of 10 m (0.8 × 12 = 9.6 → standard 10 m, D29).
+    expect(both.stats.fingerLength).toBeCloseTo(36 + 8 * 10, 6);
     expect(both.feasibility).toBe('operationalOK');
   });
 

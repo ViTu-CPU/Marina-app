@@ -117,6 +117,7 @@ export const fi: Partial<Record<StringKey, string>> = {
   'param.orientationAuto': 'Automaattinen',
   'param.orientationFixed': 'Kiinteä (° pohjoisesta)',
   'param.fairwayFactor': 'Väylän leveys ÷ veneen pituus',
+  'param.fingerLengths': 'Aisojen vakiopituudet (m; tyhjä = tarkka)',
   'param.fairwayMin': 'Väylän vähimmäisleveys (m)',
   'param.obstacleClearance': 'Etäisyys esteisiin (m)',
   'param.assumption': 'Oletusarvot ovat alustavan tarkastelun oletuksia, eivät standardien arvoja.',

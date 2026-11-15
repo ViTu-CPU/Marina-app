@@ -133,10 +133,18 @@ function boatClasses(v: unknown): BoatClass[] {
   });
 }
 
+/** Extension (D29): standard finger lengths; missing in older files (they take the default). */
+function fingerLengths(v: unknown): number[] {
+  if (v === undefined) return [...DEFAULT_PARAMS.fingerLengths];
+  const list = arr(v, 'params.fingerLengths').map((x, i) => num(x, `params.fingerLengths[${i}]`));
+  if (list.some((x) => !(x > 0))) fail('params.fingerLengths must be positive lengths');
+  return [...new Set(list)].sort((a, b) => a - b);
+}
+
 function params(v: unknown): Params {
   const o = obj(v, 'params');
   // Missing keys take their defaults, so files from older versions stay readable.
-  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget'>): number =>
+  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths'>): number =>
     o[key] === undefined ? DEFAULT_PARAMS[key] : num(o[key], `params.${key}`);
   const boatsPerBay = o.boatsPerBay === undefined ? DEFAULT_PARAMS.boatsPerBay : o.boatsPerBay;
   if (boatsPerBay !== 1 && boatsPerBay !== 2) fail('params.boatsPerBay must be 1 or 2');
@@ -145,6 +153,7 @@ function params(v: unknown): Params {
     mainPierWidth: pick('mainPierWidth'),
     fingerWidth: pick('fingerWidth'),
     fingerLengthRatio: pick('fingerLengthRatio'),
+    fingerLengths: fingerLengths(o.fingerLengths),
     boatsPerBay: boatsPerBay as 1 | 2,
     beamClearance: pick('beamClearance'),
     lengthClearance: pick('lengthClearance'),
