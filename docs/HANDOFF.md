@@ -12,7 +12,7 @@ suomeksi, UI pysyy englanniksi.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D38, I86, U25).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D39, I86, U25).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013,
   AS 3962) – kaikki on alustavaa ja vaatii pätevän suunnittelijan tarkastuksen.
@@ -74,11 +74,14 @@ Kolmannessa istunnossa (omistajan päätökset D25–D32):
    300–1 200 kg, ketju 10–16 mm, poiju 45–120 kp; avoin satama = koko ylöspäin), ketju
    max(1,41 × syvyys, ylävesi + 0,8 m), etäisyyskerroin 1 säilyy. Varoitukset: syvyys > 5 m,
    vedenkorkeusvaihtelu > 1,3 m, poiju > 1,4 × veneen pituus. 3 × paino -sääntöä ei tue mikään
-   muu lähde (10–25 kertaa muita raskaampi). Demot: painot 379 t, ankkurointi 513 301 €.
+   muu lähde (10–25 kertaa muita raskaampi).
+17. **Poijurivien väylä (D38)**: Båtunionen ≥ 2,5 × veneen pituus, ≥ 20 m (painojen välissä vain
+   vapaa vesi lasketaan). Demot peräpoijuilla: suorakaide 355 → 207 paikkaa, lahti 345 → 260;
+   laituriväli 66 m (käsikirjan taulukko 1: 69 m). Sormilaiturit ennallaan.
 
 ## Avoimet asiat, ehdotettu järjestys
-0. **Väylä poijurivien välissä** (Båtunionen: ≥ 2,5 × veneen pituus, ≥ 20 m painojen välissä) ja
-   **paikkaleveys** (Båtunionen taulukko 2: 0,7–0,8 m veneen leveyttä enemmän, nyt 0,5 m oletus).
+0. **Paikkaleveys** (Båtunionen taulukko 2: kaikille kiinnitystavoille 0,7–0,8 m veneen leveyttä
+   enemmän; nyt oletus 0,5 m = käsikirjan "suojaisa ja ahdas" -tapaus). Omistajan päätettävä.
 1. Paalujen ja Marinetekin tuotteiden hinnat puuttuvat (pyydä tarjous).
 2. Hinnaston aukot: A-Laiturit G40 -ketjujen murtokuorma (kysyttävä toimittajalta);
    asennuksen tuntimenekit, työveneen päivähinta ja Marinetekin hinnat ovat oletuksia.

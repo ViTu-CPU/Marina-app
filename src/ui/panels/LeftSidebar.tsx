@@ -627,10 +627,18 @@ function DockSection() {
 
 function FairwaySection() {
   const t = useT();
+  // D38: the fairway of stern-buoy rows; shown when the project has any.
+  const buoys = useAppStore((s) => s.project.params.berthType === 'sternBuoy' || s.project.layouts.some((l) => l.berths.some((b) => b.buoy)));
   return (
     <Section title={t('section.fairway')}>
       <ParamField name="fairwayFactor" min={0.5} max={5} />
       <ParamField name="fairwayMin" min={1} max={100} step={0.5} />
+      {buoys && (
+        <>
+          <ParamField name="buoyFairwayFactor" min={0.5} max={10} step={0.1} />
+          <ParamField name="buoyFairwayMin" min={1} max={200} step={1} />
+        </>
+      )}
       <ParamField name="obstacleClearance" min={0} max={50} step={0.5} />
     </Section>
   );

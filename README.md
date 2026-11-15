@@ -158,6 +158,7 @@ rules.
 | Length clearance | 0.5 m | extra slot length |
 | Fairway width ÷ boat length | 1.75 | fairway = max(minimum, 1.75 × longest boat); 1.75 L<sub>b</sub> is the minimum fairway width without side-ties in California DBW 2005 Table B-2, where L<sub>b</sub> is the longest berth (docs/DECISIONS.md D27) |
 | Minimum fairway width | 8.0 m | |
+| Fairway at stern buoys | 2.5 × boat length, at least 20 m | between rows of stern buoys, after Svenska Båtunionen's Hamnhandboken 2016 §2.32 (docs/DECISIONS.md D38) |
 | Obstacle clearance | 2.0 m | structures and boats keep this far from obstacles |
 | Max main pier length | 150 m | |
 | First berth from shore | 0 m | |

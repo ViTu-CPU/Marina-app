@@ -177,6 +177,8 @@ export const fi: Partial<Record<StringKey, string>> = {
   'issues.hide': 'piilota',
   'site.gangwaysMiddle': 'tyhjä = yksi keskellä',
   'param.fairwayMin': 'Väylän vähimmäisleveys (m)',
+  'param.buoyFairwayFactor': 'Väylä peräpoijujen kohdalla ÷ veneen pituus',
+  'param.buoyFairwayMin': 'Väylä peräpoijujen kohdalla vähintään (m)',
   'param.obstacleClearance': 'Etäisyys esteisiin (m)',
   'param.assumption': 'Oletusarvot ovat alustavan tarkastelun oletuksia, eivät standardien arvoja.',
 

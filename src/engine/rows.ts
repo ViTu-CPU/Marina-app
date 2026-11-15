@@ -90,7 +90,8 @@ export function layoutRows(
         sMin,
         sMax,
         depth,
-        fairwayWidth: fairwayWidthFor(longest, params),
+        // D38: a row with stern buoys needs the wider fairway of buoy rows.
+        fairwayWidth: fairwayWidthFor(longest, params, active.some((b) => b.type === 'sternBuoy') ? 'sternBuoy' : 'finger'),
         berths: active,
       });
     }

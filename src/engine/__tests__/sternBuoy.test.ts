@@ -9,6 +9,8 @@ import { costEstimate } from '../bom';
 import type { PriceList, Product } from '../catalog';
 import type { Berth, BoatClass, MainPier, Params, Site } from '../model';
 import { sternBuoyDistance, sternBuoyPattern } from '../patterns/sternBuoy';
+import { fairwayWidthFor, rowDesign } from '../fill';
+import { layoutRows } from '../rows';
 import { pierPolygon, prepareSite } from '../site';
 
 const boat = (id: string): BoatClass => DEFAULT_BOAT_CLASSES.find((c) => c.id === id)!;
@@ -34,6 +36,22 @@ describe('stern-buoy berths (D35), hand-calculated', () => {
   });
 });
 
+describe('fairway in front of stern-buoy rows (D38, Båtunionen)', () => {
+  it('2.5 × boat length, at least 20 m, never less than the general rule', () => {
+    // 12 m: max(1.75 · 12 = 21, 8; 2.5 · 12 = 30, 20) = 30 m; 6 m: max(10.5, 8; 15, 20) = 20 m.
+    expect(fairwayWidthFor(12, SB, 'sternBuoy')).toBe(30);
+    expect(fairwayWidthFor(6, SB, 'sternBuoy')).toBe(20);
+    expect(fairwayWidthFor(12, SB, 'finger')).toBe(21);
+    expect(fairwayWidthFor(12, SB)).toBe(21);
+    // A smaller buoy factor than the general one leaves the general rule.
+    expect(fairwayWidthFor(12, { ...SB, buoyFairwayFactor: 1, buoyFairwayMin: 5 }, 'sternBuoy')).toBe(21);
+    // The row design of a stern-buoy pier uses it: pitch = 3 + 2 · 16.5 + 30 = 66 m.
+    const design = rowDesign(DEFAULT_BOAT_CLASSES, SB, sternBuoyPattern)!;
+    expect(design.fairwayWidth).toBe(30);
+    expect(design.pitch).toBeCloseTo(66, 9);
+  });
+});
+
 describe('stern-buoy layouts on the demo projects', () => {
   for (const demo of DEMO_PROJECTS) {
     const project = demo.create();
@@ -56,6 +74,12 @@ describe('stern-buoy layouts on the demo projects', () => {
         for (let i = 0; i < shapes.length; i++) for (let j = i + 1; j < shapes.length; j++) if (convexPolygonsOverlap(shapes[i]!, shapes[j]!)) overlaps++;
         expect(overlaps).toBe(0);
         expect(layout.stats.issueCounts.error).toBe(0);
+        // D38: every stern-buoy row keeps Båtunionen's fairway in front of it.
+        const longest = Math.max(...project.boatClasses.filter((c) => layout.berths.some((b) => b.boatClassId === c.id)).map((c) => c.length));
+        for (const row of layoutRows(layout.piers, layout.fingers, layout.berths, project.boatClasses, params)) {
+          expect(row.fairwayWidth).toBeGreaterThanOrEqual(20);
+          expect(row.fairwayWidth).toBeLessThanOrEqual(Math.max(20, 2.5 * longest) + 1e-9);
+        }
       }
     });
   }

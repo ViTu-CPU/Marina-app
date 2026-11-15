@@ -89,6 +89,8 @@ describe('defaults', () => {
       lengthClearance: 0.5,
       fairwayFactor: 1.75,
       fairwayMin: 8.0,
+      buoyFairwayFactor: 2.5,
+      buoyFairwayMin: 20,
       obstacleClearance: 2.0,
       maxMainPierLength: 150,
       orientation: 'auto',

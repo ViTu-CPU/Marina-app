@@ -177,6 +177,8 @@ function params(v: unknown): Params {
     lengthClearance: pick('lengthClearance'),
     fairwayFactor: pick('fairwayFactor'),
     fairwayMin: pick('fairwayMin'),
+    buoyFairwayFactor: pick('buoyFairwayFactor'),
+    buoyFairwayMin: pick('buoyFairwayMin'),
     obstacleClearance: pick('obstacleClearance'),
     maxMainPierLength: pick('maxMainPierLength'),
     orientation,

@@ -175,6 +175,8 @@ export const en = {
   'issues.hide': 'hide',
   'site.gangwaysMiddle': 'empty = one at the middle',
   'param.fairwayMin': 'Min fairway width (m)',
+  'param.buoyFairwayFactor': 'Fairway at stern buoys ÷ boat length',
+  'param.buoyFairwayMin': 'Min fairway at stern buoys (m)',
   'param.obstacleClearance': 'Obstacle clearance (m)',
   'param.assumption': 'Defaults are assumptions for a first study, not values from a standard.',
 

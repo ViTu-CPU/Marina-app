@@ -41,16 +41,22 @@ export interface RowDesign {
 /** Boat classes that take part in the mix, i.e. with a positive share. */
 export const activeClasses = (classes: BoatClass[]): BoatClass[] => classes.filter((c) => c.share > 0);
 
-/** Fairway width required next to boats of the given length (SPEC §5.3). */
-export const fairwayWidthFor = (boatLength: number, params: Params): number =>
-  Math.max(params.fairwayMin, params.fairwayFactor * boatLength);
+/**
+ * Fairway width required next to boats of the given length (SPEC §5.3). In front of stern-buoy
+ * rows also Båtunionen's manoeuvring width, 2.5 × L and at least 20 m (D38): the buoys are only
+ * pulled towards the pier while the berths are taken, so only the water beyond them is free.
+ */
+export const fairwayWidthFor = (boatLength: number, params: Params, berthType: BerthType = 'finger'): number => {
+  const general = Math.max(params.fairwayMin, params.fairwayFactor * boatLength);
+  return berthType === 'sternBuoy' ? Math.max(general, params.buoyFairwayMin, params.buoyFairwayFactor * boatLength) : general;
+};
 
 export function rowDesign(classes: BoatClass[], params: Params, pattern: BerthPattern): RowDesign | null {
   const active = activeClasses(classes);
   if (active.length === 0) return null;
   const longest = active.reduce((a, b) => (b.length > a.length ? b : a));
   const rowDepth = pattern.slotLength(longest, params);
-  const fairwayWidth = fairwayWidthFor(longest.length, params);
+  const fairwayWidth = fairwayWidthFor(longest.length, params, pattern.berthType);
   const minBayFootprint = Math.min(...active.map((c) => pattern.bay([c], 0, params).footprint));
   return {
     rowDepth,

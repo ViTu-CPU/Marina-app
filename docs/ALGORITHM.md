@@ -23,6 +23,7 @@ with a share above zero (strategy E sizes each row separately, see §3):
 ```
 row depth     = boat length + lengthClearance
 fairway width = max(fairwayMin, fairwayFactor × boat length)
+                (stern-buoy rows also ≥ max(buoyFairwayMin, buoyFairwayFactor × boat length), D38)
 pier pitch    = mainPierWidth + 2 × row depth + fairway width
 ```
 

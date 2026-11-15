@@ -752,7 +752,7 @@ function zonedContext(ctx: SearchContext): ZonedContext {
     .map((boat) => ({
       boat,
       depth: pattern.slotLength(boat, params),
-      fairway: fairwayWidthFor(boat.length, params),
+      fairway: fairwayWidthFor(boat.length, params, pattern.berthType),
       minFootprint: Math.min(...active.filter((c) => c.length <= boat.length).map(footprint)),
     }));
   const cache = new Map<string, FillContext>();
@@ -1148,9 +1148,9 @@ function explainEmpty(ctx: SearchContext): Diagnostic[] {
   // usable as soon as one class fits.
   const { pattern } = ctx.fill;
   const needs = activeClasses(ctx.fill.classes).map((c) => ({
-    reach: pattern.slotLength(c, params) + fairwayWidthFor(c.length, params),
-    pierRun: params.shoreOffset + pattern.bay([c], 0, params).footprint + fairwayWidthFor(c.length, params),
-    fairway: fairwayWidthFor(c.length, params),
+    reach: pattern.slotLength(c, params) + fairwayWidthFor(c.length, params, pattern.berthType),
+    pierRun: params.shoreOffset + pattern.bay([c], 0, params).footprint + fairwayWidthFor(c.length, params, pattern.berthType),
+    fairway: fairwayWidthFor(c.length, params, pattern.berthType),
   }));
   const reach = Math.min(...needs.map((n) => n.reach));
   const moduleWidth = params.mainPierWidth + reach;

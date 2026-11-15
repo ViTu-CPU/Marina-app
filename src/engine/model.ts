@@ -152,6 +152,12 @@ export interface Params {
   fairwayFactor: number;
   /** Absolute minimum fairway width, m. */
   fairwayMin: number;
+  /**
+   * Extension (D38): fairway in front of stern-buoy rows = factor × longest boat length, at least
+   * `buoyFairwayMin` (and at least the general rule). Svenska Båtunionen: 2.5 × L, at least 20 m.
+   */
+  buoyFairwayFactor: number;
+  buoyFairwayMin: number;
   /** Minimum distance structures/boats ↔ obstacles, m. */
   obstacleClearance: number;
   /** Maximum length of one main pier, m. */

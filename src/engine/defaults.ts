@@ -30,6 +30,10 @@ export const DEFAULT_PARAMS: Params = {
   lengthClearance: 0.5,
   fairwayFactor: 1.75,
   fairwayMin: 8.0,
+  // D38: between rows of stern buoys "Minimibredden kan sättas till ca 2,5 gånger båtlängden men
+  // bör vara minst 20 meter" (Svenska Båtunionen, Hamnhandboken 2016, §2.32).
+  buoyFairwayFactor: 2.5,
+  buoyFairwayMin: 20,
   obstacleClearance: 2.0,
   maxMainPierLength: 150,
   orientation: 'auto',
