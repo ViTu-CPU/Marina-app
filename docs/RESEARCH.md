@@ -869,3 +869,31 @@ be used as a design specification."* The tool does not claim compliance with it.
 | 4.9–4.11 | Berthing at ≥ 0.3 m/s; anchorage elasticity; gangway loads from lateral displacement of the pontoon. | Not computed. | Listed as not computed. |
 | 5.1.1 (c), (d) | The pontoon system's ability to withstand the wave climate and the need for and type of attenuator. | — | Breakwater proposal (D48). |
 | 5.1.2 | *"The marina should allow access from the water without assistance if the freeboard is more than 500 mm."* | Ladders per pier in the BOM (I51). | Premier freeboard 0.56 m > 0.5 m: ladders needed; recorded. |
+
+## 12. Marinetek floating breakwaters (read 2026-11-15)
+
+Brochures on [marinetek.hr](https://www.marinetek.hr/en/brochures-and-specifications/) (modification
+date 14.11.2014), read for the breakwater proposal (DECISIONS D48):
+
+- **Breakwater Pontoons 3300, 3800** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Breakwater-3300-3800.pdf)):
+  M3316BR / M3320BR 16,05 / 19,90 × 3,3 m (concrete 3,0 m), height 1,0 m, 20,9 / 26,0 t, freeboard 0,55 m,
+  joints 2 × 703 kN; M3816BR / M3820BR 16,05 / 19,90 × 3,8 m (3,5 m), height 1,2 m, 31,5 / 39,2 t, freeboard
+  0,61 m, joints 2 × 812 kN (*"3800 -series pontoons have middle rubber in joints"*). *"The Marinetek
+  Breakwaters without keels work best when the sea wave length is less than 18 m."* *"Mooring with chains
+  or Seaflex."*
+- **K-series Breakwater 3300K, 4300K, 5300K** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Breakwater-K-3300-4300-5300.pdf)):
+  3312BRK / 3316BRK 12,20 / 16,05 × 3,3 m, height 1,8 m, 20,9 / 28,0 t, freeboard 0,55 m; 4320BRK 19,90 × 4,3 m,
+  41,1 t; 5320BRK 19,90 × 5,3 m, 52,4 t (freeboard 0,60 m; *"also available with 16,05 m lengths"*); joints
+  2 × 812 kN. *"The Marinetek Breakwaters with keels work best when the sea wave lengths is less than 26 m."*
+- Both have a diagram **"Wave attenuation capacity, Sheltered sea conditions"**: Ac (%) against Hs (m) and
+  L (m) on one shared horizontal axis, with scales for wind 10–20 m/s and effective fetch 1–5 km. The curves
+  were digitised for the tool from the brochures' vector drawings rendered at 400 dpi (pixel tracing of
+  each curve, axis gridlines located from the drawing; table in `src/engine/breakwater.ts`). Examples: 3300 at
+  Hs 0.32 m / L 4.8 m 74 %, at 0.69 m / 12 m 57 %, curve ends at 0.97 m / 17.8 m (25 %); 3800 ends at 1.14 m /
+  21.9 m (20 %); 3300K from 77 % (0.30 m) to 23 % (1.07 m / 20.5 m); 4300K from 87 % to 20 % (1.26 m / 26.2 m);
+  5300K from 90 % to 29 % (1.29 m / 27.4 m). The brochures do not define Ac; it is read as the reduction of
+  the wave height (DECISIONS I93).
+- **Premier Pontoons 2700, 3300** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Premier-pontoons-2700-3300.pdf)):
+  M2712PE / M2716PE / M2720PE 12,20 / 16,05 / 19,90 × 2,7 m (concrete 2,4 m), 12,5 / 16,5 / 20,6 t; M3312PE /
+  M3316PE / M3320PE × 3,3 m (3,0 m), 15,6 / 20,7 / 25,7 t; height 1,0 m, net capacity 5,6 kN/m², freeboard 0,56 m,
+  joints 2 × 322 kN, joint gap 35 mm; *"Premier pontoons can be moored by piles, chain or Seaflex."* (DECISIONS D44.)

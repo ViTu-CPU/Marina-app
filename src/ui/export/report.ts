@@ -5,6 +5,7 @@
  */
 import type { AnchoringParams } from '../../engine/anchoring';
 import { BOM_GROUPS, type BomGroup } from '../../engine/bom';
+import { breakwaterProposal, weightPerMetre } from '../../engine/breakwater';
 import type { Layout, Params, Project } from '../../engine/model';
 import { pierAxis } from '../../engine/rows';
 import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../../engine/waves';
@@ -248,6 +249,28 @@ export function buildReportHtml(input: ReportInput): string {
     if (waveResult.piers.length > 0) parts.push(`<p class="small">${esc(t('waves.piers'))}: ${esc(waveResult.piers.map((p) => p.id).join(', '))}</p>`);
     parts.push(`<div class="disclaimer">${esc(t(`waveAdvice.${waveResult.advice}`))}</div>`);
     if (waveResult.doubleBerthPiles && project.params.boatsPerBay === 2) parts.push(`<p class="small">${esc(t('waves.piles'))}</p>`);
+    // D48: floating breakwater type.
+    const proposal = breakwaterProposal(waveResult);
+    if (proposal) {
+      const p = proposal.proposed;
+      parts.push(`<h3>${esc(t('breakwater.title'))}</h3>`);
+      parts.push(
+        `<p>${p ? `${esc(t('breakwater.proposed'))} <strong>${esc(p.name)}</strong> (${esc(p.modules.map((m) => `${m.code} ${len(m.length)} × ${len(p.width)} m`).join(', '))})` : esc(t('breakwater.none'))}</p>`,
+      );
+      parts.push(
+        table(
+          [t('breakwater.product'), t('breakwater.width'), t('breakwater.perMetre'), t('breakwater.result')],
+          proposal.evaluations.map((e) => [
+            esc(e.product.id),
+            esc(`${len(e.product.width)} / ${height(e.product.freeboard)}`),
+            esc(len(weightPerMetre(e.product))),
+            esc(`${e.ok ? t('breakwater.ok') : e.checks.some((c) => c.transmitted === null) ? t('breakwater.beyondCurve') : t('breakwater.notEnough')}${e.beyondBestWavelength ? ` (${t('breakwater.beyondBest')} ${len(e.product.bestBelowWavelength)} m)` : ''}`),
+          ]),
+          [1, 2],
+        ),
+      );
+      parts.push(`<p class="small">${esc(t('breakwater.note'))}</p>`);
+    }
     const climate = w.climate;
     if (climate) {
       parts.push(

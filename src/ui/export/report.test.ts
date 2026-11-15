@@ -83,6 +83,9 @@ describe('printable report (U24)', () => {
     expect(w).toContain('S 180°');
     expect(w).not.toContain('N 0°');
     expect(w).toContain(translate('en', 'waveCriteria.as3962'));
+    // D48: the breakwater types are compared when a direction exceeds the criteria.
+    expect(w).toContain(translate('en', 'breakwater.title'));
+    expect(w).toContain('3300BR');
   });
 
   it('in Finnish; without a price list or an image', () => {

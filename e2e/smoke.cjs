@@ -508,6 +508,8 @@ async function waitForServer() {
       assert.match(await tool.locator('tr[data-sector="E"]').textContent(), /Exceeds|OK/);
       const advice = await tool.getByTestId('wave-advice').textContent();
       assert.match(advice, /floating wave attenuator|no wave protection|fixed breakwater/);
+      // D48: a direction exceeds the criteria, so Marinetek's floating breakwaters are compared.
+      assert.match(await tool.getByTestId('breakwater').textContent(), /Proposed type: Marinetek|None of Marinetek/);
       // D41: wind climate from Open-Meteo (mocked: the test must not depend on the network or its quota).
       const requests = [];
       await page.route('https://archive-api.open-meteo.com/**', (route) => {

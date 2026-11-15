@@ -6,6 +6,7 @@
  * Preliminary only.
  */
 import { useState } from 'react';
+import { breakwaterProposal, weightPerMetre, type BreakwaterProposal } from '../../engine/breakwater';
 import { centroid } from '../../engine/geometry';
 import { pierAxis } from '../../engine/rows';
 import {
@@ -188,6 +189,67 @@ function WindSection() {
   );
 }
 
+/** D48: Marinetek's floating breakwaters against the waves that exceed the criteria. */
+function BreakwaterSection({ proposal }: { proposal: BreakwaterProposal }) {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const len = (m: number) => formatLength(m, language);
+  const h = (m: number) => formatHeight(m, language);
+  const p = proposal.proposed;
+  const th = 'px-1 font-medium';
+  return (
+    <div className="space-y-1" data-testid="breakwater">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('breakwater.title')}</div>
+      <p className={p ? 'text-slate-800' : 'text-amber-800'}>
+        {p ? (
+          <>
+            {t('breakwater.proposed')} <span className="font-medium">{p.name}</span> ({p.modules.map((m) => `${m.code} ${len(m.length)} × ${len(p.width)} m`).join(', ')})
+          </>
+        ) : (
+          t('breakwater.none')
+        )}
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-right text-xs tabular-nums">
+          <thead>
+            <tr className="text-slate-500">
+              <th className={`${th} text-left`}>{t('breakwater.product')}</th>
+              <th className={th}>{t('breakwater.modules')}</th>
+              <th className={th}>{t('breakwater.width')}</th>
+              <th className={th}>{t('breakwater.perMetre')}</th>
+              <th className={th}>{t('breakwater.worst')}</th>
+              <th className={`${th} text-left`}>{t('breakwater.result')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {proposal.evaluations.map((e) => {
+              const beyond = e.checks.some((c) => c.transmitted === null);
+              const worst = e.checks.reduce<{ tr: number; limit: number } | null>(
+                (a, c) => (c.transmitted === null ? a : !a || c.transmitted - c.check.limit! > a.tr - a.limit ? { tr: c.transmitted, limit: c.check.limit! } : a),
+                null,
+              );
+              return (
+                <tr key={e.product.id} className={e.product === p ? 'bg-emerald-50 font-medium' : ''}>
+                  <td className="px-1 text-left">{e.product.id}</td>
+                  <td className="px-1">{e.product.modules.map((m) => `${len(m.length)} (${len(m.weightT)})`).join(', ')}</td>
+                  <td className="px-1">{`${len(e.product.width)} / ${h(e.product.freeboard)}`}</td>
+                  <td className="px-1">{len(weightPerMetre(e.product))}</td>
+                  <td className="px-1">{worst ? `${h(worst.tr)} / ${h(worst.limit)}` : '–'}</td>
+                  <td className={`px-1 text-left ${e.ok ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {e.ok ? t('breakwater.ok') : beyond ? t('breakwater.beyondCurve') : t('breakwater.notEnough')}
+                    {e.beyondBestWavelength ? ` (${t('breakwater.beyondBest')} ${len(e.product.bestBelowWavelength)} m)` : ''}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-500">{t('breakwater.note')}</p>
+    </div>
+  );
+}
+
 /** One row of the sector table: inputs and the waves of that direction. */
 function SectorRow({ k, sector, result, designDepth }: { k: number; sector: WaveSectorInput; result: SectorAssessment | undefined; designDepth: number }) {
   const t = useT();
@@ -255,6 +317,7 @@ export function WaveTool() {
 
   const bearings = (piers ?? []).map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) }));
   const result = waveAssessment(waves, designDepth, bearings);
+  const proposal = breakwaterProposal(result);
   const set = (patch: Partial<typeof waves>, key: string) => state().setWaves(patch, { coalesce: `waves:${key}` });
   const len = (m: number) => formatLength(m, language);
   const h = (m: number) => formatHeight(m, language);
@@ -387,6 +450,7 @@ export function WaveTool() {
                   {t(`waveAdvice.${result.advice}`)}
                 </div>
                 {result.doubleBerthPiles && boatsPerBay === 2 && <p className="text-xs text-amber-800">{t('waves.piles')}</p>}
+                {proposal && <BreakwaterSection proposal={proposal} />}
               </>
             )}
             <p className="text-xs text-slate-500">{t('waves.note')}</p>
