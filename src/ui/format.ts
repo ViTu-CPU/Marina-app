@@ -24,3 +24,9 @@ export const formatRatio = (value: number, language: Language = 'en'): string =>
 
 export const formatPercent = (fraction: number, language: Language = 'en'): string =>
   `${formatter(language, 0).format(Math.round(fraction * 100))} %`;
+
+/** Money in euros, whole euros with grouping, without the unit. */
+export const formatEuro = (euros: number, language: Language = 'en'): string => formatter(language, 0).format(Math.round(euros));
+
+/** A force in kN, 1 decimal, without the unit. */
+export const formatKn = (kn: number, language: Language = 'en'): string => formatter(language, 1).format(kn);

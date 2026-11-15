@@ -72,10 +72,21 @@ npx playwright install chromium
   calibration needed.
 - Background image (aerial photo or map screenshot) with two-point scale calibration,
   rotation and opacity.
+- Berth types: finger piers (two boats per finger), Y-boom berths (one boat between light
+  booms, fingers for boats too long for a boom) or stern-buoy berths (bow to the pier, buoy
+  at boat length + factor × water depth), as the project default and per pier side.
+- Access pontoons: empty pontoon metres, e.g. in front of a high quay wall; main piers
+  start from their edges.
 - Two built-in examples: a rectangular basin and an irregular bay.
+- Wave screening ("Waves"): wind waves from the longest fetch, its direction, the depth and
+  extreme winds (USACE Coastal Engineering Manual II-2), checked against the small craft harbour
+  criteria of UFC 4-152-07, with advice on a floating attenuator or a fixed breakwater; wind rose
+  and extreme winds by direction from Open-Meteo (ERA5), non-commercial use (preliminary;
+  docs/DECISIONS.md D40, D41).
 
 **Inputs**
-- Boat classes: length, beam, target share, colour.
+- Boat classes: length, beam, colour, and either a target share or a target number of
+  berths per class (the generator places at most that many; the shortfall is shown).
 - Dock parameters: pier and finger widths, finger length ratio, one or two boats per bay,
   clearances, distance of the first berth from the shore, maximum pier length, pier
   direction (automatic or fixed).
@@ -103,28 +114,56 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 - Issue list; clicking an issue zooms to the element.
 - Select a pier or berth; remove/restore berths; lock a pier; drag a pier along its axis
   or sideways. Edited layouts are marked "Manually edited".
+- Fill one side of a pier with one boat class or with the mix, leaving empty metres at the
+  shore end; change a berth's boat class; change a pier's length; delete a pier; draw a new
+  pier and fill it. Fills never take the fairway that existing berths need.
+
+**Anchoring and cost (preliminary)**
+- Anchoring plan for one design depth, shown as a map layer: crossed chain pairs and
+  concrete anchors per pier and access pontoon, chain and anchor chosen from the price list
+  by breaking load and required mass; anchor type concrete block (friction) or concrete wedge
+  (Pearl Harbor type, published capacities). Main piers of 10 m or more get two crossed chains
+  at their head; fingers longer than 12 m get an end pile (Marinetek; not priced). An access pontoon in front of the shore has
+  chains on the water side only and is held off the wall by two shore chains at each of its
+  gangways (placed by the user, or one at its middle) and by the piers attached to it. Each
+  stern buoy gets its own sinker, chain and float from Svenska Båtunionen's table by boat weight
+  (or Top Marine's, or factor × boat weight), chain at a 1:1 slope. All factors are editable; a quantity estimate, not a
+  mooring design.
+- Bill of materials and cost estimate: pontoon modules, fingers, gangways, anchoring
+  hardware, fittings, labour and plant, with site overheads, contingency, VAT 25.5 % on the
+  total and a range. Every line shows its basis and source. Export as Excel.
+- Price list `data/hinnasto.xlsx` (A-Laiturit, Top Marine incl. buoys, Suomen Laatulaituri,
+  Savorak, Marinetek estimate, labour and plant rates), editable in Excel; import an edited copy in the app or
+  replace the file and rebuild. See [docs/RESEARCH.md](docs/RESEARCH.md).
 
 **Files**
 - Autosave in the browser; project file export/import (JSON).
+- Report of the selected alternative ("Report (PDF)"): map, comparison, inputs, anchoring
+  plan, cost estimate and bill of materials, cost parameters and product sources, with the
+  disclaimer on every page. It opens the browser's print dialog; choose "Save as PDF".
 - PNG export of the canvas and CSV export of the comparison and the berth list. Both
   carry the disclaimer.
 - Undo/redo. English and Finnish UI.
 
 ## Assumptions behind the default parameters
 
-These defaults are **assumptions for a first study, not values taken from any standard or
-guideline**. Replace them with values appropriate for the site and the applicable rules.
+These defaults are **assumptions for a first study, not values taken from any standard**;
+only the fairway factor follows a published guideline (California DBW 2005, a US guideline,
+not a Finnish rule). Replace them with values appropriate for the site and the applicable
+rules.
 
 | Parameter | Default | Meaning |
 |---|---|---|
 | Main pier width | 3.0 m | |
 | Finger width | 0.8 m | |
-| Finger length ÷ boat length | 0.8 | finger length = 0.8 × length of the longer boat beside it |
+| Finger length ÷ boat length | 0.8 | finger length = 0.8 × length of the longer boat beside it, rounded up to a standard length |
+| Standard finger lengths | 5, 6, 7, 8, 10, 12 m | Marinetek's standard booms and mooring fingers (docs/DECISIONS.md D29, I70); empty = exact 0.8 × boat length |
 | Boats per bay | 2 | two boats between a pair of fingers |
-| Beam clearance | 0.5 m | total extra width per boat |
+| Beam clearance | 0.5 m | total extra width per boat; owner's choice (D39). Svenska Båtunionen's Hamnhandboken 2016 gives 0.7–0.8 m, 0.2 m less in a sheltered, cramped harbour |
 | Length clearance | 0.5 m | extra slot length |
-| Fairway width ÷ boat length | 1.5 | fairway = max(minimum, 1.5 × longest boat) |
+| Fairway width ÷ boat length | 1.75 | fairway = max(minimum, 1.75 × longest boat); 1.75 L<sub>b</sub> is the minimum fairway width without side-ties in California DBW 2005 Table B-2, where L<sub>b</sub> is the longest berth (docs/DECISIONS.md D27) |
 | Minimum fairway width | 8.0 m | |
+| Fairway at stern buoys | 2.5 × boat length, at least 20 m | between rows of stern buoys, after Svenska Båtunionen's Hamnhandboken 2016 §2.32 (docs/DECISIONS.md D38) |
 | Obstacle clearance | 2.0 m | structures and boats keep this far from obstacles |
 | Max main pier length | 150 m | |
 | First berth from shore | 0 m | |
@@ -138,16 +177,29 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
 - Strategies A–D use **one pier module for the whole layout**, sized by the longest boat
   class. Strategy E sizes each row for its own boats, but only for piers square to the
   shore, and its search over start positions is coarser (2 m) than that of A–C (1 m).
-- Only **finger-pier berths**. Side-to, Y-boom and stern-buoy berths are not implemented
-  (the engine has an interface for them).
+- No **side-to berths** (finger piers, Y-boom and stern-buoy berths are implemented; the
+  engine has an interface for more).
+- Stern buoys follow the Swedish boating union's marina handbook (Hamnhandboken 2016) by default;
+  published rules of thumb differ by a factor of up to 25 (docs/RESEARCH.md §9.14). Boat weights
+  should be entered, otherwise they are estimated from the length.
 - Piers are straight, start at the shoreline and keep one fairway width clear at the head.
   No T- or L-heads, no piers from two banks on the same line, strategy D places one pier.
 - The search uses fixed steps (5° and 1 m) and no local refinement, so it finds good
   layouts, not provably optimal ones.
 - Fairway width is a single rule (factor × boat length, with a minimum). There is no
   turning-basin check.
-- **No depth data**, wind, waves, currents, ice, mooring loads, costs or environmental
-  constraints.
+- One design water depth per project (no soundings). The anchoring plan covers wind only:
+  no waves, currents, ice or berthing loads, no structural check of pontoons and fixings.
+  Wind loads follow UFC 4-152-07 and the defaults have public sources where one was found
+  (docs/RESEARCH.md §5, §9). Plain concrete blocks hold by friction and come out heavier
+  than suppliers' standard packages; the wedge (Pearl Harbor type) option uses published
+  working capacities and needs longer chains. The chains of a pier are splayed towards its
+  ends (default 45°, a weak source) so that they also hold the wind along the pier; how
+  real installations take that load is not documented publicly (docs/DECISIONS.md I49,
+  I54–I61, D25). Nothing is checked against RIL 201-3-2013 or AS 3962.
+- Costs come from public list prices and stated assumptions (labour output, work-boat
+  rate, Marinetek prices); they are a feasibility-stage estimate, not a quote.
+- No environmental constraints.
 - The water area is one simple polygon. Islands are entered as obstacles.
 - Coordinates are local metres. The OpenStreetMap background is a drawn map, not an aerial
   photo, needs an internet connection, and has no place-name search. Its tiles come from
@@ -155,12 +207,16 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   [usage policy](https://operations.osmfoundation.org/policies/tiles/) allows light use
   only; a widely used deployment would need another tile source. There is no GeoJSON import.
 - Issue messages and a few notices are in English also in the Finnish UI.
-- Layout generation runs on the main thread; the page is unresponsive while it runs
-  (about one second for the examples in the test environment).
+- Layout generation runs in a Web Worker (about one second for the examples in the test
+  environment); the page stays responsive and the run can be cancelled, but there is no
+  progress percentage.
 - Browser storage is small. A large background image is not autosaved; it is kept in
   saved project files.
 - Made for desktop browsers with a mouse. Touch input is not supported.
-- The JavaScript bundle is about 0.9 MB (0.27 MB gzipped), mostly the geometry library.
+- The JavaScript is about 1.06 MB (about 0.31 MB gzipped), split into the app and the
+  libraries (React, Konva, JSTS), plus a 0.32 MB worker loaded at the first generation. The
+  geometry library is needed on the main thread too (validation after edits), so it is not
+  loaded lazily.
 
 ## Tests
 
@@ -193,9 +249,9 @@ The engine takes plain JSON and returns plain JSON, and is deterministic.
 
 Not started; listed in the specification as later phases.
 
-- More berth patterns: side-to, Y-boom, bow-to with stern buoy.
+- More berth patterns: side-to (Y-boom and stern-buoy berths are done).
 - Manual editing: rotate and resize piers, add and remove fingers, T- and L-heads.
 - Turning-basin check; better optimisation; local refinement of angle and offset.
-- GeoJSON import in a projected metric CRS; DXF export; PDF report.
+- GeoJSON import in a projected metric CRS; DXF export.
 - Full Finnish localisation, including issue messages.
 - Bathymetry and draught per boat class; map tiles; exposure; cost estimation.

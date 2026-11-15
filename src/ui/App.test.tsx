@@ -105,6 +105,74 @@ describe('app shell (SPEC §8)', () => {
     expect(appStore.getState().project.boatClasses.map((c) => c.id)).not.toContain('c12');
   });
 
+  it('the boat mix can be given as target counts (D20) and switched back in one undo step each', () => {
+    renderShell();
+    act(() => appStore.getState().setBoatClasses(appStore.getState().project.boatClasses.map((c) => ({ ...c, count: 0 }))));
+    fireEvent.click(screen.getByRole('button', { name: 'Count' }));
+    const { project } = appStore.getState();
+    expect(project.params.berthTarget).toBe('count');
+    // Without layouts the counts start from the shares of 100 berths.
+    expect(project.boatClasses.map((c) => c.count)).toEqual([30, 35, 25, 10]);
+    expect(screen.getByText(/Target berths/).textContent).toContain('100');
+    fireEvent.change(screen.getByLabelText('Count: 5 m'), { target: { value: '12' } });
+    expect(appStore.getState().project.boatClasses[0]!.count).toBe(12);
+    fireEvent.click(screen.getByRole('button', { name: 'Share %' }));
+    expect(appStore.getState().project.params.berthTarget).toBe('share');
+    expect(screen.getByLabelText('Share (%): 5 m')).toBeTruthy();
+    act(() => appStore.getState().undo());
+    expect(appStore.getState().project.params.berthTarget).toBe('count');
+  });
+
+  it('a pier side can be filled with one class, a berth can change class, a pier can be deleted (D22)', () => {
+    renderShell();
+    act(() => {
+      appStore.getState().loadDemo('rectBasin');
+      appStore.getState().generate();
+    });
+    const layout = () => appStore.getState().project.layouts.find((l) => l.id === appStore.getState().selectedLayoutId)!;
+    const pier = layout().piers[0]!;
+    act(() => appStore.getState().select({ kind: 'pier', id: pier.id }));
+    fireEvent.change(screen.getByLabelText('Boat class to fill with'), { target: { value: 'c5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Fill left side' }));
+    const left = layout().berths.filter((b) => b.pierId === pier.id && b.side === 'left');
+    expect(left.length).toBeGreaterThan(0);
+    expect(left.every((b) => b.boatClassId === 'c5')).toBe(true);
+    expect(layout().modified).toBe(true);
+
+    act(() => appStore.getState().select({ kind: 'berth', id: left[0]!.id }));
+    fireEvent.change(screen.getByLabelText('Boat class'), { target: { value: 'c7' } });
+    expect(layout().berths.find((b) => b.id === left[0]!.id)!.boatClassId).toBe('c7');
+
+    act(() => appStore.getState().select({ kind: 'pier', id: pier.id }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete pier' }));
+    expect(layout().piers.some((p) => p.id === pier.id)).toBe(false);
+    expect(appStore.getState().selection).toBeNull();
+  });
+
+  it('shows the anchoring plan and the cost estimate once the price list is loaded (D23, D24)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { parsePriceListFile } = await import('../catalog/priceList');
+    const parsed = parsePriceListFile(readFileSync('data/hinnasto.xlsx'), 'hinnasto.xlsx');
+    renderShell();
+    act(() => {
+      appStore.getState().loadDemo('rectBasin');
+      appStore.getState().generate();
+    });
+    expect(screen.getAllByText('Loading the price list …').length).toBeGreaterThan(0);
+    act(() => appStore.getState().setBuiltInPriceList(parsed.ok ? parsed.priceList : null));
+    expect(screen.getByText('Total VAT 0 %')).toBeTruthy();
+    expect(screen.getByText('Anchor lines')).toBeTruthy();
+    // Choosing another pontoon series changes the project's choice (one undo step).
+    fireEvent.change(screen.getByLabelText('Pontoons'), { target: { value: 'A-Laiturit MX 3 m' } });
+    expect(appStore.getState().project.cost.pontoonSeries).toBe('A-Laiturit MX 3 m');
+    act(() => appStore.getState().undo());
+    expect(appStore.getState().project.cost.pontoonSeries).toBe('');
+    // Anchoring parameters are part of the project (the section is collapsed but in the DOM).
+    fireEvent.change(screen.getByLabelText('Design water depth (m)'), { target: { value: '6' } });
+    expect(appStore.getState().project.anchoring.depth).toBe(6);
+    act(() => appStore.getState().setBuiltInPriceList(null));
+  });
+
   it('removing a berth from the selection panel marks the layout as manually edited', () => {
     renderShell();
     act(() => {

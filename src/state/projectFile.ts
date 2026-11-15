@@ -1,12 +1,18 @@
 /**
  * JSON project file: export and import with structural validation (SPEC §2, persistence).
  */
-import { DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
+import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type Seabed } from '../engine/anchoring';
+import { DEFAULT_WAVES, type WaveSettings } from '../engine/waves';
+import { SECTORS, type WindClimate } from '../engine/wind';
+import { PRODUCT_CATEGORIES, PRODUCT_UNITS, type PriceList, type Product } from '../engine/catalog';
+import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import {
   PROJECT_SCHEMA_VERSION,
+  type AccessPontoon,
   type BackgroundImage,
   type Berth,
   type BoatClass,
+  type CostSettings,
   type Finger,
   type Layout,
   type MainPier,
@@ -93,6 +99,27 @@ function site(v: unknown): Site {
         shape: polygon(e.shape, `${p}.shape`),
       };
     }),
+    // Extension (D21); files from older versions have none, and the key is then left out.
+    ...(o.accessPontoons === undefined
+      ? {}
+      : {
+          accessPontoons: arr(o.accessPontoons, 'site.accessPontoons').map((item, i): AccessPontoon => {
+            const p = `site.accessPontoons[${i}]`;
+            const e = obj(item, p);
+            const width = num(e.width, `${p}.width`);
+            if (width <= 0) fail(`${p}.width must be positive`);
+            // Extension (D32): gangway positions; missing = one at the middle.
+            const gangways = e.gangways === undefined ? [] : arr(e.gangways, `${p}.gangways`).map((x, k) => num(x, `${p}.gangways[${k}]`));
+            if (gangways.some((x) => x < 0)) fail(`${p}.gangways must not be negative`);
+            return {
+              id: str(e.id, `${p}.id`),
+              start: vec(e.start, `${p}.start`),
+              end: vec(e.end, `${p}.end`),
+              width,
+              ...(gangways.length > 0 ? { gangways } : {}),
+            };
+          }),
+        }),
   };
 }
 
@@ -107,17 +134,33 @@ function boatClasses(v: unknown): BoatClass[] {
       beam: num(e.beam, `${p}.beam`),
       color: str(e.color, `${p}.color`),
       share: num(e.share, `${p}.share`),
+      // Files from before target counts (D20) have none; 0 until the user sets them.
+      count: e.count === undefined ? 0 : num(e.count, `${p}.count`),
+      // D36: optional boat weight, t.
+      ...(e.weight === undefined || e.weight === null ? {} : { weight: num(e.weight, `${p}.weight`) }),
     };
+    if (c.weight !== undefined && !(c.weight > 0)) fail(`${p}.weight must be positive`);
     if (c.length <= 0 || c.beam <= 0) fail(`${p}: length and beam must be positive`);
     if (c.share < 0) fail(`${p}.share must not be negative`);
+    if (c.count < 0 || !Number.isInteger(c.count)) fail(`${p}.count must be a whole number, 0 or more`);
     return c;
   });
 }
 
+/** Extension (D29, D34): a list of standard lengths; missing in older files (the default). */
+function lengthList(v: unknown, key: 'fingerLengths' | 'boomLengths'): number[] {
+  if (v === undefined) return [...DEFAULT_PARAMS[key]];
+  const list = arr(v, `params.${key}`).map((x, i) => num(x, `params.${key}[${i}]`));
+  if (list.some((x) => !(x > 0))) fail(`params.${key} must be positive lengths`);
+  return [...new Set(list)].sort((a, b) => a - b);
+}
+
+const BERTH_TYPES = ['finger', 'yBoom', 'sternBuoy'] as const;
+
 function params(v: unknown): Params {
   const o = obj(v, 'params');
   // Missing keys take their defaults, so files from older versions stay readable.
-  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation'>): number =>
+  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth'>): number =>
     o[key] === undefined ? DEFAULT_PARAMS[key] : num(o[key], `params.${key}`);
   const boatsPerBay = o.boatsPerBay === undefined ? DEFAULT_PARAMS.boatsPerBay : o.boatsPerBay;
   if (boatsPerBay !== 1 && boatsPerBay !== 2) fail('params.boatsPerBay must be 1 or 2');
@@ -126,15 +169,24 @@ function params(v: unknown): Params {
     mainPierWidth: pick('mainPierWidth'),
     fingerWidth: pick('fingerWidth'),
     fingerLengthRatio: pick('fingerLengthRatio'),
+    fingerLengths: lengthList(o.fingerLengths, 'fingerLengths'),
+    berthType: o.berthType === undefined ? DEFAULT_PARAMS.berthType : oneOf(o.berthType, BERTH_TYPES, 'params.berthType'),
+    boomLengths: lengthList(o.boomLengths, 'boomLengths'),
+    boomWidth: pick('boomWidth'),
+    buoyDepthFactor: pick('buoyDepthFactor'),
     boatsPerBay: boatsPerBay as 1 | 2,
     beamClearance: pick('beamClearance'),
     lengthClearance: pick('lengthClearance'),
     fairwayFactor: pick('fairwayFactor'),
     fairwayMin: pick('fairwayMin'),
+    buoyFairwayFactor: pick('buoyFairwayFactor'),
+    buoyFairwayMin: pick('buoyFairwayMin'),
     obstacleClearance: pick('obstacleClearance'),
     maxMainPierLength: pick('maxMainPierLength'),
     orientation,
     shoreOffset: pick('shoreOffset'),
+    berthTarget:
+      o.berthTarget === undefined ? DEFAULT_PARAMS.berthTarget : oneOf(o.berthTarget, ['share', 'count'] as const, 'params.berthTarget'),
   };
 }
 
@@ -175,7 +227,12 @@ function layout(v: unknown, i: number): Layout {
   const fingers = arr(o.fingers, `${p}.fingers`).map((item, k): Finger => {
     const q = `${p}.fingers[${k}]`;
     const e = obj(item, q);
-    return { id: str(e.id, `${q}.id`), pierId: str(e.pierId, `${q}.pierId`), shape: polygon(e.shape, `${q}.shape`) };
+    return {
+      id: str(e.id, `${q}.id`),
+      pierId: str(e.pierId, `${q}.pierId`),
+      shape: polygon(e.shape, `${q}.shape`),
+      ...(e.kind === undefined ? {} : { kind: oneOf(e.kind, ['boom'] as const, `${q}.kind`) }),
+    };
   });
   const berths = arr(o.berths, `${p}.berths`).map((item, k): Berth => {
     const q = `${p}.berths[${k}]`;
@@ -185,8 +242,10 @@ function layout(v: unknown, i: number): Layout {
       pierId: str(e.pierId, `${q}.pierId`),
       side: oneOf(e.side, ['left', 'right'] as const, `${q}.side`),
       boatClassId: str(e.boatClassId, `${q}.boatClassId`),
+      ...(e.type === undefined ? {} : { type: oneOf(e.type, BERTH_TYPES, `${q}.type`) }),
       slot: polygon(e.slot, `${q}.slot`),
       boat: polygon(e.boat, `${q}.boat`),
+      ...(e.buoy === undefined ? {} : { buoy: vec(e.buoy, `${q}.buoy`) }),
       removed: bool(e.removed, `${q}.removed`),
       issues: [],
     };
@@ -206,6 +265,7 @@ function layout(v: unknown, i: number): Layout {
       berthsByClass: {},
       mainPierLength: 0,
       fingerLength: 0,
+      accessPontoonLength: 0,
       pontoonLength: 0,
       pontoonDeckArea: 0,
       fairwayArea: 0,
@@ -215,6 +275,7 @@ function layout(v: unknown, i: number): Layout {
       pontoonPerBerth: 0,
       mixDeviation: 0,
       unreachableRemoved: 0,
+      targetShortfall: 0,
       issueCounts: { error: 0, warning: 0 },
     },
     score: typeof o.score === 'number' && Number.isFinite(o.score) ? o.score : 0,
@@ -252,6 +313,187 @@ function mapBackground(v: unknown): MapBackground | null {
   return { provider: oneOf(o.provider, ['osm'] as const, 'map.provider'), lat, lon, opacity: Math.min(1, Math.max(0, opacity)) };
 }
 
+/** Extension (D40): wave screening inputs; missing in older files (nothing entered). */
+function waveSettings(v: unknown): WaveSettings {
+  if (v === undefined) return { ...DEFAULT_WAVES };
+  const o = obj(v, 'waves');
+  const optional = (key: 'fetch' | 'fetchDepth' | 'wind1' | 'wind50'): number | null => {
+    const x = o[key];
+    if (x === undefined || x === null) return null;
+    const n = num(x, `waves.${key}`);
+    if (!(n > 0)) fail(`waves.${key} must be positive`);
+    return n;
+  };
+  const averaging = o.windAveragingS === undefined ? DEFAULT_WAVES.windAveragingS : num(o.windAveragingS, 'waves.windAveragingS');
+  if (!(averaging > 0)) fail('waves.windAveragingS must be positive');
+  return {
+    fetch: optional('fetch'),
+    fetchFrom: o.fetchFrom === undefined ? DEFAULT_WAVES.fetchFrom : ((num(o.fetchFrom, 'waves.fetchFrom') % 360) + 360) % 360,
+    fetchDepth: optional('fetchDepth'),
+    wind1: optional('wind1'),
+    wind50: optional('wind50'),
+    windAveragingS: averaging,
+    quality: o.quality === undefined ? DEFAULT_WAVES.quality : oneOf(o.quality, ['excellent', 'good', 'moderate'] as const, 'waves.quality'),
+    location: o.location === undefined || o.location === null ? null : latLon(o.location, 'waves.location'),
+    climate: o.climate === undefined || o.climate === null ? null : windClimateOf(o.climate),
+  };
+}
+
+function latLon(v: unknown, path: string): { lat: number; lon: number } {
+  const o = obj(v, path);
+  const lat = num(o.lat, `${path}.lat`);
+  const lon = num(o.lon, `${path}.lon`);
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) fail(`${path} is not a valid position`);
+  return { lat, lon };
+}
+
+/** D41: a saved wind climate (summary of a fetched record). */
+function windClimateOf(v: unknown): WindClimate {
+  const o = obj(v, 'waves.climate');
+  const nullable = (x: unknown, path: string): number | null => (x === null || x === undefined ? null : num(x, path));
+  const sectors = arr(o.sectors, 'waves.climate.sectors').map((item, i) => {
+    const p = `waves.climate.sectors[${i}]`;
+    const s = obj(item, p);
+    return {
+      rose: arr(s.rose, `${p}.rose`).map((x, k) => num(x, `${p}.rose[${k}]`)),
+      annualMax: arr(s.annualMax, `${p}.annualMax`).map((x, k) => num(x, `${p}.annualMax[${k}]`)),
+      oneYear: nullable(s.oneYear, `${p}.oneYear`),
+      fiftyYear: nullable(s.fiftyYear, `${p}.fiftyYear`),
+    };
+  });
+  if (sectors.length !== SECTORS) fail(`waves.climate.sectors must have ${SECTORS} sectors`);
+  return {
+    source: str(o.source, 'waves.climate.source'),
+    requested: latLon(o.requested, 'waves.climate.requested'),
+    cell: latLon(o.cell, 'waves.climate.cell'),
+    startYear: num(o.startYear, 'waves.climate.startYear'),
+    endYear: num(o.endYear, 'waves.climate.endYear'),
+    hours: num(o.hours, 'waves.climate.hours'),
+    fetchedOn: str(o.fetchedOn, 'waves.climate.fetchedOn'),
+    averagingS: num(o.averagingS, 'waves.climate.averagingS'),
+    sectors,
+  };
+}
+
+/** Extension (D23). Missing values take their defaults, so older files stay readable. */
+function anchoring(v: unknown): AnchoringParams {
+  if (v === undefined) return structuredClone(DEFAULT_ANCHORING);
+  const o = obj(v, 'anchoring');
+  const d = DEFAULT_ANCHORING;
+  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed'>): number =>
+    o[key] === undefined ? d[key] : num(o[key], `anchoring.${key}`);
+  const f = o.friction === undefined ? {} : obj(o.friction, 'anchoring.friction');
+  const mu = (k: Seabed) => (f[k] === undefined ? d.friction[k] : num(f[k], `anchoring.friction.${k}`));
+  const result: AnchoringParams = {
+    depth: pick('depth'),
+    highWater: pick('highWater'),
+    lowWater: pick('lowWater'),
+    seabed: o.seabed === undefined ? d.seabed : oneOf(o.seabed, ['clay', 'sand', 'rock'] as const, 'anchoring.seabed'),
+    windSpeed: pick('windSpeed'),
+    airDensity: pick('airDensity'),
+    dragCoefficient: pick('dragCoefficient'),
+    leewardFactor: pick('leewardFactor'),
+    profileHeightRatio: pick('profileHeightRatio'),
+    pontoonFreeboard: pick('pontoonFreeboard'),
+    lineSpacing: pick('lineSpacing'),
+    splayAngle: pick('splayAngle'),
+    chainSafetyFactor: pick('chainSafetyFactor'),
+    corrosionAllowance: pick('corrosionAllowance'),
+    slidingSafetyFactor: pick('slidingSafetyFactor'),
+    friction: { clay: mu('clay'), sand: mu('sand'), rock: mu('rock') },
+    chainLengthFactor: pick('chainLengthFactor'),
+    maxAnchorMass: pick('maxAnchorMass'),
+    tipAnchorMinLength: pick('tipAnchorMinLength'),
+    fingerPileMinLength: pick('fingerPileMinLength'),
+    anchorType: o.anchorType === undefined ? d.anchorType : oneOf(o.anchorType, ['block', 'wedge'] as const, 'anchoring.anchorType'),
+    buoySinkerMethod:
+      o.buoySinkerMethod === undefined ? d.buoySinkerMethod : oneOf(o.buoySinkerMethod, ['factor', 'table'] as const, 'anchoring.buoySinkerMethod'),
+    buoyTable: o.buoyTable === undefined ? d.buoyTable : oneOf(o.buoyTable, ['batunionen', 'topMarine'] as const, 'anchoring.buoyTable'),
+    buoyExposed: o.buoyExposed === undefined ? d.buoyExposed : bool(o.buoyExposed, 'anchoring.buoyExposed'),
+    buoySinkerFactor: pick('buoySinkerFactor'),
+    buoyChainFactor: pick('buoyChainFactor'),
+    buoyLift: pick('buoyLift'),
+    waterDensity: pick('waterDensity'),
+    concreteDensity: pick('concreteDensity'),
+    steelDensity: pick('steelDensity'),
+  };
+  if (result.depth <= 0) fail('anchoring.depth must be positive');
+  if (result.lineSpacing <= 0) fail('anchoring.lineSpacing must be positive');
+  if (result.splayAngle < 0 || result.splayAngle > MAX_SPLAY_ANGLE) fail(`anchoring.splayAngle must be between 0 and ${MAX_SPLAY_ANGLE}`);
+  if (result.maxAnchorMass <= 0) fail('anchoring.maxAnchorMass must be positive');
+  if (result.tipAnchorMinLength < 0) fail('anchoring.tipAnchorMinLength must not be negative');
+  if (result.fingerPileMinLength < 0) fail('anchoring.fingerPileMinLength must not be negative');
+  if (Object.values(result.friction).some((x) => x <= 0)) fail('anchoring.friction values must be positive');
+  if (result.buoySinkerFactor <= 0) fail('anchoring.buoySinkerFactor must be positive');
+  if (result.buoyChainFactor <= 0) fail('anchoring.buoyChainFactor must be positive');
+  if (result.buoyLift < 0) fail('anchoring.buoyLift must not be negative');
+  return result;
+}
+
+/** An imported price list kept in the project (D24). */
+function priceList(v: unknown): PriceList | null {
+  if (v === undefined || v === null) return null;
+  const o = obj(v, 'cost.priceList');
+  const optNum = (x: unknown, path: string): number | null => (x === null || x === undefined ? null : num(x, path));
+  const products = arr(o.products, 'cost.priceList.products').map((item, i): Product => {
+    const p = `cost.priceList.products[${i}]`;
+    const e = obj(item, p);
+    const text = (k: string) => (e[k] === undefined ? '' : str(e[k], `${p}.${k}`));
+    return {
+      id: str(e.id, `${p}.id`),
+      category: oneOf(e.category, PRODUCT_CATEGORIES, `${p}.category`),
+      supplier: text('supplier'),
+      series: text('series'),
+      name: str(e.name, `${p}.name`),
+      code: text('code'),
+      unit: oneOf(e.unit, PRODUCT_UNITS, `${p}.unit`),
+      price: optNum(e.price, `${p}.price`),
+      priceIncludesVat: e.priceIncludesVat === undefined ? false : bool(e.priceIncludesVat, `${p}.priceIncludesVat`),
+      marginPct: optNum(e.marginPct, `${p}.marginPct`) ?? 0,
+      lengthM: optNum(e.lengthM, `${p}.lengthM`),
+      widthM: optNum(e.widthM, `${p}.widthM`),
+      weightKg: optNum(e.weightKg, `${p}.weightKg`),
+      capacityKg: optNum(e.capacityKg, `${p}.capacityKg`),
+      freeboardM: optNum(e.freeboardM, `${p}.freeboardM`),
+      chainDiameterMm: optNum(e.chainDiameterMm, `${p}.chainDiameterMm`),
+      chainGrade: text('chainGrade'),
+      breakingLoadKn: optNum(e.breakingLoadKn, `${p}.breakingLoadKn`),
+      massKgPerM: optNum(e.massKgPerM, `${p}.massKgPerM`),
+      anchorMassKg: optNum(e.anchorMassKg, `${p}.anchorMassKg`),
+      shackleMm: optNum(e.shackleMm, `${p}.shackleMm`),
+      sourceUrl: text('sourceUrl'),
+      sourceDate: text('sourceDate'),
+      note: text('note'),
+    };
+  });
+  const parameters = arr(o.parameters, 'cost.priceList.parameters').map((item, i) => {
+    const p = `cost.priceList.parameters[${i}]`;
+    const e = obj(item, p);
+    return {
+      key: str(e.key, `${p}.key`),
+      value: num(e.value, `${p}.value`),
+      unit: e.unit === undefined ? '' : str(e.unit, `${p}.unit`),
+      description: e.description === undefined ? '' : str(e.description, `${p}.description`),
+      source: e.source === undefined ? '' : str(e.source, `${p}.source`),
+    };
+  });
+  return { title: str(o.title, 'cost.priceList.title'), products, parameters };
+}
+
+/** Extension (D24). */
+function costSettings(v: unknown): CostSettings {
+  if (v === undefined) return { ...DEFAULT_COST };
+  const o = obj(v, 'cost');
+  const series = (k: 'pontoonSeries' | 'fingerSeries' | 'boomSeries' | 'gangwaySeries') => (o[k] === undefined ? '' : str(o[k], `cost.${k}`));
+  return {
+    priceList: priceList(o.priceList),
+    pontoonSeries: series('pontoonSeries'),
+    fingerSeries: series('fingerSeries'),
+    boomSeries: series('boomSeries'),
+    gangwaySeries: series('gangwaySeries'),
+  };
+}
+
 /** Read a project from the text of a project file. Never throws. */
 export function parseProject(text: string): ParseResult {
   let raw: unknown;
@@ -280,6 +522,9 @@ export function parseProject(text: string): ParseResult {
       preferredLayoutId: preferred !== null && layouts.some((l) => l.id === preferred) ? preferred : null,
       background: background(p.background),
       map: mapBackground(p.map),
+      anchoring: anchoring(p.anchoring),
+      cost: costSettings(p.cost),
+      waves: waveSettings(p.waves),
       generatedFrom: typeof p.generatedFrom === 'string' ? p.generatedFrom : null,
     };
     return { ok: true, project };

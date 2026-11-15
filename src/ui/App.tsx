@@ -3,6 +3,7 @@ import { appStore, useAppStore } from '../state/store';
 import { LeftSidebar } from './panels/LeftSidebar';
 import { RightSidebar } from './panels/RightSidebar';
 import { Toolbar } from './panels/Toolbar';
+import { WaveTool } from './panels/WaveTool';
 import { useT } from './useT';
 
 /** Keyboard shortcuts: undo/redo, and finishing or cancelling the shape being drawn. */
@@ -57,6 +58,7 @@ export function AppShell({ canvas }: { canvas: ReactNode }) {
         <main className="min-w-0 flex-1">{canvas}</main>
         <RightSidebar />
       </div>
+      <WaveTool />
       <footer role="note" className="border-t border-amber-200 bg-amber-50 px-4 py-1 text-xs text-amber-900">
         {t('app.disclaimer')}
       </footer>

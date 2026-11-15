@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { IRREGULAR_BAY_SITE } from '../../engine/demos';
-import { createAppStore, emptyProject, HISTORY_LIMIT, inputFingerprint, needsRegeneration } from '../store';
+import { createAppStore, emptyProject, engineParams, HISTORY_LIMIT, inputFingerprint, needsRegeneration } from '../store';
 
 const demoStore = () => {
   const store = createAppStore();
@@ -143,6 +143,23 @@ describe('generation and the Regenerate hint (SPEC §8)', () => {
     expect(inputFingerprint(a)).not.toBe(inputFingerprint({ ...a, site: IRREGULAR_BAY_SITE }));
     expect(inputFingerprint(a)).toMatch(/^[0-9a-f]{8}$/);
   });
+
+  it('the design depth counts for stern-buoy berths only, and reaches the engine (D35)', () => {
+    const a = emptyProject();
+    const deeper = { ...a, anchoring: { ...a.anchoring, depth: a.anchoring.depth + 2 } };
+    expect(inputFingerprint(deeper)).toBe(inputFingerprint(a));
+    const buoys = { ...a, params: { ...a.params, berthType: 'sternBuoy' as const } };
+    expect(inputFingerprint({ ...buoys, anchoring: deeper.anchoring })).not.toBe(inputFingerprint(buoys));
+    expect(engineParams(deeper).waterDepth).toBe(a.anchoring.depth + 2);
+    expect('waterDepth' in a.params).toBe(false);
+  });
+
+  it('a boat weight (D36) needs no regeneration; the buoy distance factor does', () => {
+    const a = { ...emptyProject(), params: { ...emptyProject().params, berthType: 'sternBuoy' as const } };
+    const heavier = { ...a, boatClasses: a.boatClasses.map((c) => ({ ...c, weight: 3 })) };
+    expect(inputFingerprint(heavier)).toBe(inputFingerprint(a));
+    expect(inputFingerprint({ ...a, params: { ...a.params, buoyDepthFactor: 3 } })).not.toBe(inputFingerprint(a));
+  });
 });
 
 describe('layout edits through the store (SPEC §8)', () => {
@@ -208,5 +225,42 @@ describe('layout edits through the store (SPEC §8)', () => {
     expect(store.getState().project.preferredLayoutId).toBe(id);
     store.getState().undo();
     expect(store.getState().project.preferredLayoutId).toBeNull();
+  });
+});
+
+describe('access pontoons (D21)', () => {
+  it('two clicks with the access tool add a pontoon with the main pier width; it can be moved, saved and deleted', async () => {
+    const { deleteSiteObject, moveVertex } = await import('../../ui/tools/sitePaths');
+    const { parseProject, serializeProject } = await import('../projectFile');
+    const store = createAppStore();
+    store.getState().loadDemo('rectBasin');
+    store.getState().setTool('access');
+    store.getState().addDraftPoint({ x: 10, y: 2 }, 1);
+    store.getState().addDraftPoint({ x: 50, y: 2 }, 1);
+    const [pontoon] = store.getState().project.site.accessPontoons ?? [];
+    expect(pontoon).toEqual({
+      id: 'access-1',
+      start: { x: 10, y: 2 },
+      end: { x: 50, y: 2 },
+      width: store.getState().project.params.mainPierWidth,
+    });
+    expect(store.getState().draft).toEqual([]);
+
+    store.getState().updateSite((site) => moveVertex(site, 'access:access-1', 1, { x: 60, y: 2 }));
+    expect(store.getState().project.site.accessPontoons![0]!.end).toEqual({ x: 60, y: 2 });
+
+    const reopened = parseProject(serializeProject(store.getState().project));
+    expect(reopened.ok && reopened.project.site.accessPontoons).toEqual(store.getState().project.site.accessPontoons);
+
+    store.getState().updateSite((site) => deleteSiteObject(site, 'access:access-1'));
+    expect(store.getState().project.site.accessPontoons).toEqual([]);
+  });
+
+  it('older files without access pontoons open with none', async () => {
+    const { parseProject, serializeProject } = await import('../projectFile');
+    const file = JSON.parse(serializeProject(emptyProject())) as { project: { site: Record<string, unknown> } };
+    delete file.project.site.accessPontoons;
+    const parsed = parseProject(JSON.stringify(file));
+    expect(parsed.ok && (parsed.project.site.accessPontoons ?? [])).toEqual([]);
   });
 });

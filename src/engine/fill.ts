@@ -13,7 +13,7 @@ import {
   segmentIntersectsBox,
   type Region,
 } from './geometry';
-import type { Berth, BoatClass, Finger, Params, PierSide, Vec2 } from './model';
+import type { Berth, BerthType, BoatClass, Finger, Params, PierSide, Vec2 } from './model';
 import {
   localRectToPolygon,
   type BayGeometry,
@@ -41,16 +41,22 @@ export interface RowDesign {
 /** Boat classes that take part in the mix, i.e. with a positive share. */
 export const activeClasses = (classes: BoatClass[]): BoatClass[] => classes.filter((c) => c.share > 0);
 
-/** Fairway width required next to boats of the given length (SPEC §5.3). */
-export const fairwayWidthFor = (boatLength: number, params: Params): number =>
-  Math.max(params.fairwayMin, params.fairwayFactor * boatLength);
+/**
+ * Fairway width required next to boats of the given length (SPEC §5.3). In front of stern-buoy
+ * rows also Båtunionen's manoeuvring width, 2.5 × L and at least 20 m (D38): the buoys are only
+ * pulled towards the pier while the berths are taken, so only the water beyond them is free.
+ */
+export const fairwayWidthFor = (boatLength: number, params: Params, berthType: BerthType = 'finger'): number => {
+  const general = Math.max(params.fairwayMin, params.fairwayFactor * boatLength);
+  return berthType === 'sternBuoy' ? Math.max(general, params.buoyFairwayMin, params.buoyFairwayFactor * boatLength) : general;
+};
 
 export function rowDesign(classes: BoatClass[], params: Params, pattern: BerthPattern): RowDesign | null {
   const active = activeClasses(classes);
   if (active.length === 0) return null;
   const longest = active.reduce((a, b) => (b.length > a.length ? b : a));
   const rowDepth = pattern.slotLength(longest, params);
-  const fairwayWidth = fairwayWidthFor(longest.length, params);
+  const fairwayWidth = fairwayWidthFor(longest.length, params, pattern.berthType);
   const minBayFootprint = Math.min(...active.map((c) => pattern.bay([c], 0, params).footprint));
   return {
     rowDepth,
@@ -73,11 +79,18 @@ export interface MixState {
    * rows are filled class by class from the largest boats down (size zoning).
    */
   quota?: Record<string, number>;
+  /**
+   * Optional upper limit of berths per class (target counts, DECISIONS D20). Classes are
+   * still chosen by target share, but a class at its limit gets no more berths, and the
+   * filling stops when every class is at its limit.
+   */
+  cap?: Record<string, number>;
 }
 
-export const newMixState = (classes: BoatClass[]): MixState => ({
+export const newMixState = (classes: BoatClass[], cap?: Record<string, number>): MixState => ({
   total: 0,
   counts: Object.fromEntries(classes.map((c) => [c.id, 0])),
+  ...(cap ? { cap } : {}),
 });
 
 export interface FillContext {
@@ -142,7 +155,21 @@ export interface PlacedBay {
   geometry: BayGeometry;
 }
 
-const shiftRect = (r: LocalRect, s: number): LocalRect => ({ s0: r.s0 + s, s1: r.s1 + s, d0: r.d0, d1: r.d1 });
+const shiftRect = (r: LocalRect, s: number): LocalRect => ({ ...r, s0: r.s0 + s, s1: r.s1 + s });
+
+/**
+ * Extra distance before a bay that follows `prev` in the same run (D34): when the shared
+ * divider of `prev` is wider than the new bay's own opening divider (a finger after booms of
+ * a Y-boom row), the new bay starts that much later so that its slot clears the divider.
+ * 0 for patterns whose dividers all have one width (finger piers).
+ */
+function dividerGap(prev: BayGeometry | undefined, next: BayGeometry): number {
+  if (!prev) return 0;
+  const close = prev.dividers[prev.dividers.length - 1];
+  const open = next.dividers[0];
+  if (!close || !open) return 0;
+  return Math.max(0, close.s1 - close.s0 - (open.s1 - open.s0));
+}
 
 /** Bay geometry at s = 0, computed once per combination of boat classes. */
 function bayAtOrigin(ctx: FillContext, plan: FillPlan, classIndices: number[]): BayGeometry {
@@ -188,15 +215,17 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
   const counts = classes.map((c) => mix.counts[c.id] ?? 0);
   let total = mix.total;
   const quota = mix.quota ? classes.map((c) => mix.quota![c.id] ?? 0) : null;
-  /** Index of the class for the next berth, or -1 when every quota is used up. */
+  const cap = mix.cap ? classes.map((c) => mix.cap![c.id] ?? 0) : null;
+  /** Index of the class for the next berth, or -1 when every quota or cap is used up. */
   const pick = (): number => {
     if (quota) {
       for (const i of plan.byLengthDesc) if (counts[i]! < quota[i]!) return i;
       return -1;
     }
-    let best = 0;
+    let best = -1;
     let bestDeficit = -Infinity;
     for (let i = 0; i < classes.length; i++) {
+      if (cap && counts[i]! >= cap[i]!) continue;
       const deficit = shares[i]! * (total + 1) - counts[i]!;
       if (deficit > bestDeficit + 1e-12) {
         best = i;
@@ -250,7 +279,7 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
   const structureEdges = localEdges(prepared.structureRegion);
 
   const runs: PlacedBay[][] = [];
-  /** Set when every quota is used up: nothing more can be placed in this row. */
+  /** Set when every quota or cap is used up: nothing more can be placed in this row. */
   let exhausted = false;
   for (const [from, to] of stretches) {
     if (exhausted) break;
@@ -279,7 +308,8 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
     };
 
     /** First bay that fits at `s`: the mix-driven choice first, then smaller classes, then fewer boats. */
-    const chooseBay = (s: number): PlacedBay | null => {
+    const chooseBay = (s0: number, prev: BayGeometry | undefined): PlacedBay | null => {
+      const s = s0;
       // Every bay covers at least the smallest footprint, so if that is not navigable nothing is.
       if (!clear && !blockIsNavigable(s, design.minBayFootprint)) return null;
       for (let n = plan.capacity; n >= 1; n--) {
@@ -302,7 +332,8 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
           continue;
         }
         const geometry = bayAtOrigin(ctx, plan, picks);
-        if (bayIsValid(s, geometry)) return { s, boats: picks.map((i) => classes[i]!), geometry };
+        const at0 = s + dividerGap(prev, geometry);
+        if (bayIsValid(at0, geometry)) return { s: at0, boats: picks.map((i) => classes[i]!), geometry };
         for (const index of picks) counts[index]!--;
         total -= n;
 
@@ -310,12 +341,14 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
         for (const index of plan.byLengthDesc) {
           if (classes[index]!.length >= longest) continue;
           if (quota && counts[index]! + n > quota[index]!) continue;
+          if (cap && counts[index]! + n > cap[index]!) continue;
           const same = Array<number>(n).fill(index);
           const smaller = bayAtOrigin(ctx, plan, same);
-          if (bayIsValid(s, smaller)) {
+          const atSmaller = s + dividerGap(prev, smaller);
+          if (bayIsValid(atSmaller, smaller)) {
             counts[index]! += n;
             total += n;
-            return { s, boats: same.map((i) => classes[i]!), geometry: smaller };
+            return { s: atSmaller, boats: same.map((i) => classes[i]!), geometry: smaller };
           }
         }
       }
@@ -326,10 +359,10 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
     let s = from;
     let run: PlacedBay[] = [];
     while (!exhausted && s + design.minBayFootprint <= to + 1e-9) {
-      const bay = chooseBay(s);
+      const bay = chooseBay(s, run[run.length - 1]?.geometry);
       if (bay) {
         run.push(bay);
-        s += bay.geometry.advance;
+        s = bay.s + bay.geometry.advance;
       } else {
         if (run.length > 0) stretchRuns.push(run);
         run = [];
@@ -354,9 +387,10 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
       for (const bay of original) {
         const group = order.splice(0, bay.boats.length);
         const geometry = bayAtOrigin(ctx, plan, group);
-        if (!bayIsValid(cursor, geometry)) break;
-        sorted.push({ s: cursor, boats: group.map((i) => classes[i]!), geometry });
-        cursor += geometry.advance;
+        const at0 = cursor + dividerGap(sorted[sorted.length - 1]?.geometry, geometry);
+        if (!bayIsValid(at0, geometry)) break;
+        sorted.push({ s: at0, boats: group.map((i) => classes[i]!), geometry });
+        cursor = at0 + geometry.advance;
       }
       // Keep the original order if the re-ordered run does not pass the checks.
       runs.push(sorted.length === original.length ? sorted : original);
@@ -382,6 +416,8 @@ export interface FilledRow {
   depth: number;
   /** Fairway width kept clear in front of the row, m. */
   fairwayWidth: number;
+  /** Berth type of the row's pattern (D34). */
+  berthType: BerthType;
 }
 
 export interface FillOptions {
@@ -403,20 +439,27 @@ export function fillPierRows(pier: PierLike, ctx: FillContext, mix: MixState, op
     const frame: RowFrame = { origin: add(pier.start, scale(outward, pier.width / 2)), along, outward };
     const runs = fillRow(frame, options.rowStart ?? ctx.params.shoreOffset, pierLength, ctx, mix);
     if (runs.length > 0) {
-      rows.push({ side, frame, runs, depth: ctx.design.rowDepth, fairwayWidth: ctx.design.fairwayWidth });
+      rows.push({ side, frame, runs, depth: ctx.design.rowDepth, fairwayWidth: ctx.design.fairwayWidth, berthType: ctx.pattern.berthType });
     }
   }
   return rows;
 }
 
-/** Dividers of a run with shared ones merged: a shared divider takes the longer length. */
+/**
+ * Dividers of a run with shared ones merged: a shared divider takes the longer length and
+ * the wider extent; it is a finger if either of the two is (D34).
+ */
 function mergedDividers(run: PlacedBay[]): LocalRect[] {
   const dividers: LocalRect[] = [];
   for (const bay of run) {
     for (const d of bay.geometry.dividers) {
       const last = dividers[dividers.length - 1];
-      if (last && Math.abs(last.s0 - (d.s0 + bay.s)) < 1e-6) last.d1 = Math.max(last.d1, d.d1);
-      else dividers.push(shiftRect(d, bay.s));
+      const placed = shiftRect(d, bay.s);
+      if (last && placed.s0 <= last.s1 + 1e-6 && placed.s0 >= last.s0 - 1e-6) {
+        last.s1 = Math.max(last.s1, placed.s1);
+        last.d1 = Math.max(last.d1, placed.d1);
+        if (last.kind !== placed.kind) delete last.kind;
+      } else dividers.push(placed);
     }
   }
   return dividers;
@@ -439,7 +482,7 @@ export function summarizeRows(rows: FilledRow[]): { berths: number; fingerLength
 export function rowsToElements(pierId: string, rows: FilledRow[]): PierFill {
   const fingers: Finger[] = [];
   const berths: Berth[] = [];
-  for (const { side, frame, runs } of rows) {
+  for (const { side, frame, runs, berthType } of rows) {
     const tag = side === 'left' ? 'L' : 'R';
     let fingerNo = 0;
     let berthNo = 0;
@@ -452,8 +495,10 @@ export function rowsToElements(pierId: string, rows: FilledRow[]): PierFill {
             pierId,
             side,
             boatClassId: b.boatClassId,
+            ...(berthType === 'finger' ? {} : { type: berthType }),
             slot: localRectToPolygon(shiftRect(b.slot, bay.s), frame).map(roundVec),
             boat: localRectToPolygon(shiftRect(b.boat, bay.s), frame).map(roundVec),
+            ...(b.buoy ? { buoy: roundVec(add(add(frame.origin, scale(frame.along, b.buoy.s + bay.s)), scale(frame.outward, b.buoy.d))) } : {}),
             removed: false,
             issues: [],
           });
@@ -465,6 +510,7 @@ export function rowsToElements(pierId: string, rows: FilledRow[]): PierFill {
           id: `${pierId}-${tag}F${fingerNo}`,
           pierId,
           shape: localRectToPolygon(d, frame).map(roundVec),
+          ...(d.kind === 'boom' ? { kind: 'boom' as const } : {}),
         });
       }
     }

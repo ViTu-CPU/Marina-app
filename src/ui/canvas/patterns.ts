@@ -1,4 +1,5 @@
 /** Small tiling images for hatched fills (SPEC §8: fairways and restricted zones). */
+import { HATCH } from './colors';
 
 function hatch(background: string, line: string): HTMLCanvasElement {
   const size = 10;
@@ -28,8 +29,8 @@ let cache: { fairway: HTMLCanvasElement; zone: HTMLCanvasElement } | null = null
 
 export function hatchPatterns(): { fairway: HTMLCanvasElement; zone: HTMLCanvasElement } {
   cache ??= {
-    fairway: hatch('rgba(186, 230, 253, 0.55)', 'rgba(56, 189, 248, 0.9)'),
-    zone: hatch('rgba(254, 202, 202, 0.45)', 'rgba(220, 38, 38, 0.9)'),
+    fairway: hatch(...HATCH.fairway),
+    zone: hatch(...HATCH.zone),
   };
   return cache;
 }

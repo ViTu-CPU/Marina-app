@@ -8,8 +8,13 @@ import { fingerPierPattern } from '../patterns';
 import { compareLayouts, OBJECTIVES, rankLayouts, scoreReference } from '../score';
 import { prepareSite } from '../site';
 
+/**
+ * The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27)
+ * and exact finger lengths, 0.8 × boat length (no standard lengths, D29).
+ */
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [] };
 const OPEN_BASIN: Site = { ...RECT_BASIN_SITE, obstacles: [] };
-const params = DEFAULT_PARAMS;
+const params = PARAMS;
 
 function singlePierLayout(classes: BoatClass[], x: number, length: number, site: Site = OPEN_BASIN): Layout {
   const prepared = prepareSite(site, params);
@@ -102,6 +107,7 @@ describe('objectives (SPEC §7)', () => {
     berthsByClass: {},
     mainPierLength: 200,
     fingerLength: 200,
+    accessPontoonLength: 0,
     pontoonLength: 400,
     pontoonDeckArea: 800,
     fairwayArea: 5000,
@@ -111,6 +117,7 @@ describe('objectives (SPEC §7)', () => {
     pontoonPerBerth: 4,
     mixDeviation: 0,
     unreachableRemoved: 0,
+    targetShortfall: 0,
     issueCounts: { error: 0, warning: 0 },
     ...over,
   });

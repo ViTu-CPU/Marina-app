@@ -9,10 +9,10 @@ import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Image as KonvaImage, Layer, Line, Rect, Shape, Stage, Text } from 'react-konva';
-import { centroid, distance, dot, sub } from '../../engine/geometry';
+import { add, centroid, distance, dot, sub } from '../../engine/geometry';
 import type { BackgroundImage, BoatClass, Layout, Polygon, Site, Vec2 } from '../../engine/model';
 import { pierAxis } from '../../engine/rows';
-import { pierPolygon } from '../../engine/site';
+import { gangwayLinks, pierPolygon } from '../../engine/site';
 import { appStore, useAppStore, type LayerId, type Selection, type ToolId } from '../../state/store';
 import { OSM_ATTRIBUTION } from '../../state/geo';
 import { gridStep, panBy, scaleBar, screenToWorld, visibleBounds, worldToScreen, zoomAt, type Size, type View } from '../../state/view';
@@ -20,28 +20,13 @@ import { loadImage, registerStage } from '../export/download';
 import { formatLength } from '../format';
 import { deleteVertex, hasEntrance, insertVertex, moveVertex, normalizeSite, sitePaths } from '../tools/sitePaths';
 import { siteSnapTargets, snapPoint } from '../tools/snap';
+import { useCostModel } from '../costModel';
 import { useT } from '../useT';
 import { MapTiles } from './MapTiles';
 import { hatchPatterns } from './patterns';
 
-const COLORS = {
-  water: '#e0f2fe',
-  waterTranslucent: 'rgba(186, 230, 253, 0.35)',
-  waterEdge: '#0369a1',
-  shoreline: '#15803d',
-  entrance: '#f59e0b',
-  obstacle: '#1f2937',
-  zoneEdge: '#dc2626',
-  pier: '#374151',
-  pierLocked: '#111827',
-  finger: '#9ca3af',
-  slot: '#64748b',
-  issue: '#dc2626',
-  selection: '#2563eb',
-  draft: '#7c3aed',
-  grid: '#e2e8f0',
-  gridMajor: '#cbd5e1',
-};
+import { COLORS } from './colors';
+import { MapLegend } from './MapLegend';
 
 /** Pixels within which the cursor snaps to existing geometry. */
 const SNAP_PIXELS = 10;
@@ -55,7 +40,7 @@ const PIER_DRAG_STEP = 0.1;
 /** A custom attribute of the node under the pointer (set as a prop on the shape). */
 const attr = (node: unknown, name: string): unknown => (node as { attrs: Record<string, unknown> }).attrs[name];
 
-const DRAWING_TOOLS: ToolId[] = ['water', 'shoreline', 'entrance', 'obstacle', 'zone', 'measure', 'calibrate'];
+const DRAWING_TOOLS: ToolId[] = ['water', 'shoreline', 'entrance', 'access', 'pier', 'obstacle', 'zone', 'measure', 'calibrate'];
 const flat = (points: Vec2[]): number[] => points.flatMap((p) => [p.x, p.y]);
 
 // ---------------------------------------------------------------------------
@@ -98,12 +83,96 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
       {layers.shoreline && site.shoreline.length >= 2 && (
         <Line points={flat(site.shoreline)} stroke={COLORS.shoreline} strokeWidth={4} strokeScaleEnabled={false} lineCap="round" lineJoin="round" listening={false} />
       )}
+      {layers.piers &&
+        (site.accessPontoons ?? []).map((p) =>
+          distance(p.start, p.end) > 0 ? (
+            <Line
+              key={p.id}
+              points={flat(pierPolygon(p.start, p.end, p.width))}
+              closed
+              fill={COLORS.access}
+              stroke={COLORS.pier}
+              strokeWidth={1}
+              dash={[4, 3]}
+              strokeScaleEnabled={false}
+              listening={false}
+            />
+          ) : null,
+        )}
+      {layers.piers &&
+        (site.accessPontoons ?? []).flatMap((p) =>
+          // D32: each gangway as a mark across the pontoon and on to the shoreline, so it shows
+          // at any zoom.
+          gangwayLinks(p, site.shoreline).map((g, i) => (
+            <Line
+              key={`${p.id}-gangway-${i}`}
+              points={flat([add(g.centre, sub(g.centre, g.from)), g.from, g.to])}
+              stroke={COLORS.gangway}
+              strokeWidth={4}
+              strokeScaleEnabled={false}
+              lineCap="butt"
+              listening={false}
+            />
+          )),
+        )}
       {layers.shoreline && hasEntrance(site) && (
         <Line points={flat([site.entrance.a, site.entrance.b])} stroke={COLORS.entrance} strokeWidth={5} strokeScaleEnabled={false} lineCap="round" listening={false} />
       )}
     </>
   );
 });
+
+/** Middle of the boat's edge nearest to its stern buoy (D35). */
+function sternPoint(boat: Vec2[], buoy: Vec2): Vec2 {
+  const [a, b] = [...boat].sort((p, q) => distance(p, buoy) - distance(q, buoy));
+  return a && b ? centroid([a, b]) : buoy;
+}
+
+/**
+ * D23: chains (lines) and concrete anchors (squares, about 1.2 m) of the anchoring plan;
+ * shore chains end at a wall fixing (small circle, D28); end piles of long fingers (D31).
+ */
+function AnchorShapes() {
+  const model = useCostModel();
+  if (!model) return null;
+  return (
+    <>
+      {model.anchoring.lines.filter((l) => l.role !== 'buoy').map((l) => (
+        <Line
+          key={`${l.id}-chain`}
+          points={flat([l.fix, l.anchor])}
+          stroke={l.chainId ? COLORS.chain : COLORS.issue}
+          strokeWidth={1}
+          dash={[3, 2]}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      ))}
+      {model.anchoring.piles.map((x) => (
+        <Circle key={x.id} x={x.at.x} y={x.at.y} radius={0.4} fill={COLORS.pier} stroke={COLORS.anchor} strokeWidth={1} strokeScaleEnabled={false} listening={false} />
+      ))}
+      {model.anchoring.lines
+        .filter((l) => l.fixing === 'wall')
+        .map((l) => (
+          <Circle key={`${l.id}-wall`} x={l.anchor.x} y={l.anchor.y} radius={0.3} fill={COLORS.anchor} listening={false} />
+        ))}
+      {model.anchoring.lines
+        // A stern buoy's sinker lies under the buoy, which is drawn with the berth (D36).
+        .filter((l) => l.fixing === 'seabed' && l.role !== 'buoy')
+        .map((l) => (
+        <Rect
+          key={`${l.id}-anchor`}
+          x={l.anchor.x - 0.6}
+          y={l.anchor.y - 0.6}
+          width={1.2}
+          height={1.2}
+          fill={l.anchorCount > 1 ? COLORS.issue : COLORS.anchor}
+          listening={false}
+        />
+      ))}
+    </>
+  );
+}
 
 interface LayoutShapesProps {
   layout: Layout;
@@ -160,10 +229,18 @@ const LayoutShapes = memo(function LayoutShapes({ layout, classes, layers, selec
             {layers.boats && !b.removed && (
               <Line points={flat(b.boat)} closed fill={color.get(b.boatClassId) ?? '#94a3b8'} listening={false} />
             )}
+            {/* D35: the stern buoy and the line from the boat's stern to it. */}
+            {layers.boats && !b.removed && b.buoy && (
+              <>
+                <Line points={flat([sternPoint(b.boat, b.buoy), b.buoy])} stroke={COLORS.buoy} strokeWidth={1} dash={[2, 2]} strokeScaleEnabled={false} listening={false} />
+                <Circle x={b.buoy.x} y={b.buoy.y} radius={0.4} fill={COLORS.buoy} listening={false} />
+              </>
+            )}
           </Group>
         );
       })}
-      {layers.fingers && layout.fingers.map((f) => <Line key={f.id} points={flat(f.shape)} closed fill={COLORS.finger} listening={false} />)}
+      {layers.fingers &&
+        layout.fingers.map((f) => <Line key={f.id} points={flat(f.shape)} closed fill={f.kind === 'boom' ? COLORS.boom : COLORS.finger} listening={false} />)}
       {layers.piers &&
         layout.piers.map((p) => {
           const selected = selection?.kind === 'pier' && selection.id === p.id;
@@ -307,6 +384,9 @@ export function MarinaCanvas() {
   /** World position of the pointer, snapped to the site geometry. */
   const snapped = (screen: Vec2, exclude?: { key: string; index: number }): Vec2 => {
     const s = appStore.getState();
+    // An access pontoon lies off the wall on purpose; snapping would pull its centreline
+    // onto the shoreline (D21).
+    if (s.tool === 'access' || exclude?.key.startsWith('access:')) return toWorld(screen);
     const targets = siteSnapTargets(s.project.site, s.draft);
     if (exclude) {
       const own = sitePaths(s.project.site).find((p) => p.key === exclude.key)?.points[exclude.index];
@@ -505,7 +585,7 @@ export function MarinaCanvas() {
     <div
       ref={containerRef}
       data-testid="canvas"
-      className="h-full w-full overflow-hidden bg-white"
+      className="relative h-full w-full overflow-hidden bg-white"
       style={{ cursor: drawing ? 'crosshair' : tool === 'edit' ? 'default' : 'grab' }}
     >
       <Stage
@@ -554,6 +634,7 @@ export function MarinaCanvas() {
             {layout && (
               <LayoutShapes layout={layout} classes={project.boatClasses} layers={layers} selection={selection} patternScale={patternScale} />
             )}
+            {layout && layers.anchoring && <AnchorShapes />}
           </Group>
         </Layer>
 
@@ -657,6 +738,7 @@ export function MarinaCanvas() {
           </Group>
         </Layer>
       </Stage>
+      <MapLegend />
     </div>
   );
 }

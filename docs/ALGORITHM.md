@@ -23,6 +23,7 @@ with a share above zero (strategy E sizes each row separately, see §3):
 ```
 row depth     = boat length + lengthClearance
 fairway width = max(fairwayMin, fairwayFactor × boat length)
+                (stern-buoy rows also ≥ max(buoyFairwayMin, buoyFairwayFactor × boat length), D38)
 pier pitch    = mainPierWidth + 2 × row depth + fairway width
 ```
 
@@ -36,7 +37,7 @@ Default mix: 12.5 m, 18 m and 46 m.
    the first line is swept over one pitch in 1 m steps.
 3. **Pier placement** (`site.ts → placePiersOnLine`): the line is clipped to the structure
    region (centreline and both edges). A stretch becomes a pier if one end is within 0.5 m
-   of the shoreline (I5). The pier keeps one fairway width clear at its head (I4, I16) and
+   of the shoreline or of an access pontoon's long edge (I5, I35). The pier keeps one fairway width clear at its head (I4, I16) and
    is capped at `maxMainPierLength`.
 4. **Filling** (`fill.ts`): each side of a pier is filled from the shore end
    (`shoreOffset`) outwards, bay by bay. A bay is kept only if the water from the pier
@@ -45,7 +46,9 @@ Default mix: 12.5 m, 18 m and 46 m.
    are tried; otherwise the cursor moves on by 0.5 m (I9).
 5. **Class mix**: each berth goes to the class furthest behind its target share, counted
    over the whole layout; each contiguous run is then ordered by boat length, shortest at
-   the shore (I7).
+   the shore (I7). With **target counts** (D20) the shares follow the counts and each count
+   is an upper limit: filling stops when all are used up, and the pier on which they run
+   out gets the shortest length that still takes its berths (I31, I32).
 6. **Search score**: number of berths that can be reached from the entrance, estimated on
    a grid (`reach.ts`, I15); for "min infrastructure" pontoon metres per berth with the
    shortfall penalty.
@@ -97,6 +100,39 @@ Built from the actual rows, so they also follow manual edits: a strip of the req
 width in front of every row and one across every pier head, united, clipped to the
 navigable region, minus piers and row blocks.
 
+## Anchoring plan and cost estimate (`anchoring.ts`, `bom.ts`)
+
+Derived from a layout, the site and the price list (DECISIONS D23–D32, I47–I73):
+
+1. Wind load per pier after UFC 4-152-07 (I54): across the pier the boats are hit bow-on
+   (beam × profile height), windward row in full, leeward row 20 %, plus the pier face not
+   hidden by the windward boats; along the pier they are hit broadside (length × profile
+   height), the first boat of each row from the windward end in full and the others 20 %,
+   plus the pier end; for wind from the sea and from the shore.
+2. Crossed chain pairs every `lineSpacing` m, splayed by `splayAngle` from square to the
+   pier (D25, I60): the shore half towards the head (they hold wind from the sea), the head
+   half towards the shore (wind from the shore). Each direction is checked on its own:
+   across, the lines of one side share the load (÷ cos θ); along, the lines splayed against
+   it share it (÷ sin θ); a line takes the larger.
+2a. Tip chains (D30, I68): a main pier at least `tipAnchorMinLength` long gets two crossed
+   chains at its head, splayed outwards; they count as one more station across and join the
+   head-ward lines along. A finger longer than `fingerPileMinLength` (12 m) gets an end pile
+   (D31, I72), sized for half the full broadside wind of the boats beside it (UFC: no
+   shielding), with the smallest Marinetek pile guide that holds it; piles are not priced.
+2b. Access pontoon in front of the shore (D28, I64–I66): square lines on the water side only
+   (wind towards the wall). The wind pushing it off the wall is split by tributary length
+   between two shore chains at each gangway (placed by the user, D32, or one at its middle;
+   crossed at θ, to fixings in the wall) and the piers attached to its water-side edge, which add their share to the
+   load their shore-ward lines hold. The wind along the wall goes to the shore chains.
+3. Each line: chain length `k × depth at high water`, catenary with uplift at the anchor;
+   cheapest chain with breaking load × ((d − c)/d)² ≥ SF × tension; cheapest anchor with
+   submerged weight ≥ SF × (H/μ + uplift), no heavier than the largest piece to be handled
+   (several pieces otherwise). With wedge anchors (I59): mass from the published working
+   capacities, chain lengthened until the angle at the anchor is within the tables' limit.
+4. Bill of materials: cheapest module combination per pier, fingers by length, gangways per
+   shore connection, chain, anchors, shackles, springs, anodes per line, fittings per berth
+   and pier; labour and plant from output rates; overheads, contingency, VAT, range.
+
 ## 5. Validation (`validate.ts`)
 
 **Geometric — errors, any one gives `geometricFail`:**
@@ -112,7 +148,8 @@ fingers and slots by more than 1 cm · boat outside its slot.
 - berths cannot be reached from the entrance: the free navigable water is shrunk by half
   the fairway width (less 0.1 m), and the fairway in front of the berth must lie in the
   water swept by a circle of that size starting at the entrance (I21);
-- a pier does not start at the shoreline;
+- a pier does not start at the shoreline or an access pontoon;
+- an access pontoon is more than 12 m from the shoreline (gangway, I37);
 - the generator left berths out of the layout because they could not be reached from the
   entrance (one warning with the count, D12).
 

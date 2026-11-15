@@ -36,6 +36,30 @@ export function exportPng(filename: string): boolean {
   return true;
 }
 
+/** The canvas as shown, as a PNG data URL at twice the screen resolution; null without a canvas. */
+export const canvasImage = (): string | null => (stage ? stage.toDataURL({ pixelRatio: 2, mimeType: 'image/png' }) : null);
+
+/**
+ * Prints an HTML document from a hidden frame (U24): the browser's print dialog, where the
+ * user can choose "Save as PDF". The frame stays until the next print.
+ */
+export function printHtml(html: string): void {
+  document.querySelector('iframe[data-testid="report-frame"]')?.remove();
+  const frame = document.createElement('iframe');
+  frame.setAttribute('data-testid', 'report-frame');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument;
+  if (!doc) return;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  const images = [...doc.images];
+  void Promise.all(images.map((img) => (img.complete ? Promise.resolve() : new Promise((r) => img.addEventListener('load', r, { once: true })))))
+    .then(() => frame.contentWindow?.print());
+}
+
 export const readFileAsText = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -59,3 +83,20 @@ export const loadImage = (url: string): Promise<HTMLImageElement> =>
     image.onerror = () => reject(new Error('The image could not be read.'));
     image.src = url;
   });
+
+/** Save bytes (e.g. an .xlsx workbook) as a file. */
+export function downloadBytes(filename: string, bytes: Uint8Array, mimeType: string): void {
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mimeType }));
+  downloadUrl(filename, url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export const readFileAsBytes = (file: File): Promise<Uint8Array> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.readAsArrayBuffer(file);
+  });
+
+export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

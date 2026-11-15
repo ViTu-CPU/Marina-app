@@ -27,7 +27,7 @@ export function buildCsv(project: Project, selectedLayoutId: string | null, lang
   lines.push(line([t('results.manuallyEdited'), ...project.layouts.map((l) => (l.modified ? '1' : '0'))]));
   lines.push(line([t('results.preferred'), ...project.layouts.map((l) => (l.id === project.preferredLayoutId ? '1' : '0'))]));
   // The comparison rows are formatted in English so that decimals use a point.
-  for (const row of comparisonRows(project.layouts, project.boatClasses, 'en')) {
+  for (const row of comparisonRows(project.layouts, project.boatClasses, 'en', project.params.berthTarget)) {
     const label = 'key' in row.label ? t(row.label.key) : row.label.text;
     lines.push(line([row.unit ? `${label} (${row.unit})` : label, ...row.values.map(plain)]));
   }

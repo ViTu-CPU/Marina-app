@@ -3,7 +3,9 @@ import { DEMO_PROJECTS } from '../../engine/demos';
 import { serializeProject } from '../../state/projectFile';
 import { appStore, needsRegeneration, useAppStore } from '../../state/store';
 import { buildCsv } from '../export/csv';
-import { downloadText, exportPng, readFileAsText, safeFileName } from '../export/download';
+import { canvasImage, downloadText, exportPng, printHtml, readFileAsText, safeFileName } from '../export/download';
+import { buildReportHtml } from '../export/report';
+import { computeCostModel } from '../costModel';
 import { useT } from '../useT';
 import { Button } from './fields';
 
@@ -20,6 +22,18 @@ export function Toolbar() {
   const canUndo = useAppStore((s) => s.past.length > 0);
   const canRedo = useAppStore((s) => s.future.length > 0);
   const stale = useAppStore((s) => needsRegeneration(s.project));
+  const generating = useAppStore((s) => s.generating);
+  /** U24: report of the selected alternative, printed from a hidden frame ("Save as PDF"). */
+  const printReport = () => {
+    const s = state();
+    const layout = s.project.layouts.find((l) => l.id === s.selectedLayoutId);
+    if (!layout) {
+      s.setNotice(t('report.noLayout'));
+      return;
+    }
+    const model = computeCostModel(s.project, layout, s.builtInPriceList);
+    printHtml(buildReportHtml({ project: s.project, layout, model, image: canvasImage(), language: s.language, date: new Date().toISOString().slice(0, 10) }));
+  };
   const hasLayouts = useAppStore((s) => s.project.layouts.length > 0);
 
   const confirmDiscard = (): boolean => isPristine() || window.confirm(t('confirm.discard'));
@@ -81,10 +95,18 @@ export function Toolbar() {
       </Button>
 
       <span className="mx-1 h-5 w-px bg-slate-300" />
-      <Button variant="primary" onClick={() => state().generate()}>
+      <Button variant="primary" onClick={() => state().generate()} disabled={generating}>
         {stale ? t('toolbar.regenerate') : t('toolbar.generate')}
       </Button>
-      {stale && (
+      {generating && (
+        <>
+          <span role="status" className="animate-pulse rounded bg-sky-100 px-2 py-0.5 text-xs text-sky-900">
+            {t('toolbar.generating')}
+          </span>
+          <Button onClick={() => state().cancelGeneration()}>{t('toolbar.cancel')}</Button>
+        </>
+      )}
+      {stale && !generating && (
         <span role="status" className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
           {t('toolbar.regenerateHint')}
         </span>
@@ -101,7 +123,12 @@ export function Toolbar() {
       >
         {t('toolbar.exportCsv')}
       </Button>
+      <Button disabled={!hasLayouts} title={t('report.printHint')} onClick={printReport}>
+        {t('report.button')}
+      </Button>
       <Button onClick={() => state().fitView()}>{t('toolbar.fit')}</Button>
+      {/* D40: the wave screening window. */}
+      <Button onClick={() => state().setWaveToolOpen(true)}>{t('toolbar.waves')}</Button>
 
       <div className="ml-auto flex items-center gap-1" role="group" aria-label={t('toolbar.language')}>
         <Button active={language === 'en'} onClick={() => state().setLanguage('en')}>

@@ -12,10 +12,13 @@ import type {
   MainPier,
   ObjectiveId,
   ObjectiveSettings,
+  Params,
   Stats,
 } from './model';
 import { pierAxis, rowFrame, toLocalRect } from './rows';
+import { accessPontoonsOf } from './site';
 import type { PreparedSite } from './site';
+import { mixClasses, targetShortfall } from './targets';
 
 export interface StatsInput {
   piers: MainPier[];
@@ -26,7 +29,14 @@ export interface StatsInput {
   unreachableRemoved?: number;
 }
 
-export function computeStats(layout: StatsInput, prepared: PreparedSite, classes: BoatClass[]): Stats {
+export function computeStats(
+  layout: StatsInput,
+  prepared: PreparedSite,
+  projectClasses: BoatClass[],
+  params: Pick<Params, 'berthTarget'> = { berthTarget: 'share' },
+): Stats {
+  // With target counts the target mix is the one implied by the counts (D20).
+  const classes = mixClasses(projectClasses, params);
   const active = layout.berths.filter((b) => !b.removed);
   const totalBerths = active.length;
 
@@ -53,13 +63,21 @@ export function computeStats(layout: StatsInput, prepared: PreparedSite, classes
     fingerLength += r.d1 - r.d0;
   }
 
+  // Access pontoons belong to the site and count in every layout (D21).
+  let accessPontoonLength = 0;
+  for (const p of accessPontoonsOf(prepared.site)) {
+    const length = Math.hypot(p.end.x - p.start.x, p.end.y - p.start.y);
+    accessPontoonLength += length;
+    pontoonDeckArea += length * p.width;
+  }
+
   const slotArea = active.reduce((sum, b) => sum + polygonArea(b.slot), 0);
   const fairwayArea = layout.fairways.reduce(
     (sum, f) => sum + polygonArea(f.shape) - f.holes.reduce((h, ring) => h + polygonArea(ring), 0),
     0,
   );
   const marinaWaterArea = slotArea + fairwayArea;
-  const pontoonLength = mainPierLength + fingerLength;
+  const pontoonLength = mainPierLength + fingerLength + accessPontoonLength;
 
   // Target shares over the classes that take part in the mix.
   const shareSum = classes.reduce((sum, c) => sum + Math.max(0, c.share), 0);
@@ -76,6 +94,7 @@ export function computeStats(layout: StatsInput, prepared: PreparedSite, classes
     berthsByClass,
     mainPierLength,
     fingerLength,
+    accessPontoonLength,
     pontoonLength,
     pontoonDeckArea,
     fairwayArea,
@@ -85,6 +104,7 @@ export function computeStats(layout: StatsInput, prepared: PreparedSite, classes
     pontoonPerBerth: totalBerths > 0 ? pontoonLength / totalBerths : 0,
     mixDeviation,
     unreachableRemoved: layout.unreachableRemoved ?? 0,
+    targetShortfall: targetShortfall(classes, params, berthsByClass),
     issueCounts: {
       error: layout.issues.filter((i) => i.severity === 'error').length,
       warning: layout.issues.filter((i) => i.severity === 'warning').length,

@@ -74,20 +74,28 @@ describe('defaults', () => {
     expect(DEFAULT_BOAT_CLASSES.reduce((s, c) => s + c.share, 0)).toBeCloseTo(1, 12);
   });
 
-  it('default parameters match SPEC §4', () => {
+  it('default parameters match SPEC §4, except the fairway factor (D27) and the standard finger lengths (D29)', () => {
     expect(DEFAULT_PARAMS).toEqual({
       mainPierWidth: 3.0,
       fingerWidth: 0.8,
       fingerLengthRatio: 0.8,
+      fingerLengths: [5, 6, 7, 8, 10, 12],
+      berthType: 'finger',
+      boomLengths: [5, 6, 7],
+      boomWidth: 0.4,
+      buoyDepthFactor: 1,
       boatsPerBay: 2,
       beamClearance: 0.5,
       lengthClearance: 0.5,
-      fairwayFactor: 1.5,
+      fairwayFactor: 1.75,
       fairwayMin: 8.0,
+      buoyFairwayFactor: 2.5,
+      buoyFairwayMin: 20,
       obstacleClearance: 2.0,
       maxMainPierLength: 150,
       orientation: 'auto',
       shoreOffset: 0,
+      berthTarget: 'share',
     });
   });
 });
