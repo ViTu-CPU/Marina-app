@@ -7,6 +7,8 @@ import { anchoringPlan, type AnchoringResult } from '../engine/anchoring';
 import { costEstimate, resolveChoices, type CostEstimate, type ResolvedChoices } from '../engine/bom';
 import { DEFAULT_VAT_PCT, parameter, type PriceList } from '../engine/catalog';
 import type { Layout, Project } from '../engine/model';
+import { pierAxis } from '../engine/rows';
+import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../engine/waves';
 import { useAppStore } from '../state/store';
 
 export interface CostModel {
@@ -17,6 +19,13 @@ export interface CostModel {
   choices: ResolvedChoices;
   anchoring: AnchoringResult;
   estimate: CostEstimate;
+}
+
+/** D45: wave directions for the anchoring plan from the wave screening (sectors with a fetch). */
+export function waveInput(project: Project, layout: Layout): { from: number[]; exceeding: string[] } {
+  const from = project.waves.sectors.flatMap((x, k) => (x.fetch > 0 ? [waveSectorBearing(k)] : []));
+  const assessment = waveAssessment(project.waves, project.anchoring.depth, layout.piers.map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) })));
+  return { from, exceeding: (assessment?.bad ?? []).map((k) => WAVE_SECTORS[k]!) };
 }
 
 /** The price list in use: the project's imported one, else the built-in one. */
@@ -38,6 +47,8 @@ export function computeCostModel(project: Project, layout: Layout, builtIn: Pric
     buoyDepthFactor: project.params.buoyDepthFactor,
     moduleLengths: project.params.pierModuleLengths,
     gangwayReach: project.params.gangwayLength,
+    // D45: the directions with open water, and those whose waves exceed the criteria.
+    waves: waveInput(project, layout),
   });
   const estimate = costEstimate({ layout, site: project.site, priceList, choices, anchoring });
   return { priceList, imported: project.cost.priceList !== null, vatPct, choices, anchoring, estimate };

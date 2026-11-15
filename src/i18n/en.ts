@@ -444,6 +444,7 @@ export const en = {
   'anchoring.leewardFactor': 'Wind on shielded boats (share)',
   'anchoring.pontoonFreeboard': 'Pontoon freeboard if unknown (m)',
   'anchoring.lineSpacing': 'Chain pair spacing (m)',
+  'anchoring.waveLoad': 'Wave load where there is open water (kN/m)',
   'anchoring.splayAngle': 'Chain splay from square to the pier (°)',
   'anchoring.tipAnchorMinLength': 'Tip chains on main piers from (m)',
   'anchoring.fingerPileMinLength': 'End piles for fingers longer than (m)',

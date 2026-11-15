@@ -468,6 +468,7 @@ function anchoring(v: unknown): AnchoringParams {
     profileHeightRatio: pick('profileHeightRatio'),
     pontoonFreeboard: pick('pontoonFreeboard'),
     lineSpacing: pick('lineSpacing'),
+    waveLoad: pick('waveLoad'),
     splayAngle: pick('splayAngle'),
     chainSafetyFactor: pick('chainSafetyFactor'),
     corrosionAllowance: pick('corrosionAllowance'),

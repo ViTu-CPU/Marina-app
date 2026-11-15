@@ -236,6 +236,7 @@ export function AnchoringSection() {
       <AnchoringField name="profileHeightRatio" min={0.01} max={1} step={0.01} />
       <AnchoringField name="leewardFactor" min={0} max={1} step={0.05} />
       <AnchoringField name="lineSpacing" min={1} max={100} step={1} />
+      <AnchoringField name="waveLoad" min={0} max={50} step={0.5} />
       <AnchoringField name="splayAngle" min={0} max={MAX_SPLAY_ANGLE} step={5} />
       <AnchoringField name="tipAnchorMinLength" min={0} max={1000} step={0.5} />
       <AnchoringField name="fingerPileMinLength" min={0} max={100} step={0.5} />

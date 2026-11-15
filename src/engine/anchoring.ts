@@ -106,6 +106,11 @@ export interface AnchoringParams {
   /** Spacing of crossed line pairs along a pier, m. */
   lineSpacing: number;
   /**
+   * D45: horizontal wave load on the pontoons from directions with open water, kN/m (AS 3962-2001
+   * 4.8.2.3: "a minimum horizontal force of 2 kN/m"); 0 turns it off.
+   */
+  waveLoad: number;
+  /**
    * Plan angle of the chains of a main pier from square to the pier, degrees (0–80). The
    * splayed chains also hold the wind along the pier (D25); 0 leaves that load unheld.
    */
@@ -193,6 +198,7 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   profileHeightRatio: 0.15,
   pontoonFreeboard: 0.5,
   lineSpacing: 12,
+  waveLoad: 2,
   splayAngle: 45,
   chainSafetyFactor: 3,
   corrosionAllowance: 0,
@@ -435,6 +441,27 @@ export interface AnchoringInput {
   moduleLengths?: readonly number[];
   /** D49: longest gap a pier's shore gangway spans (`Params.gangwayLength`), m. */
   gangwayReach?: number;
+  /**
+   * D45: the wave screening: bearings the waves come from (sectors with a fetch) and the sectors
+   * whose waves exceed the criteria. Missing = no waves.
+   */
+  waves?: { from: readonly number[]; exceeding: readonly string[] };
+}
+
+/** Compass bearing of a direction in plan (x east, y north), degrees. */
+const bearingOfVec = (v: Vec2): number => ((Math.atan2(v.x, v.y) * 180) / Math.PI + 360) % 360;
+
+/**
+ * D45, I99: which way waves from `fromBearing` load a pontoon whose axis (start → end) has bearing
+ * `axisBearing`: 'across' when they travel within 45° of square to it (the wave front within 45° of
+ * the axis, AS 3962 4.8.2.4), else along it — 'fromSea' when they travel from the head towards the
+ * start (pushing the pier shorewards), 'fromShore' the other way.
+ */
+export function waveAction(axisBearing: number, fromBearing: number): 'across' | 'fromSea' | 'fromShore' {
+  const travel = (fromBearing + 180) % 360;
+  const delta = Math.abs((((travel - axisBearing) % 360) + 540) % 360 - 180); // 0–180°
+  if (delta > 45 + 1e-9 && delta < 135 - 1e-9) return 'across';
+  return delta <= 45 + 1e-9 ? 'fromShore' : 'fromSea';
 }
 
 export interface ChainLine {
@@ -794,6 +821,32 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     splayed: true,
     ...pierLoads(pier, layout, classes, p, freeboard),
   }));
+  // D45, I99: the AS 3962 minimum wave load from the directions that have open water: across the
+  // pier on its whole length, along it on its end; added to the wind of the same direction.
+  const waveFrom = input.waves?.from ?? [];
+  const qWave = Math.max(0, p.waveLoad) * 1000;
+  const waveNotes: string[] = [];
+  const addWaves = (item: Held) => {
+    if (qWave <= 0 || waveFrom.length === 0) return;
+    const { length, along } = pierAxis({ id: item.id, start: item.start, end: item.end, width: item.width, locked: false, origin: 'manual' });
+    if (!(length > 0)) return;
+    const actions = new Set(waveFrom.map((b) => waveAction(bearingOfVec(along), b)));
+    const parts: string[] = [];
+    if (actions.has('across')) {
+      item.lateral += qWave * length;
+      parts.push(`across ${((qWave * length) / 1000).toFixed(1)} kN`);
+    }
+    if (actions.has('fromSea')) {
+      item.axialFromSea += qWave * item.width;
+      parts.push(`from the sea ${((qWave * item.width) / 1000).toFixed(1)} kN`);
+    }
+    if (actions.has('fromShore')) {
+      item.axialFromShore += qWave * item.width;
+      parts.push(`from the shore ${((qWave * item.width) / 1000).toFixed(1)} kN`);
+    }
+    if (parts.length > 0) waveNotes.push(`${item.id} ${parts.join(', ')}`);
+  };
+  piers.forEach(addWaves);
 
   // Access pontoons (D28). In front of the shore, chains only on the water side; the wind
   // pushing the pontoon off the wall is shared by tributary length between the shore chains
@@ -806,6 +859,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     const { length, along, left } = pierAxis({ id: a.id, start: a.start, end: a.end, width: a.width, locked: false, origin: 'manual' });
     const across = k * length * freeboard;
     const item: Held = { id: a.id, start: a.start, end: a.end, width: a.width, lateral: across, axialFromSea: 0, axialFromShore: 0, splayed: false };
+    addWaves(item);
     accessItems.push(item);
     if (site.shoreline.length < 2) continue;
     const mid = add(a.start, scale(along, length / 2));
@@ -1267,9 +1321,21 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       item.id,
     );
   }
+  if (waveNotes.length > 0) {
+    warn(
+      'WAVE_LOAD',
+      `Wave load ${p.waveLoad.toFixed(1)} kN/m (AS 3962-2001 4.8.2.3, minimum without a specific analysis) from the directions with open water, added to the wind: ${waveNotes.join('; ')}. Across a pontoon on its whole length (the wave front along it, 4.8.2.4), along it on its end; the fingers' share is not added (not at the same time).`,
+    );
+    if ((input.waves?.exceeding ?? []).length > 0) {
+      warn(
+        'WAVE_LOAD_ABOVE_CRITERIA',
+        `The waves from ${input.waves!.exceeding.join(', ')} exceed the wave climate criteria; AS 3962's 2 kN/m is a minimum "for the wave criteria given in Table 4.2". Larger waves need a specific wave load analysis (and probably wave protection).`,
+      );
+    }
+  }
   warn(
     'ANCHORING_NOT_A_DESIGN',
-    'Preliminary quantity estimate from wind only. Waves, ice, currents, berthing loads and the capacity of the pontoon fixings are not calculated. Requires design by a qualified engineer (e.g. RIL 201-3-2013, AS 3962).',
+    `Preliminary quantity estimate from wind${waveNotes.length > 0 ? ' and the AS 3962 minimum wave load' : ' only'}. ${waveNotes.length > 0 ? 'Wave dynamics' : 'Waves'}, ice, currents, berthing loads and the capacity of the pontoon fixings are not calculated. Requires design by a qualified engineer (e.g. RIL 201-3-2013, AS 3962).`,
   );
   return { lines, piles, loads, issues };
 }

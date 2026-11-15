@@ -4,7 +4,7 @@ import { parsePriceListFile } from '../../catalog/priceList';
 import { DEMO_PROJECTS } from '../../engine/demos';
 import { generateLayouts } from '../../engine/generate';
 import { translate } from '../../i18n';
-import { computeCostModel } from '../costModel';
+import { computeCostModel, waveInput } from '../costModel';
 import { formatEuro } from '../format';
 import { bomWorkbook } from './bomXlsx';
 import { buildReportHtml } from './report';
@@ -104,5 +104,19 @@ describe('bill of materials workbook (D24)', () => {
     const bytes = bomWorkbook(project, layout, model, '2026-11-15');
     expect(bytes.length).toBeGreaterThan(2000);
     expect(String.fromCharCode(bytes[0]!, bytes[1]!)).toBe('PK');
+  });
+});
+
+describe('wave directions for the anchoring plan (D45)', () => {
+  it('the sectors with a fetch, and those whose waves exceed the criteria', () => {
+    expect(waveInput(project, layout)).toEqual({ from: [], exceeding: [] });
+    const withFetch = { ...project, waves: { ...project.waves, wind1: 15, wind50: 22, sectors: project.waves.sectors.map((x, k) => ({ ...x, fetch: k === 2 ? 3000 : k === 4 ? 200 : 0 })) } };
+    const w = waveInput(withFetch, layout);
+    expect(w.from).toEqual([90, 180]);
+    expect(w.exceeding).toContain('E');
+    // The cost model passes them on: the plan carries the wave load warning.
+    const m = computeCostModel(withFetch, layout, parsed.priceList)!;
+    expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD')).toBe(true);
+    expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD_ABOVE_CRITERIA')).toBe(true);
   });
 });

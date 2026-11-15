@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   anchoringPlan,
+  waveAction,
   chainLengthFor,
   chainLine,
   choosePileGuide,
@@ -357,6 +358,32 @@ describe('anchoring plan of a pier', () => {
     }
     // A pier on an access pontoon or beyond the gangway's reach has none.
     expect(plan.lines.some((l) => l.role === 'shore')).toBe(false);
+  });
+
+  it('AS 3962 wave load from the directions with open water (D45, I99)', () => {
+    // Pier P1 runs north (shore end at y = 0). Waves from the east: their front lies along the pier,
+    // 2 kN/m on its 30 m → +60 kN across. Waves from the north (the head): +2 · 3 = 6 kN from the sea.
+    expect(waveAction(0, 90)).toBe('across');
+    expect(waveAction(0, 0)).toBe('fromSea');
+    expect(waveAction(0, 180)).toBe('fromShore');
+    expect(waveAction(0, 45)).toBe('fromSea'); // 45° off the axis: along (the boundary goes along)
+    expect(waveAction(0, 135)).toBe('fromShore');
+    expect(waveAction(90, 0)).toBe('across');
+    const run = (from: number[], exceeding: string[] = []) =>
+      anchoringPlan({ layout: { piers: [pier], berths }, site: pierSite, classes: [boat], params, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5, waves: { from, exceeding } });
+    const east = run([90]);
+    expect(east.loads[0]!.lateralKn).toBeCloseTo(14.036 + 60, 6);
+    expect(east.loads[0]!.axialFromSeaKn).toBeCloseTo(12.342, 6);
+    expect(east.issues.find((i) => i.code === 'WAVE_LOAD')!.message).toContain('P1 across 60.0 kN');
+    const north = run([0, 315]);
+    expect(north.loads[0]!.lateralKn).toBeCloseTo(14.036, 6);
+    expect(north.loads[0]!.axialFromSeaKn).toBeCloseTo(12.342 + 6, 6);
+    // No waves, or a zero load: unchanged.
+    expect(run([]).loads).toEqual(plan.loads);
+    expect(anchoringPlan({ layout: { piers: [pier], berths }, site: pierSite, classes: [boat], params: { ...params, waveLoad: 0 }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5, waves: { from: [90], exceeding: [] } }).loads).toEqual(plan.loads);
+    expect(plan.issues.some((i) => i.code === 'WAVE_LOAD')).toBe(false);
+    // Waves above the criteria: the 2 kN/m minimum is not enough on its own.
+    expect(run([90], ['E']).issues.find((i) => i.code === 'WAVE_LOAD_ABOVE_CRITERIA')!.message).toMatch(/^The waves from E exceed/);
   });
 
   describe('access pontoon in front of the shore (D28)', () => {
