@@ -4,11 +4,14 @@ import { MAX_BOAT_PIER_GAP } from './fingerPier';
 import type { BayGeometry, BerthPattern, LocalRect } from './types';
 
 /**
- * Distance of the stern buoy from the pier edge, m (D35): *"Asennusetäisyys laiturista (A) =
- * veneen pituus (B) + veden syvyys (C)"* (Suomen Laiturikauppa, docs/RESEARCH.md §2.5). The
- * depth is the anchoring design depth (D16), given to the engine as `params.waterDepth`.
+ * Distance of the stern buoy from the pier edge, m (D35, I78): boat length + factor × water
+ * depth. Factor 1: *"Asennusetäisyys laiturista (A) = veneen pituus (B) + veden syvyys (C)"*
+ * (Suomen Laiturikauppa, docs/RESEARCH.md §2.5); Top Marine: *"veneen pituus + kolme kertaa
+ * veden syvyys"* (factor 3). The depth is the anchoring design depth (D16), given to the
+ * engine as `params.waterDepth`.
  */
-export const sternBuoyDistance = (boat: BoatClass, params: Params): number => boat.length + (params.waterDepth ?? DEFAULT_ANCHORING.depth);
+export const sternBuoyDistance = (boat: BoatClass, params: Params): number =>
+  boat.length + (params.buoyDepthFactor ?? 1) * (params.waterDepth ?? DEFAULT_ANCHORING.depth);
 
 /**
  * Stern-buoy berths (peräpoiju, D35): the boat lies bow to the pier and stern to a buoy; no

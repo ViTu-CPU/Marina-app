@@ -108,8 +108,12 @@ describe('chain line (catenary)', () => {
       dragCoefficient: 1.2,
       profileHeightRatio: 0.25,
       friction: { clay: 0.2, sand: 0.5, rock: 0.4 },
+      buoySinkerFactor: 5,
+      buoyChainFactor: 3,
     };
     expect(resetAnchoringFactors(own)).toEqual({ ...DEFAULT_ANCHORING, depth: 7, highWater: 1.2, lowWater: 0.6, seabed: 'sand', windSpeed: 25 });
+    // The sinker method of the stern buoys is a choice, like the anchor type (D36).
+    expect(resetAnchoringFactors({ ...own, buoySinkerMethod: 'table' }).buoySinkerMethod).toBe('table');
   });
 
   it('chain length: factor × depth, at least depth + 1 m', () => {

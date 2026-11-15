@@ -14,6 +14,7 @@ export const PRODUCT_CATEGORIES = [
   'chain',
   'anchor',
   'wall_fixing',
+  'buoy',
   'shackle',
   'spring',
   'anode',

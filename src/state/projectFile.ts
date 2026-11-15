@@ -134,7 +134,10 @@ function boatClasses(v: unknown): BoatClass[] {
       share: num(e.share, `${p}.share`),
       // Files from before target counts (D20) have none; 0 until the user sets them.
       count: e.count === undefined ? 0 : num(e.count, `${p}.count`),
+      // D36: optional boat weight, t.
+      ...(e.weight === undefined || e.weight === null ? {} : { weight: num(e.weight, `${p}.weight`) }),
     };
+    if (c.weight !== undefined && !(c.weight > 0)) fail(`${p}.weight must be positive`);
     if (c.length <= 0 || c.beam <= 0) fail(`${p}: length and beam must be positive`);
     if (c.share < 0) fail(`${p}.share must not be negative`);
     if (c.count < 0 || !Number.isInteger(c.count)) fail(`${p}.count must be a whole number, 0 or more`);
@@ -168,6 +171,7 @@ function params(v: unknown): Params {
     berthType: o.berthType === undefined ? DEFAULT_PARAMS.berthType : oneOf(o.berthType, BERTH_TYPES, 'params.berthType'),
     boomLengths: lengthList(o.boomLengths, 'boomLengths'),
     boomWidth: pick('boomWidth'),
+    buoyDepthFactor: pick('buoyDepthFactor'),
     boatsPerBay: boatsPerBay as 1 | 2,
     beamClearance: pick('beamClearance'),
     lengthClearance: pick('lengthClearance'),
@@ -310,7 +314,7 @@ function anchoring(v: unknown): AnchoringParams {
   if (v === undefined) return structuredClone(DEFAULT_ANCHORING);
   const o = obj(v, 'anchoring');
   const d = DEFAULT_ANCHORING;
-  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType'>): number =>
+  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod'>): number =>
     o[key] === undefined ? d[key] : num(o[key], `anchoring.${key}`);
   const f = o.friction === undefined ? {} : obj(o.friction, 'anchoring.friction');
   const mu = (k: Seabed) => (f[k] === undefined ? d.friction[k] : num(f[k], `anchoring.friction.${k}`));
@@ -336,6 +340,10 @@ function anchoring(v: unknown): AnchoringParams {
     tipAnchorMinLength: pick('tipAnchorMinLength'),
     fingerPileMinLength: pick('fingerPileMinLength'),
     anchorType: o.anchorType === undefined ? d.anchorType : oneOf(o.anchorType, ['block', 'wedge'] as const, 'anchoring.anchorType'),
+    buoySinkerMethod:
+      o.buoySinkerMethod === undefined ? d.buoySinkerMethod : oneOf(o.buoySinkerMethod, ['factor', 'table'] as const, 'anchoring.buoySinkerMethod'),
+    buoySinkerFactor: pick('buoySinkerFactor'),
+    buoyChainFactor: pick('buoyChainFactor'),
     waterDensity: pick('waterDensity'),
     concreteDensity: pick('concreteDensity'),
     steelDensity: pick('steelDensity'),
@@ -347,6 +355,8 @@ function anchoring(v: unknown): AnchoringParams {
   if (result.tipAnchorMinLength < 0) fail('anchoring.tipAnchorMinLength must not be negative');
   if (result.fingerPileMinLength < 0) fail('anchoring.fingerPileMinLength must not be negative');
   if (Object.values(result.friction).some((x) => x <= 0)) fail('anchoring.friction values must be positive');
+  if (result.buoySinkerFactor <= 0) fail('anchoring.buoySinkerFactor must be positive');
+  if (result.buoyChainFactor <= 0) fail('anchoring.buoyChainFactor must be positive');
   return result;
 }
 

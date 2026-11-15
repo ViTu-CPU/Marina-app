@@ -317,6 +317,25 @@ async function waitForServer() {
       assert.equal(sb.fingers.length, 0);
       assert.ok(sb.berths.length > 0 && sb.berths.every((b) => b.type === 'sternBuoy' && b.buoy), 'stern-buoy berths with buoys');
       assert.equal(sb.stats.issueCounts.error, 0);
+      // Stern-buoy sizing (D36): a weight column (empty = estimated from the length), the sinker
+      // method; the anchoring plan lists the buoys and their heaviest sinker.
+      await page.waitForFunction(() => window.__marina.getState().builtInPriceList !== null, null, { timeout: 10000 });
+      const weight = page.getByRole('textbox', { name: 'Weight (t): 5 m', exact: true });
+      assert.equal(await weight.getAttribute('placeholder'), '≈1.3');
+      await weight.fill('1.5');
+      await page.waitForFunction(() => window.__marina.getState().project.boatClasses.find((c) => c.name === '5 m').weight === 1.5);
+      const buoys = page.getByText('Stern buoys', { exact: true });
+      await buoys.scrollIntoViewIfNeeded();
+      assert.ok(await buoys.isVisible());
+      const sinker = () => page.getByText('Heaviest buoy sinker', { exact: true }).locator('xpath=following-sibling::span').textContent();
+      const byFactor = await sinker();
+      await page.getByText('Anchoring parameters', { exact: true }).click();
+      await page.getByRole('combobox', { name: 'Stern-buoy sinker' }).selectOption('table');
+      await page.waitForFunction(() => window.__marina.getState().project.anchoring.buoySinkerMethod === 'table');
+      const byTable = await sinker();
+      assert.notEqual(byTable, byFactor, `table ${byTable} vs factor ${byFactor}`);
+      await page.getByRole('combobox', { name: 'Stern-buoy sinker' }).selectOption('factor');
+      await page.getByText('Anchoring parameters', { exact: true }).click();
       await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('finger');
     });
 

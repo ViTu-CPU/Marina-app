@@ -42,6 +42,11 @@
  *     than the largest piece to be handled; otherwise several of the heaviest such piece.
  *     Friction only: the extra holding of an anchor embedded in the seabed is not counted
  *     (it depends on penetration, which is not known at this stage; Chalmers 2026 §7.5).
+ *  7. Stern buoys (D36, I79–I82): one line per stern-buoy berth, from the buoy straight down
+ *     to its sinker. Sinker = factor × boat weight, or the anchor of Top Marine's selection
+ *     table by boat weight; chain length = factor × depth at high water (at least + 1 m);
+ *     chain at least the table's size and strong enough for the boat's stern-on wind; float
+ *     of at least the table's buoyancy. The friction method of step 6 is shown for comparison.
  */
 import { unitPriceVat0, type PriceList, type Product } from './catalog';
 import { add, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
@@ -57,6 +62,12 @@ export type Seabed = 'clay' | 'sand' | 'rock';
  * (DECISIONS I59).
  */
 export type AnchorType = 'block' | 'wedge';
+
+/**
+ * How stern-buoy sinkers are sized (D36): 'factor' = `buoySinkerFactor` × boat weight;
+ * 'table' = the anchor of Top Marine's selection table for the boat's weight.
+ */
+export type BuoySinkerMethod = 'factor' | 'table';
 
 export interface AnchoringParams {
   /** Design water depth at the anchors, m (D16). */
@@ -101,6 +112,12 @@ export interface AnchoringParams {
   /** Fingers longer than this get an end pile at the tip (D31), m. */
   fingerPileMinLength: number;
   anchorType: AnchorType;
+  /** Stern buoys (D36): how the sinker is sized. */
+  buoySinkerMethod: BuoySinkerMethod;
+  /** Stern buoys: sinker mass as a multiple of the boat weight (method 'factor'). */
+  buoySinkerFactor: number;
+  /** Stern buoys: chain length as a multiple of the water depth at high water (at least + 1 m). */
+  buoyChainFactor: number;
   waterDensity: number;
   concreteDensity: number;
   steelDensity: number;
@@ -130,6 +147,9 @@ export interface AnchoringParams {
  *  - tipAnchorMinLength 10 m: owner's choice (D30).
  *  - fingerPileMinLength 12 m: "Longer than 12 m Super Yacht and Concrete Fingers are moored with
  *    end piles" (Marinetek catalogue 2012, p. 27; owner's choice D31).
+ *  - buoySinkerMethod 'factor', buoySinkerFactor 3, buoyChainFactor 2: owner's choice (D36) after
+ *    Top Marine, "suojaisissa olosuhteissa vähintään 3–5 × veneen paino" and "Poijukettingin
+ *    pituus: normaaliolosuhteet: veden syvyys × 2" (topmarinelaiturit.fi, read 2026-11-15).
  *  - Assumptions without a source: depth and water levels (site data), pontoonFreeboard,
  *    lineSpacing, slidingSafetyFactor, friction for clay and rock.
  */
@@ -155,6 +175,9 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   tipAnchorMinLength: 10,
   fingerPileMinLength: 12,
   anchorType: 'block',
+  buoySinkerMethod: 'factor',
+  buoySinkerFactor: 3,
+  buoyChainFactor: 2,
   waterDensity: 1000,
   concreteDensity: 2400,
   steelDensity: 7850,
@@ -162,7 +185,8 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
 
 /**
  * The method's defaults with the site values and the anchor type of `p` kept (depth, water
- * levels, seabed, design wind): "Reset factors to defaults" (DECISIONS U19).
+ * levels, seabed, design wind), and the stern-buoy sinker method (D36): "Reset factors to
+ * defaults" (DECISIONS U19).
  */
 export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
   ...structuredClone(DEFAULT_ANCHORING),
@@ -172,6 +196,7 @@ export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
   seabed: p.seabed,
   windSpeed: p.windSpeed,
   anchorType: p.anchorType,
+  buoySinkerMethod: p.buoySinkerMethod,
 });
 
 const G = 9.81;
@@ -196,9 +221,10 @@ export interface AnchorLine {
   fixing: 'seabed' | 'wall';
   /**
    * 'side': a chain of the stations along a pier or access pontoon; 'tip': one of the two
-   * crossed chains at a pier head (D30); 'shore': a shore chain (D28).
+   * crossed chains at a pier head (D30); 'shore': a shore chain (D28); 'buoy': the chain from
+   * a stern buoy to its sinker (D36; `holdsId` is the berth, fix and anchor the buoy).
    */
-  role: 'side' | 'tip' | 'shore';
+  role: 'side' | 'tip' | 'shore' | 'buoy';
   /** Where the chain is fixed to the pontoon. */
   fix: Vec2;
   /** Position of the anchor on the seabed, or of the wall fixing (plan view). */
@@ -221,7 +247,68 @@ export interface AnchorLine {
   anchorId: string | null;
   /** Number of anchors (more than 1 only when no single anchor is heavy enough). */
   anchorCount: number;
+  /** Stern buoys only (D36). */
+  buoy?: BuoyDetails;
 }
+
+/** What sized a stern buoy (D36). */
+export interface BuoyDetails {
+  /** Boat weight used, t. */
+  boatWeightT: number;
+  /** Whether the weight was estimated from the boat length (I79). */
+  weightEstimated: boolean;
+  /** Buoyancy the float needs at least, kg. */
+  floatCapacityKg: number;
+  /** Shackle size from the selection table, mm. */
+  shackleMm: number;
+  /** Sinker mass the friction method of the piers would need for the stern-on wind, kg. */
+  windAnchorKg: number;
+}
+
+/**
+ * Top Marine's selection table for stern buoys ("Millainen venepoiju valita veneelle?",
+ * https://topmarinelaiturit.fi/laituritarvikkeet/poijut/, read 2026-11-15): sailing boat
+ * length (m), beam (m), weight (t) → buoy (l), anchor (kg), chain / shackle (mm). The float
+ * buoyancy is Top Marine's "Kantavuus" of that buoy (40 l: 31 kg, 60 l: 48 kg, 120 l: 104 kg).
+ */
+export const BUOY_TABLE = [
+  { lengthM: 4.6, beamM: 2.0, weightT: 1.0, buoyL: 40, floatCapacityKg: 31, anchorKg: 500, chainMm: 10, shackleMm: 13 },
+  { lengthM: 6.1, beamM: 2.4, weightT: 2.0, buoyL: 40, floatCapacityKg: 31, anchorKg: 500, chainMm: 13, shackleMm: 16 },
+  { lengthM: 7.6, beamM: 2.8, weightT: 3.3, buoyL: 60, floatCapacityKg: 48, anchorKg: 500, chainMm: 13, shackleMm: 16 },
+  { lengthM: 9.1, beamM: 3.2, weightT: 4.8, buoyL: 60, floatCapacityKg: 48, anchorKg: 1000, chainMm: 16, shackleMm: 20 },
+  { lengthM: 10.7, beamM: 3.6, weightT: 6.5, buoyL: 120, floatCapacityKg: 104, anchorKg: 1000, chainMm: 16, shackleMm: 20 },
+  { lengthM: 12.2, beamM: 4.0, weightT: 8.5, buoyL: 120, floatCapacityKg: 104, anchorKg: 1000, chainMm: 16, shackleMm: 20 },
+  { lengthM: 13.7, beamM: 4.4, weightT: 10.8, buoyL: 120, floatCapacityKg: 104, anchorKg: 2000, chainMm: 20, shackleMm: 22 },
+] as const;
+export type BuoyTableRow = (typeof BUOY_TABLE)[number];
+
+/**
+ * Boat weight estimated from its length, t (I79): linear between the rows of Top Marine's
+ * table for sailing boats, in proportion below the first row, and continuing the last
+ * segment above the last. An ESTIMATE: real boats vary a lot.
+ */
+export function estimateBoatWeight(length: number): number {
+  const rows = BUOY_TABLE;
+  const first = rows[0];
+  if (length <= first.lengthM) return (first.weightT * Math.max(0, length)) / first.lengthM;
+  for (let i = 1; i < rows.length; i++) {
+    const a = rows[i - 1]!;
+    const b = rows[i]!;
+    if (length <= b.lengthM) return a.weightT + ((b.weightT - a.weightT) * (length - a.lengthM)) / (b.lengthM - a.lengthM);
+  }
+  const a = rows[rows.length - 2]!;
+  const b = rows[rows.length - 1]!;
+  return b.weightT + ((b.weightT - a.weightT) * (length - b.lengthM)) / (b.lengthM - a.lengthM);
+}
+
+/** The first row of the table for a boat of `weightT` t; the last row when it is heavier (`beyond`). */
+export function buoyTableRow(weightT: number): { row: BuoyTableRow; beyond: boolean } {
+  const row = BUOY_TABLE.find((r) => r.weightT >= weightT - 1e-9);
+  return row ? { row, beyond: false } : { row: BUOY_TABLE[BUOY_TABLE.length - 1]!, beyond: true };
+}
+
+/** Chain length of a stern buoy in water `h` deep (high water), m. */
+export const buoyChainLength = (h: number, p: AnchoringParams): number => Math.max(h + 1, p.buoyChainFactor * h);
 
 /**
  * Marinetek's standard pile guides: design pile load and pile diameter (Pile Guides brochure,
@@ -413,17 +500,30 @@ function wedgeChainLength(h: number, H: number, w: number, base: number, limitDe
 
 /**
  * The cheapest chain of the list that holds `H` (N) in water `h` deep (m), or null. With wedge
- * anchors each chain is made long enough for the wedge tables' angle limit.
+ * anchors each chain is made long enough for the wedge tables' angle limit. `fixed` gives a
+ * set length (no wedge sizing) and a smallest diameter, for stern buoys (D36).
  */
-export function chooseChain(H: number, h: number, p: AnchoringParams, list: PriceList, vatPct: number): ChainChoice | null {
+export function chooseChain(
+  H: number,
+  h: number,
+  p: AnchoringParams,
+  list: PriceList,
+  vatPct: number,
+  fixed?: { length: number; minDiameterMm: number },
+): ChainChoice | null {
   let best: { choice: ChainChoice; cost: number } | null = null;
   for (const product of list.products) {
     if (product.category !== 'chain' || product.breakingLoadKn === null || product.massKgPerM === null) continue;
     const price = unitPriceVat0(product, vatPct);
     const d = product.chainDiameterMm;
     if (price === null || d === null || d <= p.corrosionAllowance) continue;
+    if (fixed && d < fixed.minDiameterMm - 1e-9) continue;
     const w = submergedWeight(product.massKgPerM, p);
-    const length = usesWedge(p) ? wedgeChainLength(h, H, w, chainLengthFor(h, p), WEDGE_ANGLE_LIMIT[p.seabed]) : chainLengthFor(h, p);
+    const length = fixed
+      ? fixed.length
+      : usesWedge(p)
+        ? wedgeChainLength(h, H, w, chainLengthFor(h, p), WEDGE_ANGLE_LIMIT[p.seabed])
+        : chainLengthFor(h, p);
     const line = chainLine(h, length, H, w);
     const remaining = ((d - p.corrosionAllowance) / d) ** 2;
     if (product.breakingLoadKn * 1000 * remaining < p.chainSafetyFactor * line.topTension) continue;
@@ -811,6 +911,92 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
         if (!shore.product) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(shore.tension / 1000).toFixed(1)} kN with the safety factor; shore chain ${id} has no chain.`, item.id);
       }
       });
+  }
+
+  // D36: stern buoys. One line per berth from the buoy straight down to its sinker.
+  const classById = new Map(classes.map((c) => [c.id, c]));
+  const buoyLines: AnchorLine[] = [];
+  const estimated = new Map<string, number>();
+  let beyondTable = 0;
+  for (const b of layout.berths) {
+    const c = classById.get(b.boatClassId);
+    if (!b.buoy || b.removed || !c) continue;
+    const weightEstimated = !(c.weight !== undefined && c.weight > 0);
+    const weight = weightEstimated ? estimateBoatWeight(c.length) : c.weight!;
+    if (weightEstimated) estimated.set(c.id, weight);
+    const { row, beyond } = buoyTableRow(weight);
+    if (beyond) beyondTable++;
+    // The buoy holds the boat against wind from the sea, which meets it stern-on (full load).
+    const H = k * c.beam * p.profileHeightRatio * c.length;
+    const length = buoyChainLength(hHigh, p);
+    const chain = chooseChain(H, hHigh, p, priceList, vatPct, { length, minDiameterMm: row.chainMm });
+    const uplift = chain?.uplift ?? 0;
+    const mass = p.buoySinkerMethod === 'table' ? row.anchorKg : p.buoySinkerFactor * weight * 1000;
+    const anchor = chooseAnchor(mass, priceList, vatPct, p.maxAnchorMass);
+    const chainMass = chain ? chain.product.massKgPerM! * length * (1 - p.waterDensity / p.steelDensity) : 0;
+    const line: AnchorLine = {
+      id: `${b.id}-B`,
+      holdsId: b.id,
+      splay: 'none',
+      governs: 'across',
+      fixing: 'seabed',
+      role: 'buoy',
+      fix: b.buoy,
+      anchor: b.buoy,
+      horizontalKn: H / 1000,
+      topTensionKn: (chain?.topTension ?? H) / 1000,
+      chainLength: length,
+      chainId: chain?.product.id ?? null,
+      upliftKn: uplift / 1000,
+      upliftAngleDeg: upliftAngle(H, uplift),
+      anchorType: 'block',
+      requiredAnchorKg: mass,
+      anchorId: anchor?.product.id ?? null,
+      anchorCount: anchor?.count ?? 0,
+      buoy: {
+        boatWeightT: weight,
+        weightEstimated,
+        floatCapacityKg: Math.max(row.floatCapacityKg, chainMass),
+        shackleMm: row.shackleMm,
+        windAnchorKg: requiredAnchorMass(H, uplift, p),
+      },
+    };
+    buoyLines.push(line);
+    if (!chain) {
+      warn('NO_CHAIN_STRONG_ENOUGH', `No chain of at least ${row.chainMm} mm in the price list holds ${(H / 1000).toFixed(1)} kN with the safety factor; stern buoy ${line.id} has no chain.`, b.id);
+    }
+  }
+  lines.push(...buoyLines);
+  if (buoyLines.length > 0) {
+    const heaviest = buoyLines.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
+    const several = buoyLines.filter((l) => l.anchorCount > 1).length;
+    const sinker =
+      p.buoySinkerMethod === 'table'
+        ? 'the anchor of Top Marine’s selection table for the boat’s weight'
+        : `${p.buoySinkerFactor.toFixed(1)} × the boat’s weight (Top Marine: 3–5 × in sheltered, 5–10 × in open areas)`;
+    warn(
+      'STERN_BUOYS',
+      `${buoyLines.length} stern buoys, each on its own sinker: ${sinker}, heaviest ${Math.round(heaviest)} kg${several > 0 ? ` (${several} buoys need several anchors of at most ${Math.round(p.maxAnchorMass)} kg; Top Marine joins two sinkers with about 1 m of chain)` : ''}. Chain ${buoyLines[0]!.chainLength.toFixed(1)} m = ${p.buoyChainFactor.toFixed(1)} × the depth at high water (Top Marine: depth × 2, in the open sea × 3${hHigh > 8 ? ', at depths over 8 m × 1.5' : ''}), at least the table’s size and strong enough for the boat’s stern-on wind; float of at least the table’s buoyancy. The wind on the boats broadside is left to the piers.`,
+    );
+    const light = buoyLines.filter((l) => l.buoy!.windAnchorKg > l.requiredAnchorKg + 1e-6);
+    if (light.length > 0) {
+      const worst = light.reduce((a, l) => (l.buoy!.windAnchorKg - l.requiredAnchorKg > a.buoy!.windAnchorKg - a.requiredAnchorKg ? l : a));
+      warn(
+        'BUOY_SINKER_BELOW_WIND_METHOD',
+        `${light.length} stern-buoy sinkers are lighter than the friction method of the pier anchors needs for the boat’s stern-on wind (e.g. ${worst.id}: ${Math.round(worst.requiredAnchorKg)} kg, the method gives ${Math.round(worst.buoy!.windAnchorKg)} kg).`,
+      );
+    }
+    if (estimated.size > 0) {
+      warn(
+        'BOAT_WEIGHT_ESTIMATED',
+        `No weight given for ${[...estimated.entries()]
+          .map(([id, w]) => `${classById.get(id)!.name} (estimated ${w.toFixed(1)} t)`)
+          .join(', ')}: estimated from the length with Top Marine’s table for sailing boats. Enter the boat weights for the stern buoys.`,
+      );
+    }
+    if (beyondTable > 0) {
+      warn('BOAT_ABOVE_BUOY_TABLE', `${beyondTable} stern buoys are for boats heavier than ${BUOY_TABLE[BUOY_TABLE.length - 1]!.weightT.toFixed(1)} t, the end of Top Marine’s table; its largest set is used.`);
+    }
   }
 
   // D31: fingers longer than `fingerPileMinLength` are moored with an end pile (Marinetek).

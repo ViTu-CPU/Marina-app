@@ -190,7 +190,9 @@ pairs about every 2 m or at both chain ends) and these **buoy** chain rules (p. 
 *"Peräpoijun ketjunpituus (D) = veden syvyys (C) + 3 m"*, *"Ketjun pituus ahtaassa
 satamassa (D) = veden syvyys (C) + 1 m"*, *"Ketjun pituus avomerellä (D) = veden syvyys (C)
 x 3"*, *"Asennusetäisyys laiturista (A) = veneen pituus (B) + veden syvyys (C)"*.
-These are used for stern-buoy berths (later phase), not for pontoon anchoring.
+The installation distance is used for stern-buoy berths (DECISIONS D35); the chain rules are
+kept for comparison with Top Marine's (§9.13, I81): with 5.5 m at high water, depth + 3 m gives
+8.5 m, Top Marine's depth × 2 (the owner's choice, D36) 11.0 m.
 
 ### 2.6 Savorak / Lip-Lap
 
@@ -377,6 +379,11 @@ parameter is shown with its source or marked **assumption**.
    on sand, 0.9 t as wedges on clay and 0.7 t on sand; anchors per metre of pier 1.55, 0.83,
    0.17 and 0.13 t (before: 1.61, 0.86, 0.18, 0.13 t); wedge chains about 44 m (clay) and 40 m
    (sand). The total hardly changes; the peak loads at the heads are spread over all lines.
+10. **Stern buoys (D36, I78–I82).** One sinker per buoy, straight below it: factor × boat
+   weight (default 3) or the anchor of Top Marine's selection table (§9.13); chain max(h + 1 m,
+   2 h) at high water, at least the table's size, MBL ≥ SF × top tension under the boat's
+   stern-on wind. On the demos (clay) the friction method gives 0.7–3.1 t per buoy, the table
+   0.5–1.0 t and factor 3 3.8–24.7 t; the published rules differ by a factor of about 25.
 7. **Ice**: pontoons that stay in the water over winter (owner decision D17) get a warning:
    ice loads are not calculated. Suppliers allow freezing but not moving ice.
 8. **Water level**: high and low water relative to the design depth are parameters. For
@@ -646,4 +653,52 @@ several are images only and were read as images. No prices.
 - **Catalogue "Marinas, Pontoons and Floating Solutions" 2012** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Marinas-Pontoons-and-Floating-Solutions-2012.pdf)),
   "Boat Moorings" (p. 26–27): *"Light weight mooring Booms are 4-12 m long"*; *"Longer than 12 m
   Super Yacht and Concrete Fingers are moored with end piles."* (DECISIONS D31.)
+
+### 9.13 Top Marine: stern buoys (read 2026-11-15)
+
+Three pages of topmarinelaiturit.fi, a Finnish pontoon manufacturer (product and marketing
+pages: a supplier's rules of thumb, not a design method; weak sources for a marina):
+
+- **Article "Poiju – ankkuripainon mitoitus"** (
+  [topmarinelaiturit.fi/hyodyllista/poiju-ankkuripainon-mitoitus/](https://topmarinelaiturit.fi/hyodyllista/poiju-ankkuripainon-mitoitus/)):
+  *"Suojaisissa olosuhteissa suositus on 3–5 × veneen paino. Avoimilla alueilla suositus on
+  5–10 × veneen paino."*; *"Poijukettingin pituus: normaaliolosuhteet: veden syvyys × 2;
+  avomeri: veden syvyys × 3; syvyys yli 8 m: kerroin 1,5"*; floats *"40 l – pienet veneet, 60 l –
+  keskikokoiset, 120 l – suuret veneet ja avomeri"*; two sinkers joined by about 1 m of chain on
+  rocky bottoms, in very windy places and for large boats; *"Liian ohut kettinki (<10 mm)"* listed
+  as a common mistake. (DECISIONS D36.)
+- **Product page "Poijut"** ([topmarinelaiturit.fi/laituritarvikkeet/poijut/](https://topmarinelaiturit.fi/laituritarvikkeet/poijut/)):
+  the same rule *"suojaisissa olosuhteissa vähintään 3–5 × veneen paino – avoimilla alueilla
+  jopa 5–10 × veneen paino"*, but also *"Ankkurointikettingin pituus (E) saadaan laskutoimituksella:
+  veden maksimisyvyys + 1 m. Avomerellä … veden syvyys kerrottuna kolmella"* and *"Ketjun
+  nimellinen koko valitaan veneen painon mukaan. Sakkelin nimellinen koko on aina suurempi kuin
+  kettingin koko"*. Selection table "Millainen venepoiju valita veneelle?" (sailing boats):
+
+  | Length ft / m | Beam m | Weight t | Buoy l | Anchor kg | Chain/shackle mm |
+  |---|---|---|---|---|---|
+  | 15 / 4,6 | 2,0 | 1,0 | 40 | 500 | 10/13 |
+  | 20 / 6,1 | 2,4 | 2,0 | 40 | 500 | 13/16 |
+  | 25 / 7,6 | 2,8 | 3,3 | 60 | 500 | 13/16 |
+  | 30 / 9,1 | 3,2 | 4,8 | 60 | 1000 | 16/20 |
+  | 35 / 10,7 | 3,6 | 6,5 | 120 | 1000 | 16/20 |
+  | 40 / 12,2 | 4,0 | 8,5 | 120 | 1000 | 16/20 |
+  | 45 / 13,7 | 4,4 | 10,8 | 120 | 2000 | 20/22 |
+
+  Floats (Tekniset tiedot): Poiju 40 l / 60 l / 120 l, codes 111000 / 112000 / 113000, weight 9 /
+  12 / 16 kg, *"Kantavuus (kg)"* 31 / 48 / 104, D 440 / 500 / 630 mm. Example packages with
+  component prices (*"Hinnat sisältävät arvonlisäveron, mutta eivät asennuskuluja."*): 4,6 m
+  boat 309 € = Venepoiju 40 l 168 € + Betonipaino 500 kg 120 € + Kettinki 10 mm 3 m 18 € + Sakkeli
+  12 mm 3 €; 7,6 m 363 € = 60 l 198 € + 500 kg 120 € + 13 mm 4 m 40 € + 16 mm 5 €; 12,2 m 596 € =
+  120 l 243 € + 1 000 kg 271 € + 16 mm 5 m 75 € + 20 mm 7 €.
+- **Price list** ([topmarinelaiturit.fi/hinnasto/](https://topmarinelaiturit.fi/hinnasto/)): the same
+  three packages (309 €, 363 €, 596 €) and *"Venepoijun etäisyys laiturista = veneen pituus + kolme
+  kertaa veden syvyys"* (DECISIONS I78).
+
+**Contradictions:** the table's anchors are 0.12–0.5 × the boat weight, the rule 3–5 ×; the chain
+length is "maximum depth + 1 m" on the product page and "depth × 2" in the article; the package
+chains (3, 4, 5 m) are shorter than either rule for most depths. The price list takes the floats and
+the 500 kg sinker at their package component prices (rows `buoy-topmarine-40/60/120`,
+`anchor-topmarine-500`); Top Marine's chains and shackles are not added because their breaking
+loads are not published (the tool chooses chains by breaking load; the existing shackle rows are
+load-rated).
 

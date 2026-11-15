@@ -73,6 +73,59 @@ export function NumberField({ label, value, onChange, min, max, step = 0.1, bare
 }
 
 /**
+ * Optional numeric table cell (D36): empty means "not given" (undefined), shown with a
+ * placeholder such as an estimate. Reports only valid numbers within the limits, or undefined.
+ */
+export function OptionalNumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  placeholder,
+}: {
+  label: string;
+  value: number | undefined;
+  onChange: (value: number | undefined) => void;
+  min: number;
+  max: number;
+  placeholder?: string;
+}) {
+  const [text, setText] = useState(value === undefined ? '' : String(value));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setText(value === undefined ? '' : String(value));
+  }, [value, focused]);
+  const read = (s: string): number | undefined | null => {
+    if (s.trim() === '') return undefined;
+    const n = Number(s.replace(',', '.'));
+    return Number.isFinite(n) && n >= min && n <= max ? n : null;
+  };
+  const valid = read(text) !== null;
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      aria-label={label}
+      aria-invalid={!valid}
+      placeholder={placeholder}
+      className={`w-full rounded border px-0.5 py-0.5 text-right text-sm tabular-nums placeholder:text-xs placeholder:text-slate-400 ${valid ? 'border-slate-300' : 'border-red-500 bg-red-50'}`}
+      value={text}
+      onFocus={() => setFocused(true)}
+      onBlur={() => {
+        setFocused(false);
+        appStore.getState().endCoalescing();
+      }}
+      onChange={(e) => {
+        setText(e.target.value);
+        const next = read(e.target.value);
+        if (next !== null && next !== value) onChange(next);
+      }}
+    />
+  );
+}
+
+/**
  * Parses a list of lengths: entries separated by spaces or semicolons, a comma right after an
  * entry also separates ("4, 5, 10.5"), a comma inside an entry is a decimal comma ("10,5").
  * Returns sorted unique positive numbers, or null if an entry is not one.

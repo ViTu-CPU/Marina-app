@@ -305,6 +305,9 @@ export function costEstimate(input: CostInput): CostEstimate {
     return enough[0] ?? candidates.sort((a, b) => size(b)! - size(a)!)[0] ?? null;
   };
   let missingChain = 0;
+  /** Stern buoys (D36) without a float of the needed buoyancy in the list. */
+  let smallFloats = 0;
+  let buoyLines = 0;
   for (const line of anchoring.lines) {
     const chain = line.chainId ? byId.get(line.chainId) : undefined;
     if (chain) addQty('anchoring', chain, line.chainLength, line.id);
@@ -312,6 +315,19 @@ export function costEstimate(input: CostInput): CostEstimate {
     const anchor = line.anchorId ? byId.get(line.anchorId) : undefined;
     if (anchor) addQty('anchoring', anchor, line.anchorCount, line.id);
     const d = chain?.chainDiameterMm ?? 0;
+    if (line.buoy) {
+      // A stern buoy: float, sinker and chain with its shackles, as in Top Marine's buoy
+      // packages (no spring, no anode; I81).
+      buoyLines++;
+      const float = smallest('buoy', (p) => p.capacityKg, line.buoy.floatCapacityKg);
+      if (float) {
+        if ((float.capacityKg ?? 0) < line.buoy.floatCapacityKg - 1e-9) smallFloats++;
+        addQty('anchoring', float, 1, line.id);
+      }
+      const buoyShackle = smallest('shackle', (p) => p.shackleMm, Math.max(d, line.buoy.shackleMm));
+      if (buoyShackle) addQty('anchoring', buoyShackle, par('shackles_per_buoy_line', 1), line.id);
+      continue;
+    }
     const shackle = smallest('shackle', (p) => p.shackleMm, d);
     if (shackle) addQty('anchoring', shackle, par('shackles_per_anchor_line', 2), line.id);
     const spring = smallest('spring', (p) => p.chainDiameterMm, d);
@@ -320,6 +336,10 @@ export function costEstimate(input: CostInput): CostEstimate {
     if (anode) addQty('anchoring', anode, par('anodes_per_anchor_line', 1), line.id);
   }
   if (missingChain > 0) notes.push(`${missingChain} anchor lines have no chain strong enough in the price list; their chain is not priced.`);
+  if (buoyLines > 0 && !list.products.some((p) => p.category === 'buoy' && p.capacityKg !== null && priced(p, vat) !== null)) {
+    notes.push('No buoy floats with a buoyancy in the price list: the stern buoys are not priced.');
+  }
+  if (smallFloats > 0) notes.push(`${smallFloats} stern buoys need more buoyancy than the largest float of the price list; the largest is used.`);
   // Shore chains (D28): one fixing in the wall each; its capacity is not checked.
   if (wallLines > 0) {
     const fixing = list.products

@@ -137,7 +137,7 @@ function AnchorShapes() {
   if (!model) return null;
   return (
     <>
-      {model.anchoring.lines.map((l) => (
+      {model.anchoring.lines.filter((l) => l.role !== 'buoy').map((l) => (
         <Line
           key={`${l.id}-chain`}
           points={flat([l.fix, l.anchor])}
@@ -157,7 +157,8 @@ function AnchorShapes() {
           <Circle key={`${l.id}-wall`} x={l.anchor.x} y={l.anchor.y} radius={0.3} fill={COLORS.anchor} listening={false} />
         ))}
       {model.anchoring.lines
-        .filter((l) => l.fixing === 'seabed')
+        // A stern buoy's sinker lies under the buoy, which is drawn with the berth (D36).
+        .filter((l) => l.fixing === 'seabed' && l.role !== 'buoy')
         .map((l) => (
         <Rect
           key={`${l.id}-anchor`}

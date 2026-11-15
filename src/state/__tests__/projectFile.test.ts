@@ -117,6 +117,30 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(withPontoon([-1]).ok).toBe(false);
   });
 
+  it('stern buoys (D36): boat weight, buoy factors and sinker method are kept; older files take the defaults', () => {
+    const old = parseProject(
+      fileWith((p) => {
+        delete (p.params as Record<string, unknown>).buoyDepthFactor;
+        const a = p.anchoring as Record<string, unknown>;
+        delete a.buoySinkerMethod;
+        delete a.buoySinkerFactor;
+        delete a.buoyChainFactor;
+      }),
+    );
+    expect(old.ok && [old.project.params.buoyDepthFactor, old.project.anchoring.buoySinkerMethod, old.project.anchoring.buoySinkerFactor, old.project.anchoring.buoyChainFactor]).toEqual([1, 'factor', 3, 2]);
+    expect(old.ok && old.project.boatClasses.every((c) => c.weight === undefined)).toBe(true);
+    const set = parseProject(
+      fileWith((p) => {
+        (p.boatClasses as Record<string, unknown>[])[0]!.weight = 2.5;
+        (p.params as Record<string, unknown>).buoyDepthFactor = 3;
+        Object.assign(p.anchoring as Record<string, unknown>, { buoySinkerMethod: 'table', buoySinkerFactor: 5, buoyChainFactor: 3 });
+      }),
+    );
+    expect(set.ok && [set.project.boatClasses[0]!.weight, set.project.params.buoyDepthFactor, set.project.anchoring.buoySinkerMethod, set.project.anchoring.buoySinkerFactor, set.project.anchoring.buoyChainFactor]).toEqual([2.5, 3, 'table', 5, 3]);
+    expect(parseProject(fileWith((p) => ((p.boatClasses as Record<string, unknown>[])[0]!.weight = 0))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).buoySinkerMethod = 'guess'))).ok).toBe(false);
+  });
+
   it('berth types (D34): params, berth types and boom fingers are kept; older files are finger piers', () => {
     const old = parseProject(
       fileWith((p) => {

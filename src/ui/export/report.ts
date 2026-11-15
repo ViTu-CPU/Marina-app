@@ -198,7 +198,13 @@ export function buildReportHtml(input: ReportInput): string {
       kv([
         [t('anchoring.lines'), formatCount(anchoring.lines.length, language)],
         [t('anchoring.maxLine'), `${formatKn(anchoring.lines.reduce((m, l) => Math.max(m, l.horizontalKn), 0), language)} kN`],
-        [t('anchoring.maxMass'), `${formatCount(anchoring.lines.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0), language)} kg`],
+        [t('anchoring.maxMass'), `${formatCount(anchoring.lines.filter((l) => l.role !== 'buoy').reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0), language)} kg`],
+        ...(anchoring.lines.some((l) => l.role === 'buoy')
+          ? ([
+              [t('anchoring.buoys'), formatCount(anchoring.lines.filter((l) => l.role === 'buoy').length, language)],
+              [t('anchoring.maxSinker'), `${formatCount(anchoring.lines.filter((l) => l.role === 'buoy').reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0), language)} kg`],
+            ] as [string, string][])
+          : []),
         ...sum((l) => name(l.chainId), (l) => l.chainLength).map(([n, m]): [string, string] => [`${t('anchoring.chains')}: ${n}`, `${formatLength(m, language)} m`]),
         ...sum(
           (l) => name(l.anchorId),

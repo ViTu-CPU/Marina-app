@@ -1,5 +1,6 @@
 /** Left sidebar (SPEC §8): project, site tools, boat classes, parameters, objective, layers. */
 import { useRef, useState } from 'react';
+import { estimateBoatWeight } from '../../engine/anchoring';
 import { distance } from '../../engine/geometry';
 import type { BerthTarget, BerthType, BoatClass, ObjectiveId, ObstacleKind, Params, ZoneKind } from '../../engine/model';
 import { targetCount } from '../../engine/targets';
@@ -13,7 +14,7 @@ import { deleteSiteObject, hasEntrance } from '../tools/sitePaths';
 import { useT } from '../useT';
 import { AnchoringSection } from './CostPanels';
 import { BERTH_TYPE_OPTIONS } from '../berthTypes';
-import { Button, LengthListField, NumberField, Section } from './fields';
+import { Button, LengthListField, NumberField, OptionalNumberField, Section } from './fields';
 
 const state = () => appStore.getState();
 
@@ -397,6 +398,8 @@ function BoatClassesSection() {
       },
     ]);
   };
+  // D36: the boat weight sizes the stern buoys; shown when the project has any.
+  const buoys = useAppStore((s) => s.project.params.berthType === 'sternBuoy' || s.project.layouts.some((l) => l.berths.some((b) => b.buoy)));
   const shareSum = classes.reduce((sum, c) => sum + c.share, 0);
   const countSum = classes.reduce((sum, c) => sum + targetCount(c), 0);
 
@@ -419,6 +422,11 @@ function BoatClassesSection() {
             <th className="font-medium">{t('boats.name')}</th>
             <th className="font-medium">{t('boats.length')}</th>
             <th className="font-medium">{t('boats.beam')}</th>
+            {buoys && (
+              <th className="font-medium" title={t('boats.weightNote')}>
+                {t('boats.weight')}
+              </th>
+            )}
             <th className="font-medium">{counts ? t('boats.count') : t('boats.share')}</th>
             <th />
           </tr>
@@ -438,7 +446,7 @@ function BoatClassesSection() {
                   />
                   <input
                     aria-label={`${t('boats.name')}: ${c.name}`}
-                    className="w-14 rounded border border-slate-300 px-1 py-0.5 text-sm"
+                    className={`${buoys ? 'w-11' : 'w-14'} rounded border border-slate-300 px-1 py-0.5 text-sm`}
                     value={c.name}
                     onChange={(e) => update(c.id, { name: e.target.value }, 'name')}
                     onBlur={() => state().endCoalescing()}
@@ -451,6 +459,27 @@ function BoatClassesSection() {
               <td className="w-14 pr-1">
                 <NumberField bare label={`${t('boats.beam')}: ${c.name}`} value={c.beam} min={0.5} max={30} onChange={(beam) => update(c.id, { beam }, 'beam')} />
               </td>
+              {buoys && (
+                <td className="w-14 pr-1">
+                  <OptionalNumberField
+                    label={`${t('boats.weight')}: ${c.name}`}
+                    value={c.weight}
+                    min={0.05}
+                    max={500}
+                    placeholder={`≈${formatLength(estimateBoatWeight(c.length), language)}`}
+                    onChange={(weight) =>
+                      state().setBoatClasses(
+                        classes.map((x) => {
+                          if (x.id !== c.id) return x;
+                          const { weight: _old, ...rest } = x;
+                          return weight === undefined ? rest : { ...rest, weight };
+                        }),
+                        { coalesce: `class:${c.id}:weight` },
+                      )
+                    }
+                  />
+                </td>
+              )}
               <td className="w-14 pr-1">
                 {counts ? (
                   <NumberField
@@ -544,6 +573,7 @@ function DockSection() {
           ))}
         </select>
       </label>
+      {berthType === 'sternBuoy' && <ParamField name="buoyDepthFactor" min={0} max={10} step={0.5} />}
       {berthType === 'yBoom' && (
         <>
           <ParamField name="boomWidth" min={0.1} max={2} step={0.05} />

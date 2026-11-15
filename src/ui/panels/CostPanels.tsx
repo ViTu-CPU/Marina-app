@@ -2,7 +2,7 @@
  * Panels of the anchoring plan and the cost estimate (D23, D24).
  */
 import { useRef } from 'react';
-import { MAX_SPLAY_ANGLE, resetAnchoringFactors, type AnchoringParams, type AnchorType, type Seabed } from '../../engine/anchoring';
+import { MAX_SPLAY_ANGLE, resetAnchoringFactors, type AnchoringParams, type AnchorType, type BuoySinkerMethod, type Seabed } from '../../engine/anchoring';
 import { BOM_GROUPS, seriesNames, type BomGroup } from '../../engine/bom';
 import type { Layout } from '../../engine/model';
 import { parsePriceListFile, priceListToXlsx } from '../../catalog/priceList';
@@ -18,8 +18,37 @@ import { IssueList } from './IssueList';
 const state = () => appStore.getState();
 const SEABEDS: Seabed[] = ['clay', 'sand', 'rock'];
 const ANCHOR_TYPES: AnchorType[] = ['block', 'wedge'];
+const SINKER_METHODS: BuoySinkerMethod[] = ['factor', 'table'];
 
-type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType'>;
+type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod'>;
+
+/** D36: sizing of the stern-buoy sinkers and chains; shown when the project has stern buoys. */
+function BuoyFields() {
+  const t = useT();
+  const method = useAppStore((s) => s.project.anchoring.buoySinkerMethod);
+  const shown = useAppStore((s) => s.project.params.berthType === 'sternBuoy' || s.project.layouts.some((l) => l.berths.some((b) => b.buoy)));
+  if (!shown) return null;
+  return (
+    <>
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('anchoring.buoySinkerMethod')}
+        <select
+          className="rounded border border-slate-300 px-1 py-0.5 text-sm"
+          value={method}
+          onChange={(e) => state().setAnchoring({ buoySinkerMethod: e.target.value as BuoySinkerMethod })}
+        >
+          {SINKER_METHODS.map((m) => (
+            <option key={m} value={m}>
+              {t(`buoySinker.${m}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {method === 'factor' && <AnchoringField name="buoySinkerFactor" min={0.1} max={20} step={0.5} />}
+      <AnchoringField name="buoyChainFactor" min={1} max={10} step={0.5} />
+    </>
+  );
+}
 
 function AnchoringField({ name, min, max, step }: { name: NumericAnchoring; min: number; max: number; step?: number }) {
   const t = useT();
@@ -97,6 +126,7 @@ export function AnchoringSection() {
       <AnchoringField name="slidingSafetyFactor" min={1} max={5} step={0.1} />
       <AnchoringField name="maxAnchorMass" min={100} max={50000} step={100} />
       <AnchoringField name="pontoonFreeboard" min={0.1} max={3} step={0.05} />
+      <BuoyFields />
       <Button onClick={() => state().setAnchoring(resetAnchoringFactors(state().project.anchoring))}>{t('anchoring.resetFactors')}</Button>
       <p className="text-xs text-slate-500">{t('anchoring.note')}</p>
     </Section>
@@ -137,7 +167,10 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
   const wallFixings = anchoring.lines.filter((l) => l.fixing === 'wall').length;
   const piles = anchoring.piles.length;
   const maxLine = anchoring.lines.reduce((m, l) => Math.max(m, l.horizontalKn), 0);
-  const maxMass = anchoring.lines.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
+  // Stern-buoy sinkers (D36) are listed on their own.
+  const buoys = anchoring.lines.filter((l) => l.role === 'buoy');
+  const maxMass = anchoring.lines.filter((l) => l.role !== 'buoy').reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
+  const maxSinker = buoys.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
   return (
     <Section title={t('section.anchoringPlan')}>
       <div className="space-y-1 text-sm">
@@ -153,6 +186,18 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
           <span className="text-slate-600">{t('anchoring.maxMass')}</span>
           <span>{formatCount(maxMass, language)} kg</span>
         </div>
+        {buoys.length > 0 && (
+          <>
+            <div className="flex justify-between">
+              <span className="text-slate-600">{t('anchoring.buoys')}</span>
+              <span>{formatCount(buoys.length, language)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-600">{t('anchoring.maxSinker')}</span>
+              <span>{formatCount(maxSinker, language)} kg</span>
+            </div>
+          </>
+        )}
         <div className="text-xs font-medium text-slate-500">{t('anchoring.chains')}</div>
         {chains.map(([n, m]) => (
           <div key={n} className="flex justify-between gap-2 text-xs">

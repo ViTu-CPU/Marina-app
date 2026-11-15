@@ -74,7 +74,7 @@ npx playwright install chromium
   rotation and opacity.
 - Berth types: finger piers (two boats per finger), Y-boom berths (one boat between light
   booms, fingers for boats too long for a boom) or stern-buoy berths (bow to the pier, buoy
-  at boat length + water depth), as the project default and per pier side.
+  at boat length + factor × water depth), as the project default and per pier side.
 - Access pontoons: empty pontoon metres, e.g. in front of a high quay wall; main piers
   start from their edges.
 - Two built-in examples: a rectangular basin and an irregular bay.
@@ -120,13 +120,15 @@ fairway in front of every berth, connection to the entrance, pier connected to t
   (Pearl Harbor type, published capacities). Main piers of 10 m or more get two crossed chains
   at their head; fingers longer than 12 m get an end pile (Marinetek; not priced). An access pontoon in front of the shore has
   chains on the water side only and is held off the wall by two shore chains at each of its
-  gangways (placed by the user, or one at its middle) and by the piers attached to it. All factors are editable; a quantity estimate, not a
+  gangways (placed by the user, or one at its middle) and by the piers attached to it. Each
+  stern buoy gets its own sinker (factor × boat weight, or Top Marine's selection table),
+  chain (factor × depth) and float. All factors are editable; a quantity estimate, not a
   mooring design.
 - Bill of materials and cost estimate: pontoon modules, fingers, gangways, anchoring
   hardware, fittings, labour and plant, with site overheads, contingency, VAT 25.5 % on the
   total and a range. Every line shows its basis and source. Export as Excel.
-- Price list `data/hinnasto.xlsx` (A-Laiturit, Top Marine, Suomen Laatulaituri, Marinetek
-  estimate, labour and plant rates), editable in Excel; import an edited copy in the app or
+- Price list `data/hinnasto.xlsx` (A-Laiturit, Top Marine incl. buoys, Suomen Laatulaituri,
+  Savorak, Marinetek estimate, labour and plant rates), editable in Excel; import an edited copy in the app or
   replace the file and rebuild. See [docs/RESEARCH.md](docs/RESEARCH.md).
 
 **Files**
@@ -169,8 +171,11 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
 - Strategies A–D use **one pier module for the whole layout**, sized by the longest boat
   class. Strategy E sizes each row for its own boats, but only for piers square to the
   shore, and its search over start positions is coarser (2 m) than that of A–C (1 m).
-- Only **finger-pier berths**. Side-to, Y-boom and stern-buoy berths are not implemented
-  (the engine has an interface for them).
+- No **side-to berths** (finger piers, Y-boom and stern-buoy berths are implemented; the
+  engine has an interface for more).
+- Stern-buoy sinkers follow suppliers' rules of thumb that differ by a factor of about 25
+  (3 × boat weight or Top Marine's table, docs/DECISIONS.md D36, I82); boat weights must be
+  entered, otherwise they are estimated from the length.
 - Piers are straight, start at the shoreline and keep one fairway width clear at the head.
   No T- or L-heads, no piers from two banks on the same line, strategy D places one pier.
 - The search uses fixed steps (5° and 1 m) and no local refinement, so it finds good

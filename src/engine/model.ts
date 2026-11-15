@@ -97,6 +97,11 @@ export interface BoatClass {
    * `Params.berthTarget` is 'count'; the generator then places at most this many.
    */
   count: number;
+  /**
+   * Extension (D36): boat weight, t. Sizes the stern buoys; when missing it is estimated
+   * from the length (Top Marine's table for sailing boats, I79) and flagged.
+   */
+  weight?: number;
 }
 
 /**
@@ -132,6 +137,11 @@ export interface Params {
    * anchoring design depth (D16) whenever the engine runs.
    */
   waterDepth?: number;
+  /**
+   * Extension (D35, I78): stern buoy distance from the pier = boat length + factor × water
+   * depth. 1 after Suomen Laiturikauppa; Top Marine gives 3.
+   */
+  buoyDepthFactor: number;
   /** 1 = finger between every boat, 2 = two boats share a bay. */
   boatsPerBay: 1 | 2;
   /** Total extra width per boat in a berth, m. */

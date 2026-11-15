@@ -83,6 +83,7 @@ describe('defaults', () => {
       berthType: 'finger',
       boomLengths: [5, 6, 7],
       boomWidth: 0.4,
+      buoyDepthFactor: 1,
       boatsPerBay: 2,
       beamClearance: 0.5,
       lengthClearance: 0.5,

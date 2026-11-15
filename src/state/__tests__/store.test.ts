@@ -153,6 +153,13 @@ describe('generation and the Regenerate hint (SPEC §8)', () => {
     expect(engineParams(deeper).waterDepth).toBe(a.anchoring.depth + 2);
     expect('waterDepth' in a.params).toBe(false);
   });
+
+  it('a boat weight (D36) needs no regeneration; the buoy distance factor does', () => {
+    const a = { ...emptyProject(), params: { ...emptyProject().params, berthType: 'sternBuoy' as const } };
+    const heavier = { ...a, boatClasses: a.boatClasses.map((c) => ({ ...c, weight: 3 })) };
+    expect(inputFingerprint(heavier)).toBe(inputFingerprint(a));
+    expect(inputFingerprint({ ...a, params: { ...a.params, buoyDepthFactor: 3 } })).not.toBe(inputFingerprint(a));
+  });
 });
 
 describe('layout edits through the store (SPEC §8)', () => {

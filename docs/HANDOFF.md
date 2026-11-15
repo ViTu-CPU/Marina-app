@@ -12,7 +12,7 @@ suomeksi, UI pysyy englanniksi.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D36, I78, U25).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraava vapaa: D37, I83, U25).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013,
   AS 3962) – kaikki on alustavaa ja vaatii pätevän suunnittelijan tarkastuksen.
@@ -20,7 +20,7 @@ suomeksi, UI pysyy englanniksi.
   "ESTIMATE". Kysy minulta, jos tarvitset jotain parempaan tulokseen.
 
 ## Tilanne (2026-11-15, kolmannen istunnon jälkeen)
-Testit 372/372, e2e 20 vaihetta. Aiemmin tehty: tutkimus (RESEARCH.md), venepaikat
+Testit 381/381, e2e 20 vaihetta. Aiemmin tehty: tutkimus (RESEARCH.md), venepaikat
 kappalemäärinä (D20), rantaponttoni (D21), muokkaus (D22), hinnasto data/hinnasto.xlsx (D19),
 ankkurointisuunnitelma (D23), tuoteluettelo + kustannusarvio (D24), UFC-tuulikuorma ja
 lähteistetyt oletukset (I54–I57), kiila-ankkurit (I59).
@@ -65,17 +65,26 @@ Kolmannessa istunnossa (omistajan päätökset D25–D32):
 14. **Venepaikkatyypit (D33, D34, I74–I75)**: projektin oletustyyppi ja sivukohtainen tyyppi
    täytössä; Y-puomi (Marinetekin puomit 5–7 m, 0,4 m; pidemmille veneille kiinnityssormi).
    Peräpoiju (D35, I76–I77): poiju veneen pituus + suunnittelusyvyys laiturista, paikan sisällä.
-   Poijupainojen ja -ketjujen mitoitus tulossa (omistaja: poijupaino veneen painosta, D36).
+   Poijun etäisyyskerroin (I78): oletus 1 (Suomen Laiturikauppa), Top Marine 3.
+15. **Peräpoijujen mitoitus (D36, I79–I82)**: veneluokissa paino (t), tyhjä = arvio pituudesta
+   (Top Marinen purjevenetaulukko). Poijupaino = 3 × veneen paino (omistajan valinta) tai
+   Top Marinen valintataulukko; ketju 2 × syvyys ylävedellä, vähintään taulukon koko ja kestää
+   perätuulen; poiju (40/60/120 l) taulukon kantavuuden mukaan. Hinnastoon Top Marinen poijut ja
+   500 kg betonipaino. **Huom.** Top Marinen oma taulukko antaa noin 25 kertaa kevyemmät painot
+   kuin 3 × -sääntö (demot: 3 430 t vs. 229 t, ankkurointi 1,20 M€ vs. 0,49 M€; sormilaiturit
+   0,36 M€). Oletus odottaa omistajan vahvistusta.
 
 ## Avoimet asiat, ehdotettu järjestys
+0. **Vahvista peräpoijun painon oletus** (D36): 3 × veneen paino vai Top Marinen taulukko, ja
+   poijun etäisyyskerroin (1 vai 3, I78).
 1. Paalujen ja Marinetekin tuotteiden hinnat puuttuvat (pyydä tarjous).
 2. Hinnaston aukot: A-Laiturit G40 -ketjujen murtokuorma (kysyttävä toimittajalta);
    asennuksen tuntimenekit, työveneen päivähinta ja Marinetekin hinnat ovat oletuksia.
    Top Marinen MD-paketin hinta on eri sivuilla ristiriitainen (RESEARCH §2.3).
 3. Vinojen ketjujen suunta (I60): jos käytännöstä löytyy tietoa (ulospäin vai sisäänpäin,
    kulma), päivitä.
-4. Roadmap (SPEC §11): kylkipaikka, Y-puomi, peräpoiju, GeoJSON, DXF/PDF, suomennos,
-   bundlen pilkkominen, Web Worker.
+4. Roadmap (SPEC §11): kylkipaikka, GeoJSON, DXF (Y-puomi, peräpoiju, PDF-raportti, Web Worker
+   ja bundlen pilkkominen tehty).
 
 ## Omistajan vastaukset 2026-11-14
 - Toteutuneen sataman ankkurointisuunnitelmaa, urakoitsijan tarjoushintoja tai
