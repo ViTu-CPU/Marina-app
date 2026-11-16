@@ -33,7 +33,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
+      # Test files one after another: the SPEC's "under 2 seconds" generation test measures time,
+      # and dozens of files running at once on the runner's few cores distort it (run #6 failed at
+      # 2.3 s with every file in parallel; the browser e2e measures 0.8 s).
+      - run: npx vitest run --no-file-parallelism
       - run: npm run build
 
       - name: Check whether GitHub Pages is set up for Actions
