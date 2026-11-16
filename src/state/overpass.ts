@@ -207,25 +207,38 @@ async function queryServer(server: string, lat: number, lon: number, radius: num
   return { ...r, server };
 }
 
+/** A server that has not answered in this time is given up for the next one: the query's own 120 s timeout and 30 s for the transfer, ms (I112). */
+export const SERVER_TIMEOUT_MS = 150_000;
+
 /**
  * Looks the shoreline up around (lat, lon) and measures the fetch of every sector. The Overpass
  * instances are tried in turn (OVERPASS_URLS) until one answers with a shore; when none does, the
- * error names every server and its reason (I112), e.g. "no shore in any direction" (NoShoreError).
+ * error names every server and its reason (I112), e.g. "no shore in any direction" (NoShoreError)
+ * or no answer within SERVER_TIMEOUT_MS.
  */
 export async function lookupFetch(
   lat: number,
   lon: number,
   radius: number,
-  options: { fetchImpl?: typeof fetch; signal?: AbortSignal; servers?: readonly string[] } = {},
+  options: { fetchImpl?: typeof fetch; signal?: AbortSignal; servers?: readonly string[]; serverTimeoutMs?: number } = {},
 ): Promise<FetchLookup> {
   const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.serverTimeoutMs ?? SERVER_TIMEOUT_MS;
   const failures: string[] = [];
   for (const server of options.servers ?? OVERPASS_URLS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const stop = () => controller.abort();
+    options.signal?.addEventListener('abort', stop);
     try {
-      return await queryServer(server, lat, lon, radius, fetchImpl, options.signal);
+      return await queryServer(server, lat, lon, radius, fetchImpl, controller.signal);
     } catch (e) {
       if (options.signal?.aborted) throw e;
-      failures.push(`${new URL(server).host}: ${e instanceof Error ? e.message : String(e)}`);
+      const reason = controller.signal.aborted ? `no answer in ${Math.round(timeoutMs / 1000)} s` : e instanceof Error ? e.message : String(e);
+      failures.push(`${new URL(server).host}: ${reason}`);
+    } finally {
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', stop);
     }
   }
   throw new Error(failures.join('; '));

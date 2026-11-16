@@ -162,6 +162,33 @@ describe('OpenStreetMap shorelines from Overpass (D47)', () => {
     await expect(lookupFetch(LAT, LON, 20000, { fetchImpl: none.f })).rejects.toThrow(
       /no shore in any direction within 20 km; the answer held 0 ways.*; overpass-api\.de: no shore in any direction within 20 km; the answer held 1 ways, 0 water areas \(relations\), 0 shore segments/,
     );
+    // A server that does not answer is given up after the time limit.
+    let silent = true;
+    const hang = (async (_url: string, init?: RequestInit) => {
+      if (silent) {
+        silent = false;
+        return new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+      }
+      return answer(lakes);
+    }) as typeof fetch;
+    const late = await lookupFetch(LAT, LON, 5000, { fetchImpl: hang, serverTimeoutMs: 20 });
+    expect(late.server).toBe(OVERPASS_URLS[1]);
+    const never = (async (_url: string, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))))) as typeof fetch;
+    await expect(lookupFetch(LAT, LON, 5000, { fetchImpl: never, serverTimeoutMs: 20 })).rejects.toThrow('overpass.private.coffee: no answer in 0 s; overpass-api.de: no answer in 0 s');
+    // The user's own abort stops the lookup at once, without trying the next server.
+    const user = new AbortController();
+    const calls: string[] = [];
+    const pending = lookupFetch(LAT, LON, 5000, {
+      signal: user.signal,
+      fetchImpl: (async (url: string, init?: RequestInit) => {
+        calls.push(url);
+        return never(url, init);
+      }) as typeof fetch,
+    });
+    user.abort();
+    await expect(pending).rejects.toThrow(/aborted/);
+    expect(calls).toHaveLength(1);
     expect(new NoShoreError(5000, { ways: 3, relations: 1, shore: 0, waterWater: 7 }).message).toBe(
       'no shore in any direction within 5 km; the answer held 3 ways, 1 water areas (relations), 0 shore segments and 7 segments between two water areas',
     );
