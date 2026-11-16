@@ -899,6 +899,25 @@ taut chain of length c·h lets the buoy move √(c² − 1)·h towards the pier 
 
 ---
 
+### 10.1 FMI weather observations (read 2026-11-16)
+
+- **Service:** FMI open data WFS, stored query `fmi::observations::weather::hourly::multipointcoverage`
+  (*"Hourly weather observations from weather stations. Default set contains … wind speed average,
+  minumum (10 minute average) and maximum (10 minute average), wind direction average, wind gust speed
+  maximum (3 second average) …"*; describeStoredQueries, 2026-11-16). Parameters used: `WS_PT1H_MAX`,
+  `WD_PT1H_AVG`. A request longer than a month is refused: *"Too long time interval requested! No more
+  than 744.000000 hours allowed."* The answer carries `access-control-allow-origin: *`.
+- **Limits** ([FMI Open data WFS services](https://en.ilmatieteenlaitos.fi/open-data-manual-fmi-wfs-services)):
+  *"Download Service has limit of 20000 requests per day … Download and View Services have combined limit
+  of 600 requests per 5 minutes"*. 30 years = 360 requests per station.
+- **Stations found** (2026-11-16): within 60 km of Iisalmi Vieremä Kaarakkala (31.6 km) and Kuopio
+  Maaninka (46.6 km); of Helsinki 16 stations from Kaisaniemi (2.3 km) and Harmaja (5.7 km) to Inkoo
+  Bågaskär (58.0 km).
+- **Comparison with ERA5** (DECISIONS I108): Vieremä Kaarakkala 2001–2025, largest hourly maximum
+  13.4 m/s, 50-year 10.2–14.6 m/s; Helsinki Harmaja 1997–2025, 23.5 m/s, 17.5–24.6 m/s; Helsinki
+  Kaisaniemi 2016–2025, 16.0 m/s. ERA5 (1 h): Iisalmi 10.2 m/s and 8.1–10.3 m/s, Helsinki sea cell
+  20.9 m/s and 16.4–20.8 m/s.
+
 ## 11. AS 3962-2001 *Guidelines for design of marinas* (read 2026-11-15)
 
 The owner supplied a copy of AS 3962-2001 and asked that it be used to check and update the

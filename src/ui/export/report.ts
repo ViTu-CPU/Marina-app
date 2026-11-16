@@ -313,6 +313,13 @@ export function buildReportHtml(input: ReportInput): string {
         `<p class="small">${esc(t('wind.title'))}: ${esc(climate.source)}; ${esc(t('wind.cell'))} ${climate.cell.lat.toFixed(2)}, ${climate.cell.lon.toFixed(2)}; ${climate.startYear}–${climate.endYear}; ${esc(climate.fetchedOn)}. ${esc(t('wind.note'))}</p>`,
       );
     }
+    // I108: the FMI station climate and which climate gave the winds.
+    const station = w.stationClimate;
+    if (station) {
+      parts.push(
+        `<p class="small">${esc(t('station.title'))}: ${esc(station.source)}; ${station.startYear}–${station.endYear}; ${esc(station.fetchedOn)}. ${esc(t('station.choice'))}: ${esc(t(`station.choice.${w.climateChoice}`))}. ${esc(t('station.note'))}</p>`,
+      );
+    }
     parts.push(`<p class="small">${esc(t('waves.note'))}</p>`);
   }
 

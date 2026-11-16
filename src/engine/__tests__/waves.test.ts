@@ -230,6 +230,31 @@ describe('direction sectors (D47)', () => {
     expect(sectorWind({ ...s, climate: null }, 0, 'fiftyYear')).toEqual({ wind: 30, averagingS: 600, source: 'common' });
   });
 
+  it('winds from ERA5, the FMI station or the larger of the two compared as 10-min means (I108)', () => {
+    const climate = (oneYear: number, averagingS: number): WindClimate => ({
+      source: 'test',
+      requested: { lat: 63, lon: 27 },
+      cell: { lat: 63, lon: 27 },
+      startYear: 2000,
+      endYear: 2029,
+      hours: 1,
+      fetchedOn: '2026-11-16',
+      averagingS,
+      sectors: Array.from({ length: 16 }, () => ({ rose: [0, 0, 0, 0, 0], annualMax: [], oneYear, fiftyYear: oneYear + 5 })),
+    });
+    // ERA5 10 m/s as a 1-hour mean is about 10.6 m/s as a 10-min mean (windDurationRatio): an FMI 10.3 m/s is smaller, 11 m/s larger.
+    const era5 = climate(10, 3600);
+    expect(convertAveraging(10, 3600, 600)).toBeGreaterThan(10.3);
+    expect(convertAveraging(10, 3600, 600)).toBeLessThan(11);
+    const s = (station: WindClimate | null, climateChoice: 'era5' | 'station' | 'larger') => withFetch({ 0: 1000 }, { climate: era5, stationClimate: station, climateChoice });
+    expect(sectorWind(s(climate(10.3, 600), 'larger'), 0, 'oneYear')).toEqual({ wind: 10, averagingS: 3600, source: 'climate' });
+    expect(sectorWind(s(climate(11, 600), 'larger'), 0, 'oneYear')).toEqual({ wind: 11, averagingS: 600, source: 'station' });
+    expect(sectorWind(s(climate(11, 600), 'era5'), 0, 'oneYear')).toEqual({ wind: 10, averagingS: 3600, source: 'climate' });
+    expect(sectorWind(s(climate(9, 600), 'station'), 0, 'fiftyYear')).toEqual({ wind: 14, averagingS: 600, source: 'station' });
+    // Only one climate: it is used whatever the choice.
+    expect(sectorWind(s(null, 'station'), 0, 'oneYear')).toEqual({ wind: 10, averagingS: 3600, source: 'climate' });
+  });
+
   it('without piers all three headings are checked; UFC has two', () => {
     const s = withFetch({ 1: 3000 }, { wind1: 12, wind50: 20 });
     expect(waveAssessment(s, 4, [])!.sectors[0]!.headings).toEqual(['head', 'oblique', 'beam']);

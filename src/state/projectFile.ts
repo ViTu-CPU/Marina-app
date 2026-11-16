@@ -385,6 +385,9 @@ function waveSettings(v: unknown): WaveSettings {
     criteria: o.criteria === undefined ? DEFAULT_WAVES.criteria : oneOf(o.criteria, ['as3962', 'ufc'] as const, 'waves.criteria'),
     location: o.location === undefined || o.location === null ? null : latLon(o.location, 'waves.location'),
     climate: o.climate === undefined || o.climate === null ? null : windClimateOf(o.climate),
+    // I108: missing in older files.
+    stationClimate: o.stationClimate === undefined || o.stationClimate === null ? null : windClimateOf(o.stationClimate, 'waves.stationClimate'),
+    climateChoice: o.climateChoice === undefined ? 'larger' : oneOf(o.climateChoice, ['era5', 'station', 'larger'] as const, 'waves.climateChoice'),
     autoFetch: o.autoFetch === undefined || o.autoFetch === null ? null : autoFetchOf(o.autoFetch),
   };
 }
@@ -434,11 +437,11 @@ function latLon(v: unknown, path: string): { lat: number; lon: number } {
 }
 
 /** D41: a saved wind climate (summary of a fetched record). */
-function windClimateOf(v: unknown): WindClimate {
-  const o = obj(v, 'waves.climate');
+function windClimateOf(v: unknown, at = 'waves.climate'): WindClimate {
+  const o = obj(v, at);
   const nullable = (x: unknown, path: string): number | null => (x === null || x === undefined ? null : num(x, path));
-  const sectors = arr(o.sectors, 'waves.climate.sectors').map((item, i) => {
-    const p = `waves.climate.sectors[${i}]`;
+  const sectors = arr(o.sectors, `${at}.sectors`).map((item, i) => {
+    const p = `${at}.sectors[${i}]`;
     const s = obj(item, p);
     return {
       rose: arr(s.rose, `${p}.rose`).map((x, k) => num(x, `${p}.rose[${k}]`)),
@@ -447,16 +450,16 @@ function windClimateOf(v: unknown): WindClimate {
       fiftyYear: nullable(s.fiftyYear, `${p}.fiftyYear`),
     };
   });
-  if (sectors.length !== SECTORS) fail(`waves.climate.sectors must have ${SECTORS} sectors`);
+  if (sectors.length !== SECTORS) fail(`${at}.sectors must have ${SECTORS} sectors`);
   return {
-    source: str(o.source, 'waves.climate.source'),
-    requested: latLon(o.requested, 'waves.climate.requested'),
-    cell: latLon(o.cell, 'waves.climate.cell'),
-    startYear: num(o.startYear, 'waves.climate.startYear'),
-    endYear: num(o.endYear, 'waves.climate.endYear'),
-    hours: num(o.hours, 'waves.climate.hours'),
-    fetchedOn: str(o.fetchedOn, 'waves.climate.fetchedOn'),
-    averagingS: num(o.averagingS, 'waves.climate.averagingS'),
+    source: str(o.source, `${at}.source`),
+    requested: latLon(o.requested, `${at}.requested`),
+    cell: latLon(o.cell, `${at}.cell`),
+    startYear: num(o.startYear, `${at}.startYear`),
+    endYear: num(o.endYear, `${at}.endYear`),
+    hours: num(o.hours, `${at}.hours`),
+    fetchedOn: str(o.fetchedOn, `${at}.fetchedOn`),
+    averagingS: num(o.averagingS, `${at}.averagingS`),
     sectors,
   };
 }

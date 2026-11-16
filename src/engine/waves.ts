@@ -256,6 +256,8 @@ export interface AutoFetch {
   fetchedOn: string;
 }
 
+export type ClimateChoice = 'era5' | 'station' | 'larger';
+
 /** Inputs of the wave screening, stored in the project (D40, D47). */
 export interface WaveSettings {
   /** Eight sectors N, NE, … NW (D47). */
@@ -275,6 +277,13 @@ export interface WaveSettings {
   location: { lat: number; lon: number } | null;
   /** D41: wind climate fetched for the site, or null. */
   climate: WindClimate | null;
+  /** I108: wind climate of an FMI observation station near the site, or null. */
+  stationClimate: WindClimate | null;
+  /**
+   * I108: which climate gives the sectors' winds: ERA5 (`climate`), the FMI station
+   * (`stationClimate`) or, where both are present, the larger of the two (compared as 10-min means).
+   */
+  climateChoice: ClimateChoice;
   /** D47: the last automatic fetch lookup, or null. */
   autoFetch: AutoFetch | null;
 }
@@ -290,6 +299,8 @@ export const DEFAULT_WAVES: WaveSettings = {
   criteria: 'as3962',
   location: null,
   climate: null,
+  stationClimate: null,
+  climateChoice: 'larger',
   autoFetch: null,
 };
 
@@ -309,16 +320,30 @@ export function climateSectorWinds(climate: WindClimate, k: number): { oneYear: 
   return { oneYear: max('oneYear'), fiftyYear: max('fiftyYear') };
 }
 
-export type WindSource = 'sector' | 'climate' | 'common';
+export type WindSource = 'sector' | 'climate' | 'station' | 'common';
 
-/** The wind used for a sector and event: the sector's own entry, else the wind climate, else the common wind. */
+/**
+ * The wind used for a sector and event: the sector's own entry, else the wind climate (ERA5, the
+ * FMI station, or the larger of the two compared as 10-min means, I108), else the common wind.
+ */
 export function sectorWind(s: WaveSettings, k: number, event: WaveEvent): { wind: number; averagingS: number; source: WindSource } | null {
   const sector = s.sectors[k];
   const own = event === 'oneYear' ? sector?.wind1 : sector?.wind50;
   if (own !== null && own !== undefined && own > 0) return { wind: own, averagingS: s.windAveragingS, source: 'sector' };
-  if (s.climate) {
-    const c = climateSectorWinds(s.climate, k)[event];
-    if (c !== null && c > 0) return { wind: c, averagingS: s.climate.averagingS, source: 'climate' };
+  // A choice whose climate is missing falls back to the other one.
+  const chosen = s.climateChoice ?? 'larger';
+  const choice = chosen === 'station' && !s.stationClimate ? 'era5' : chosen === 'era5' && !s.climate ? 'station' : chosen;
+  const candidates: { wind: number; averagingS: number; source: WindSource }[] = [];
+  const add = (c: WindClimate | null | undefined, source: WindSource) => {
+    if (!c) return;
+    const w = climateSectorWinds(c, k)[event];
+    if (w !== null && w > 0) candidates.push({ wind: w, averagingS: c.averagingS, source });
+  };
+  if (choice !== 'station') add(s.climate, 'climate');
+  if (choice !== 'era5') add(s.stationClimate, 'station');
+  if (candidates.length > 0) {
+    const as10min = (x: { wind: number; averagingS: number }) => convertAveraging(x.wind, x.averagingS, 600);
+    return candidates.reduce((a, b) => (as10min(b) > as10min(a) + 1e-9 ? b : a));
   }
   const common = event === 'oneYear' ? s.wind1 : s.wind50;
   if (common !== null && common > 0) return { wind: common, averagingS: s.windAveragingS, source: 'common' };

@@ -14,6 +14,7 @@ import {
   WAVE_SECTORS,
   waveAssessment,
   waveSectorBearing,
+  type ClimateChoice,
   type SectorAssessment,
   type WaveCriteria,
   type WaveQuality,
@@ -25,6 +26,7 @@ import { sectorFetches, RAY_STEP_DEG } from '../../engine/fetchRays';
 import { parseLatLon } from '../../state/geo';
 import { lookupFetch, OSM_SOURCE } from '../../state/overpass';
 import { fetchWindHistory } from '../../state/openMeteo';
+import { completeYears, fetchStationWind, findWindStations, FMI_WIND_SOURCE, MIN_YEAR_COVERAGE, type WindStation } from '../../state/fmiWind';
 import { appStore, useAppStore } from '../../state/store';
 import { formatCount, formatLength, formatPercent } from '../format';
 import { useSitePosition } from '../sitePosition';
@@ -255,6 +257,144 @@ function WindSection() {
         </div>
       )}
       <p className="text-xs text-slate-500">{t('wind.note')}</p>
+    </div>
+  );
+}
+
+/** I108: wind climate of an FMI observation station near the site, compared with ERA5. */
+function StationWindSection() {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const waves = useAppStore((s) => s.project.waves);
+  const lastYear = new Date().getUTCFullYear() - 1;
+  const [years, setYears] = useState<[number, number]>([lastYear - 29, lastYear]);
+  const [stations, setStations] = useState<WindStation[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { position } = useSitePosition();
+  const station = waves.stationClimate;
+  const era5 = waves.climate;
+  const ms = (x: number | null | undefined) => (x === null || x === undefined ? '–' : formatLength(x, language));
+
+  const find = async () => {
+    if (!position) return;
+    setError(null);
+    setBusy(t('station.searching'));
+    try {
+      setStations(await findWindStations(position.lat, position.lon));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const fetchOne = async (s: WindStation) => {
+    if (!position) return;
+    setError(null);
+    try {
+      const record = await fetchStationWind(s.fmisid, years[0], years[1], {
+        onProgress: (done, total) => setBusy(`${t('station.fetching')} ${formatCount(done, language)} / ${formatCount(total, language)}`),
+      });
+      const run = completeYears(record.hoursByYear, years[0], years[1]);
+      if (!run) throw new Error(`${s.name}: ${t('station.noYears')} ${Math.round(MIN_YEAR_COVERAGE * 100)} %`);
+      const result = windClimate(record, {
+        source: `${FMI_WIND_SOURCE}; ${s.name} (fmisid ${s.fmisid})`,
+        requested: { lat: position.lat, lon: position.lon },
+        cell: s.position,
+        startYear: run.startYear,
+        endYear: run.endYear,
+        fetchedOn: new Date().toISOString().slice(0, 10),
+        averagingS: 600,
+      });
+      appStore.getState().setWaves({ stationClimate: result });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-2 border-t border-slate-200 pt-3" data-testid="station-wind">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('station.title')}</div>
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+        <span>{t('wind.years')}</span>
+        <div className="w-20">
+          <NumberField bare label={t('station.startYear')} value={years[0]} min={1950} max={lastYear} step={1} onChange={(v) => setYears([Math.round(v), years[1]])} />
+        </div>
+        <span>–</span>
+        <div className="w-20">
+          <NumberField bare label={t('station.endYear')} value={years[1]} min={1950} max={lastYear} step={1} onChange={(v) => setYears([years[0], Math.round(v)])} />
+        </div>
+        <Button disabled={!position || busy !== null} onClick={() => void find()}>
+          {t('station.find')}
+        </Button>
+        {busy && (
+          <span role="status" className="animate-pulse text-xs text-sky-800">
+            {busy}
+          </span>
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-red-700">
+          {t('wind.error')} {error}
+        </p>
+      )}
+      {stations && stations.length === 0 && <p className="text-xs text-amber-800">{t('station.none')}</p>}
+      {stations && stations.length > 0 && (
+        <ul className="text-sm" data-testid="station-list">
+          {stations.slice(0, 8).map((s) => (
+            <li key={s.fmisid} className="flex items-center justify-between gap-2 py-0.5">
+              <span className="truncate">
+                {s.name} <span className="text-xs text-slate-500">({formatLength(s.distance / 1000, language)} km)</span>
+              </span>
+              <Button disabled={busy !== null || years[1] < years[0] + 1} onClick={() => void fetchOne(s)}>
+                {t('station.fetch')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {station && (
+        <div className="space-y-1">
+          <p className="text-xs text-slate-600">
+            {station.source.split('; ').pop()} · {station.startYear}–{station.endYear} · {formatCount(station.hours, language)} h · {station.fetchedOn}
+          </p>
+          <table className="w-full text-right text-xs tabular-nums" data-testid="station-compare">
+            <thead>
+              <tr className="text-slate-500">
+                <th className="text-left font-medium">{t('wind.direction')}</th>
+                <th className="font-medium">{t('station.era5')}</th>
+                <th className="font-medium">{t('station.fmi')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {station.sectors.map((x, k) => (
+                <tr key={k}>
+                  <td className="text-left">{sectorBearing(k)}°</td>
+                  <td>{era5 ? `${ms(era5.sectors[k]?.oneYear)} / ${ms(era5.sectors[k]?.fiftyYear)}` : '–'}</td>
+                  <td>{`${ms(x.oneYear)} / ${ms(x.fiftyYear)}`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+            {t('station.choice')}
+            <select
+              className="rounded border border-slate-300 px-1 py-0.5 text-sm"
+              value={waves.climateChoice}
+              onChange={(e) => appStore.getState().setWaves({ climateChoice: e.target.value as ClimateChoice })}
+            >
+              {(['larger', 'station', 'era5'] as const).map((c) => (
+                <option key={c} value={c} disabled={c === 'era5' && !era5}>
+                  {t(`station.choice.${c}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      <p className="text-xs text-slate-500">{t('station.note')}</p>
     </div>
   );
 }
@@ -582,6 +722,7 @@ export function WaveTool() {
         </div>
         <div className="px-4 pb-4">
           <WindSection />
+          <StationWindSection />
         </div>
       </div>
     </div>

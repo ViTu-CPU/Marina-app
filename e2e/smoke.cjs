@@ -521,7 +521,7 @@ async function waitForServer() {
       assert.ok(pages >= 2, `expected several pages, got ${pages}`);
     });
 
-    await step('wave screening: fetches by direction sector and winds give waves, criteria, the bad directions and the shelter behind a breakwater (D40, D47, D58)', async () => {
+    await step('wave screening: fetches by direction sector and winds give waves, criteria, the bad directions, FMI station winds and the shelter behind a breakwater (D40, D47, D58, I108)', async () => {
       await page.getByRole('button', { name: 'Waves', exact: true }).click();
       const tool = page.getByTestId('wave-tool');
       await tool.waitFor();
@@ -572,8 +572,8 @@ async function waitForServer() {
         route.fulfill({ json: { latitude: 60.25, longitude: 25.0, hourly: { time, wind_speed_10m: speed, wind_direction_10m: dir } } });
       });
       await tool.getByLabel('Position').fill('60.15, 24.95');
-      await tool.getByLabel('First year').fill('2016');
-      await tool.getByLabel('Last year').fill('2024');
+      await tool.getByLabel('First year', { exact: true }).fill('2016');
+      await tool.getByLabel('Last year', { exact: true }).fill('2024');
       await tool.getByRole('button', { name: 'Fetch wind data', exact: true }).click();
       await tool.getByTestId('wind-rose').waitFor({ timeout: 20000 });
       assert.deepEqual(requests, ['2016-01-01', '2021-01-01']);
@@ -583,6 +583,51 @@ async function waitForServer() {
       assert.equal(w.climate.startYear, 2016);
       assert.ok((await tool.locator('tr[data-sector="E"] td[title*="from the wind climate"]').count()) >= 1);
       await page.unroute('https://archive-api.open-meteo.com/**');
+      // I108: FMI station observations (mocked): stations near the position, then a month per request.
+      const fmiMonths = [];
+      const point = (id, name, lat, lon) => `<gml:Point gml:id="point-${id}" srsDimension="2"><gml:name>${name}</gml:name><gml:pos>${lat} ${lon} </gml:pos></gml:Point>`;
+      await page.route('https://opendata.fmi.fi/wfs?**', (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.get('storedquery_id') !== 'fmi::observations::weather::hourly::multipointcoverage') return route.fallback();
+        let positions = '';
+        let values = '';
+        let points = '';
+        if (url.searchParams.get('bbox')) {
+          points = point('100996', 'Helsinki Harmaja', '60.10512', '24.97539') + point('100971', 'Helsinki Kaisaniemi', '60.17523', '24.94459');
+          positions = '60.10512 24.97539  1763200000\n60.17523 24.94459  1763200000';
+          values = '9.0 200.0\n4.0 190.0';
+        } else {
+          fmiMonths.push(url.searchParams.get('starttime'));
+          points = point('100996', 'Helsinki Harmaja', '60.10512', '24.97539');
+          const start = Date.parse(url.searchParams.get('starttime')) / 1000;
+          const end = Date.parse(url.searchParams.get('endtime')) / 1000;
+          const p = [];
+          const v = [];
+          for (let t = start, k = 0; t <= end; t += 3600, k++) {
+            p.push(`60.10512 24.97539  ${t}`);
+            v.push(`${(6 + 12 * Math.sin(k / 89) ** 2).toFixed(1)} ${(k * 41) % 360}.0`);
+          }
+          positions = p.join('\n');
+          values = v.join('\n');
+        }
+        route.fulfill({ contentType: 'text/xml', body: `<wfs:FeatureCollection>${points}<gmlcov:positions>${positions}</gmlcov:positions><gml:doubleOrNilReasonTupleList>${values}</gml:doubleOrNilReasonTupleList></wfs:FeatureCollection>` });
+      });
+      const stationSection = tool.getByTestId('station-wind');
+      await stationSection.getByLabel('First year of the observations').fill('2023');
+      await stationSection.getByLabel('Last year of the observations').fill('2024');
+      await stationSection.getByRole('button', { name: 'Find FMI stations', exact: true }).click();
+      await stationSection.getByTestId('station-list').waitFor();
+      // Nearest first; the island station is the one to use on the coast.
+      assert.match(await stationSection.getByTestId('station-list').textContent(), /Helsinki Kaisaniemi.*Helsinki Harmaja/);
+      await stationSection.getByTestId('station-list').locator('li', { hasText: 'Harmaja' }).getByRole('button', { name: 'Fetch' }).click();
+      await stationSection.getByTestId('station-compare').waitFor({ timeout: 20000 });
+      assert.equal(fmiMonths.length, 24);
+      const ws = await page.evaluate(() => window.__marina.getState().project.waves);
+      assert.equal(ws.stationClimate.startYear, 2023);
+      assert.equal(ws.stationClimate.averagingS, 600);
+      assert.equal(ws.climateChoice, 'larger');
+      assert.equal(await stationSection.getByTestId('station-compare').locator('tbody tr').count(), 16);
+      await page.unroute('https://opendata.fmi.fi/wfs?**');
       // D47: fetches from the OpenStreetMap shoreline (Overpass mocked): a lake 60.14–60.16 N, 24.92–24.99 E around the position.
       let overpassBody = '';
       await page.route('https://overpass-api.de/**', (route) => {

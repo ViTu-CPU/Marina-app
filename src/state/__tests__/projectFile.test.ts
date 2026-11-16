@@ -202,6 +202,8 @@ describe('project file (SPEC §2: JSON export/import)', () => {
       criteria: 'as3962',
       location: null,
       climate: null,
+      stationClimate: null,
+      climateChoice: 'larger',
       autoFetch: null,
     });
     // D47: sectors and criteria are kept; wrong sector count or negative fetch refused.
@@ -236,6 +238,13 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(withClimate.ok && withClimate.project.waves.location).toEqual({ lat: 60.15, lon: 24.95 });
     expect(withClimate.ok && withClimate.project.waves.climate).toEqual(climate);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { climate: { ...climate, sectors: [sector] } }))).ok).toBe(false);
+    // I108: the FMI station climate and the choice are kept; an unknown choice is refused.
+    const stationClimate = { ...climate, source: 'FMI open data; Helsinki Harmaja (fmisid 100996)', averagingS: 600 };
+    const withStation = parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { climate, stationClimate, climateChoice: 'station' })));
+    expect(withStation.ok && withStation.project.waves.stationClimate).toEqual(stationClimate);
+    expect(withStation.ok && withStation.project.waves.climateChoice).toBe('station');
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { climateChoice: 'average' }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { stationClimate: { ...climate, sectors: [sector] } }))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { fetch: -1 }))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { quality: 'superb' }))).ok).toBe(false);
   });

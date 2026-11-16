@@ -18,7 +18,7 @@ mainista uuteen haaraan.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D60, I108, U26**).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D60, I109, U26**).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
   (vahvistettu, D54): aallonkorkeudet 2 desimaalilla.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
@@ -28,7 +28,7 @@ mainista uuteen haaraan.
   NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt`.
 
 ## Tilanne (2026-11-16, viidennen istunnon jälkeen)
-Testit 466/466, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset D53–D59):
+Testit 473/473, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset D53–D59):
 
 1. **Vastaukset** (D53–D56): aisalaituri pysyy oletuksena; aallonkorkeudet 2 desimaalilla
    vahvistettu; ankkurimalli kalibroidaan; Iisalmen mitoitustietoja ei ole.
@@ -59,9 +59,10 @@ Testit 466/466, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset
    (FMI/SYKE) ja tuulidata (Open-Meteo), esim. Iisalmi ja Helsinki. Overpassia ei voitu testata
    kehitysympäristöstä: pääpalvelin katkaisee yhteyden, ja overpass.private.coffee lisättiin
    ympäristöön, mutta istunnon lupatarkistus esti kutsun.
-2. **Tuulen vertailu FMI:n havaintoihin** (nyt tärkeä, I101): järvikohteissa ERA5:n maaruutu
-   aliarvioi tuulen ja sen myötä aallot ja aaltokuorman (I104). Ehdotus: lähimmät FMI-asemat
-   (opendata.fmi.fi), 10 min tuulet suunnittain ja oletuksena suurempi.
+2. **Tuulen vertailu FMI:n havaintoihin: tehty (I108).** "Waves"-ikkunan "Find FMI stations" listaa
+   60 km:n säteellä olevat asemat; valitun aseman tuntihavainnot haetaan kuukausi kerrallaan, ja
+   aaltoarvio käyttää oletuksena suurempaa ERA5:stä ja FMI:stä. Kokeile selaimessa ja valitse
+   rannikolla mieluiten saari- tai ranta-asema.
 3. **Lähteet, joita ei voitu lukea** (RESEARCH §9.15): Ruokolahden Rasilan venesataman lupapäätös
    (ESAVI 236/2023), Oulun kelluvien talojen tekninen ohje, Pyhtään, Kustavin ja Naantalin
    asiakirjat, Ylen ja Bluetin Meri-sivut sekä tanskalainen venesatama-aineisto (kyst.dk). Palvelimet
