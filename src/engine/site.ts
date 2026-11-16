@@ -20,6 +20,7 @@ import {
   type Region,
 } from './geometry';
 import { bufferRegion, differenceRegions, unionRegions } from './geometryOps';
+import { breakwaterProductOf, breakwatersOf } from './breakwater';
 import type { AccessPontoon, Params, Polygon, Polyline, Site, Vec2, ZoneKind } from './model';
 
 /**
@@ -111,9 +112,9 @@ export interface PreparedSite {
 
 export function prepareSite(site: Site, params: Pick<Params, 'obstacleClearance'> & Partial<Pick<Params, 'gangwayLength'>>): PreparedSite {
   const water = regionFromPolygon(site.water);
-  const obstacleBuffer = unionRegions(
-    site.obstacles.map((o) => bufferRegion(regionFromPolygon(o.shape), params.obstacleClearance)),
-  );
+  // D58: breakwaters are kept clear of like obstacles (piers, boats and fairways).
+  const shapes = [...site.obstacles.map((o) => o.shape), ...breakwatersOf(site).map((b) => pierPolygon(b.start, b.end, breakwaterProductOf(b).width))];
+  const obstacleBuffer = unionRegions(shapes.map((shape) => bufferRegion(regionFromPolygon(shape), params.obstacleClearance)));
   const zoneRegion = (kind: ZoneKind): Region =>
     unionRegions(site.zones.filter((z) => z.kind === kind).map((z) => regionFromPolygon(z.shape)));
   const zones: Record<ZoneKind, Region> = {
@@ -128,7 +129,7 @@ export function prepareSite(site: Site, params: Pick<Params, 'obstacleClearance'
     differenceRegions(differenceRegions(water, obstacleBuffer), zones.protected),
     accessRegion,
   );
-  const obstacles = unionRegions(site.obstacles.map((o) => regionFromPolygon(o.shape)));
+  const obstacles = unionRegions(shapes.map((shape) => regionFromPolygon(shape)));
   return {
     site,
     connectionLines: connectionLines(site),

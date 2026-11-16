@@ -17,6 +17,8 @@
  * A preliminary choice of product type only: the length, layout, mooring and the attenuation at
  * the site need the supplier's design (AS 3962 5.1.1 (c), (d)).
  */
+import { distance, EPS } from './geometry';
+import type { Breakwater, Site } from './model';
 import type { WaveAssessment, WaveCheck } from './waves';
 
 export type BreakwaterId = '3300BR' | '3800BR' | '3300K' | '4300K' | '5300K';
@@ -188,3 +190,12 @@ export function breakwaterProposal(assessment: WaveAssessment | null): Breakwate
   });
   return { proposed: evaluations.find((e) => e.ok && !e.beyondBestWavelength)?.product ?? evaluations.find((e) => e.ok)?.product ?? null, evaluations };
 }
+
+/** D58: the product of a drawn breakwater; an unknown id takes the lightest type. */
+export const breakwaterProductOf = (b: Pick<Breakwater, 'product'>): BreakwaterProduct => BREAKWATERS.find((x) => x.id === b.product) ?? BREAKWATERS[0]!;
+
+/** D58: the site's breakwaters with a length. */
+export const breakwatersOf = (site: Site): Breakwater[] => (site.breakwaters ?? []).filter((b) => distance(b.start, b.end) > EPS);
+
+/** D58: the type a new breakwater gets: the one the wave screening proposes, else the lightest. */
+export const defaultBreakwaterProduct = (proposal: BreakwaterProposal | null): BreakwaterId => proposal?.proposed?.id ?? BREAKWATERS[0]!.id;

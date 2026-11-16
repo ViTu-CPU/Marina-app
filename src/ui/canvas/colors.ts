@@ -6,6 +6,7 @@ export const COLORS = {
   shoreline: '#15803d',
   entrance: '#f59e0b',
   access: '#6b7280',
+  breakwater: '#334155',
   gangway: '#b45309',
   chain: '#92400e',
   anchor: '#78350f',

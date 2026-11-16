@@ -228,6 +228,39 @@ describe('layout edits through the store (SPEC §8)', () => {
   });
 });
 
+describe('breakwaters (D58)', () => {
+  it('two clicks with the breakwater tool add one of the proposed type (else the lightest); it can be moved, retyped, saved and deleted', async () => {
+    const { deleteSiteObject, moveVertex } = await import('../../ui/tools/sitePaths');
+    const { parseProject, serializeProject } = await import('../projectFile');
+    const store = createAppStore();
+    store.getState().loadDemo('rectBasin');
+    // No wave screening entered: the lightest type.
+    store.getState().setTool('breakwater');
+    store.getState().addDraftPoint({ x: 20, y: 135 }, 1);
+    store.getState().addDraftPoint({ x: 120, y: 135 }, 1);
+    expect(store.getState().project.site.breakwaters).toEqual([{ id: 'breakwater-1', start: { x: 20, y: 135 }, end: { x: 120, y: 135 }, product: '3300BR' }]);
+    expect(store.getState().draft).toEqual([]);
+
+    // With waves that exceed the criteria the screening's proposal is used.
+    store.getState().setWaves({ wind1: 15, wind50: 22, sectors: store.getState().project.waves.sectors.map((x, k) => ({ ...x, fetch: k === 0 ? 1500 : 0 })) });
+    store.getState().addDraftPoint({ x: 130, y: 135 }, 1);
+    store.getState().addDraftPoint({ x: 200, y: 135 }, 1);
+    const second = store.getState().project.site.breakwaters![1]!;
+    expect(second.id).toBe('breakwater-2');
+    expect(second.product).not.toBe('');
+
+    store.getState().updateSite((site) => moveVertex(site, 'breakwater:breakwater-1', 1, { x: 110, y: 135 }));
+    store.getState().updateSite((site) => ({ ...site, breakwaters: site.breakwaters!.map((b) => (b.id === 'breakwater-1' ? { ...b, product: '4300K' } : b)) }));
+    expect(store.getState().project.site.breakwaters![0]).toMatchObject({ end: { x: 110, y: 135 }, product: '4300K' });
+
+    const reopened = parseProject(serializeProject(store.getState().project));
+    expect(reopened.ok && reopened.project.site.breakwaters).toEqual(store.getState().project.site.breakwaters);
+
+    store.getState().updateSite((site) => deleteSiteObject(site, 'breakwater:breakwater-1'));
+    expect(store.getState().project.site.breakwaters!.map((b) => b.id)).toEqual(['breakwater-2']);
+  });
+});
+
 describe('access pontoons (D21)', () => {
   it('two clicks with the access tool add a pontoon with the main pier width; it can be moved, saved and deleted', async () => {
     const { deleteSiteObject, moveVertex } = await import('../../ui/tools/sitePaths');

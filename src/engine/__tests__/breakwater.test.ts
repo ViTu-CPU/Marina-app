@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { attenuation, BREAKWATERS, breakwaterProposal, weightPerMetre } from '../breakwater';
+import { attenuation, BREAKWATERS, breakwaterProductOf, breakwaterProposal, breakwatersOf, defaultBreakwaterProduct, weightPerMetre } from '../breakwater';
+import { DEFAULT_BOAT_CLASSES, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../defaults';
+import { RECT_BASIN_SITE } from '../demos';
+import { generateLayouts } from '../generate';
+import { pierPolygon, prepareSite } from '../site';
+import { convexInsideRegion } from '../geometry';
 import type { WaveAssessment, WaveCheck } from '../waves';
 
 const bw = (id: string) => BREAKWATERS.find((b) => b.id === id)!;
@@ -64,5 +69,41 @@ describe('Marinetek floating breakwaters (D48)', () => {
     const p = breakwaterProposal(assessment([check(1.2, 30, 0.6)]))!;
     expect(p.proposed).toBeNull();
     expect(p.evaluations.every((e) => !e.ok)).toBe(true);
+  });
+});
+
+describe('breakwaters drawn by the user (D58)', () => {
+  it('type of a drawn breakwater: the given one, an unknown id the lightest; a new one the proposal, else the lightest', () => {
+    expect(breakwaterProductOf({ product: '4300K' }).width).toBe(bw('4300K').width);
+    expect(breakwaterProductOf({ product: 'x' }).id).toBe('3300BR');
+    expect(defaultBreakwaterProduct(null)).toBe('3300BR');
+    expect(defaultBreakwaterProduct({ proposed: bw('3800BR'), evaluations: [] })).toBe('3800BR');
+    expect(defaultBreakwaterProduct({ proposed: null, evaluations: [] })).toBe('3300BR');
+    expect(breakwatersOf({ ...RECT_BASIN_SITE, breakwaters: [{ id: 'b', start: { x: 1, y: 1 }, end: { x: 1, y: 1 }, product: '3300BR' }] })).toEqual([]);
+  });
+
+  it('piers, boats and fairways keep the obstacle clearance from a breakwater', () => {
+    // Across the rectangular basin at y = 100 from x = 0 to 150; the piers run north from y = 0.
+    const site = { ...RECT_BASIN_SITE, obstacles: [], breakwaters: [{ id: 'breakwater-1', start: { x: 0, y: 100 }, end: { x: 150, y: 100 }, product: '3800BR' }] };
+    const params = { ...DEFAULT_PARAMS };
+    const prepared = prepareSite(site, params);
+    const footprint = pierPolygon(site.breakwaters[0]!.start, site.breakwaters[0]!.end, bw('3800BR').width);
+    expect(convexInsideRegion(footprint, prepared.structureRegion)).toBe(false);
+    expect(convexInsideRegion(footprint, prepared.navigableRegion)).toBe(false);
+    const result = generateLayouts({ site, boatClasses: DEFAULT_BOAT_CLASSES, params, objective: DEFAULT_OBJECTIVE });
+    expect(result.layouts.length).toBeGreaterThan(0);
+    const edge = 100 - bw('3800BR').width / 2 - params.obstacleClearance;
+    let under = 0;
+    for (const layout of result.layouts) {
+      for (const pier of layout.piers) {
+        const xs = [pier.start.x, pier.end.x];
+        if (Math.max(...xs) < 150 - 1) {
+          under++;
+          expect(Math.max(pier.start.y, pier.end.y)).toBeLessThanOrEqual(edge + 1e-6);
+        }
+      }
+    }
+    // Piers under the breakwater exist (without it they run on to about y = 128).
+    expect(under).toBeGreaterThan(0);
   });
 });

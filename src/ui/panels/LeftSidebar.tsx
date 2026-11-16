@@ -1,6 +1,7 @@
 /** Left sidebar (SPEC §8): project, site tools, boat classes, parameters, objective, layers. */
 import { useRef, useState } from 'react';
 import { estimateBoatWeight } from '../../engine/anchoring';
+import { BREAKWATERS } from '../../engine/breakwater';
 import { distance } from '../../engine/geometry';
 import type { BerthTarget, BerthType, BoatClass, ObjectiveId, ObstacleKind, Params, ZoneKind } from '../../engine/model';
 import { PIER_SERIES } from '../../engine/modules';
@@ -26,6 +27,7 @@ const TOOLS: { id: ToolId; hint: StringKey }[] = [
   { id: 'shoreline', hint: 'hint.polyline' },
   { id: 'entrance', hint: 'hint.entrance' },
   { id: 'access', hint: 'hint.access' },
+  { id: 'breakwater', hint: 'hint.breakwater' },
   { id: 'obstacle', hint: 'hint.polygon' },
   { id: 'zone', hint: 'hint.polygon' },
   { id: 'measure', hint: 'hint.measure' },
@@ -64,8 +66,8 @@ function SiteSection() {
   const language = useAppStore((s) => s.language);
   const hint = TOOLS.find((x) => x.id === tool)?.hint ?? (tool === 'calibrate' ? 'hint.calibrate' : null);
 
-  /** `width` and `gangways` are set for access pontoons, edited here (D21, D32). */
-  const objects: { key: string; label: string; width?: number; gangways?: number[] }[] = [];
+  /** `width` and `gangways` are set for access pontoons (D21, D32), `product` for breakwaters (D58), edited here. */
+  const objects: { key: string; label: string; width?: number; gangways?: number[]; product?: string }[] = [];
   if (site.water.length > 0) objects.push({ key: 'water', label: t('site.water') });
   if (site.shoreline.length > 0) objects.push({ key: 'shoreline', label: t('site.shoreline') });
   if (hasEntrance(site)) objects.push({ key: 'entrance', label: t('site.entrance') });
@@ -75,6 +77,13 @@ function SiteSection() {
       label: `${t('site.accessPontoon')} (${p.id}), ${formatLength(distance(p.start, p.end), language)} m`,
       width: p.width,
       gangways: p.gangways ?? [],
+    });
+  }
+  for (const b of site.breakwaters ?? []) {
+    objects.push({
+      key: `breakwater:${b.id}`,
+      label: `${t('site.breakwater')} (${b.id}), ${formatLength(distance(b.start, b.end), language)} m`,
+      product: b.product,
     });
   }
   for (const o of site.obstacles) objects.push({ key: `obstacle:${o.id}`, label: `${t(`kind.${o.kind}`)} (${o.id})` });
@@ -159,6 +168,34 @@ function SiteSection() {
               </li>
             )).flatMap((li, i) => {
               const o = objects[i]!;
+              if (o.product !== undefined) {
+                // D58: the Marinetek type of a breakwater.
+                return [
+                  li,
+                  <li key={`${o.key}:product`} className="pb-1 pl-2">
+                    <label className="flex items-center justify-between gap-2 text-xs text-slate-700">
+                      {t('site.breakwaterType')}
+                      <select
+                        className="min-w-0 rounded border border-slate-300 px-1 py-0.5 text-xs"
+                        aria-label={`${t('site.breakwaterType')}: ${o.label}`}
+                        value={o.product}
+                        onChange={(e) =>
+                          state().updateSite((s) => ({
+                            ...s,
+                            breakwaters: (s.breakwaters ?? []).map((b) => (`breakwater:${b.id}` === o.key ? { ...b, product: e.target.value } : b)),
+                          }))
+                        }
+                      >
+                        {BREAKWATERS.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {`${b.name} (${formatLength(b.width, language)} m)`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </li>,
+                ];
+              }
               if (o.gangways === undefined) return [li];
               return [
                 li,

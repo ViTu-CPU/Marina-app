@@ -14,6 +14,7 @@ import type { BackgroundImage, BoatClass, Layout, Polygon, Site, Vec2 } from '..
 import { sectorFetches } from '../../engine/fetchRays';
 import { pierAxis } from '../../engine/rows';
 import { gangwayLinks, pierPolygon, pierShoreLink } from '../../engine/site';
+import { breakwaterProductOf, breakwatersOf } from '../../engine/breakwater';
 import { appStore, useAppStore, type LayerId, type Selection, type ToolId } from '../../state/store';
 import { latLonToLocal, OSM_ATTRIBUTION } from '../../state/geo';
 import { gridStep, panBy, scaleBar, screenToWorld, visibleBounds, worldToScreen, zoomAt, type Size, type View } from '../../state/view';
@@ -41,7 +42,7 @@ const PIER_DRAG_STEP = 0.1;
 /** A custom attribute of the node under the pointer (set as a prop on the shape). */
 const attr = (node: unknown, name: string): unknown => (node as { attrs: Record<string, unknown> }).attrs[name];
 
-const DRAWING_TOOLS: ToolId[] = ['water', 'shoreline', 'entrance', 'access', 'pier', 'obstacle', 'zone', 'measure', 'calibrate'];
+const DRAWING_TOOLS: ToolId[] = ['water', 'shoreline', 'entrance', 'access', 'breakwater', 'pier', 'obstacle', 'zone', 'measure', 'calibrate'];
 const flat = (points: Vec2[]): number[] => points.flatMap((p) => [p.x, p.y]);
 
 // ---------------------------------------------------------------------------
@@ -81,6 +82,20 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
         ))}
       {layers.obstacles &&
         site.obstacles.map((o) => <Line key={o.id} points={flat(o.shape)} closed fill={COLORS.obstacle} listening={false} />)}
+      {layers.obstacles &&
+        // D58: floating breakwaters at their product's width.
+        breakwatersOf(site).map((b) => (
+          <Line
+            key={b.id}
+            points={flat(pierPolygon(b.start, b.end, breakwaterProductOf(b).width))}
+            closed
+            fill={COLORS.breakwater}
+            stroke={COLORS.waterEdge}
+            strokeWidth={1.5}
+            strokeScaleEnabled={false}
+            listening={false}
+          />
+        ))}
       {layers.shoreline && site.shoreline.length >= 2 && (
         <Line points={flat(site.shoreline)} stroke={COLORS.shoreline} strokeWidth={4} strokeScaleEnabled={false} lineCap="round" lineJoin="round" listening={false} />
       )}
@@ -442,7 +457,7 @@ export function MarinaCanvas() {
     const s = appStore.getState();
     // An access pontoon lies off the wall on purpose; snapping would pull its centreline
     // onto the shoreline (D21).
-    if (s.tool === 'access' || exclude?.key.startsWith('access:')) return toWorld(screen);
+    if (s.tool === 'access' || s.tool === 'breakwater' || exclude?.key.startsWith('access:') || exclude?.key.startsWith('breakwater:')) return toWorld(screen);
     const targets = siteSnapTargets(s.project.site, s.draft);
     if (exclude) {
       const own = sitePaths(s.project.site).find((p) => p.key === exclude.key)?.points[exclude.index];

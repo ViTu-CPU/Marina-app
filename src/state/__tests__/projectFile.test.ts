@@ -118,6 +118,20 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(withPontoon([-1]).ok).toBe(false);
   });
 
+  it('breakwaters (D58): kept when given, missing = none, an unknown type refused', () => {
+    const withBreakwater = (product: unknown) =>
+      parseProject(
+        fileWith((p) => {
+          (p.site as Record<string, unknown>).breakwaters = [{ id: 'breakwater-1', start: { x: 0, y: 130 }, end: { x: 100, y: 130 }, product }];
+        }),
+      );
+    const ok = withBreakwater('3800BR');
+    expect(ok.ok && ok.project.site.breakwaters).toEqual([{ id: 'breakwater-1', start: { x: 0, y: 130 }, end: { x: 100, y: 130 }, product: '3800BR' }]);
+    expect(withBreakwater('9000X').ok).toBe(false);
+    const none = parseProject(fileWith(() => {}));
+    expect(none.ok && none.project.site.breakwaters).toBeUndefined();
+  });
+
   it('stern buoys (D36): boat weight, buoy factors and sinker method are kept; older files take the defaults', () => {
     const old = parseProject(
       fileWith((p) => {

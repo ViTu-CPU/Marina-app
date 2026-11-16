@@ -2,6 +2,7 @@
  * JSON project file: export and import with structural validation (SPEC §2, persistence).
  */
 import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type Seabed } from '../engine/anchoring';
+import { BREAKWATERS } from '../engine/breakwater';
 import type { CharacteristicLevels, WaterLevelInfo } from '../engine/waterLevels';
 import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type AutoFetch, type WaveSettings } from '../engine/waves';
 import { SECTORS, type WindClimate } from '../engine/wind';
@@ -10,6 +11,7 @@ import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defau
 import {
   PROJECT_SCHEMA_VERSION,
   type AccessPontoon,
+  type Breakwater,
   type BackgroundImage,
   type Berth,
   type BoatClass,
@@ -118,6 +120,21 @@ function site(v: unknown): Site {
               end: vec(e.end, `${p}.end`),
               width,
               ...(gangways.length > 0 ? { gangways } : {}),
+            };
+          }),
+        }),
+    // Extension (D58): floating breakwaters; missing in older files.
+    ...(o.breakwaters === undefined
+      ? {}
+      : {
+          breakwaters: arr(o.breakwaters, 'site.breakwaters').map((item, i): Breakwater => {
+            const p = `site.breakwaters[${i}]`;
+            const e = obj(item, p);
+            return {
+              id: str(e.id, `${p}.id`),
+              start: vec(e.start, `${p}.start`),
+              end: vec(e.end, `${p}.end`),
+              product: oneOf(e.product, BREAKWATERS.map((b) => b.id), `${p}.product`),
             };
           }),
         }),

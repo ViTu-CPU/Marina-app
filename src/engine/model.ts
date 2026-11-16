@@ -67,6 +67,20 @@ export interface AccessPontoon {
   gangways?: number[];
 }
 
+/**
+ * Extension (D58): a floating breakwater pontoon drawn by the user. It carries no berths; piers
+ * and boats keep the obstacle clearance from it (like an obstacle), and the wave screening
+ * judges the shelter it gives.
+ */
+export interface Breakwater {
+  id: string;
+  /** Centreline end points, m. */
+  start: Vec2;
+  end: Vec2;
+  /** Marinetek breakwater type (`BreakwaterId` of engine/breakwater.ts, D48). */
+  product: string;
+}
+
 export interface Site {
   /** Permitted planning water area. */
   water: Polygon;
@@ -78,6 +92,8 @@ export interface Site {
   zones: RestrictedZone[];
   /** Extension (D21): access pontoons; missing in older files. */
   accessPontoons?: AccessPontoon[];
+  /** Extension (D58): floating breakwaters; missing in older files. */
+  breakwaters?: Breakwater[];
 }
 
 // ---------------------------------------------------------------------------
