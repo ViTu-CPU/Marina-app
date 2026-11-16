@@ -114,14 +114,20 @@ describe('bill of materials workbook (D24)', () => {
 
 describe('wave directions for the anchoring plan (D45)', () => {
   it('the sectors with a fetch, and those whose waves exceed the criteria', () => {
-    expect(waveInput(project, layout)).toEqual({ from: [], exceeding: [] });
+    expect(waveInput(project, layout)).toEqual({ from: [], exceeding: [], hs50: [] });
     const withFetch = { ...project, waves: { ...project.waves, wind1: 15, wind50: 22, sectors: project.waves.sectors.map((x, k) => ({ ...x, fetch: k === 2 ? 3000 : k === 4 ? 200 : 0 })) } };
     const w = waveInput(withFetch, layout);
     expect(w.from).toEqual([90, 180]);
     expect(w.exceeding).toContain('E');
+    // I104: the 50-year Hm0 of each direction: 3 km from the east is above the 0.6 m of the full
+    // wave load, 200 m from the south below the 0.3 m of none.
+    expect(w.hs50).toHaveLength(2);
+    expect(w.hs50[0]!).toBeGreaterThan(0.6);
+    expect(w.hs50[1]!).toBeLessThan(0.3);
     // The cost model passes them on: the plan carries the wave load warning.
     const m = computeCostModel(withFetch, layout, parsed.priceList)!;
     expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD')).toBe(true);
     expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD_ABOVE_CRITERIA')).toBe(true);
+    expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD_SMALL_WAVES')).toBe(true);
   });
 });

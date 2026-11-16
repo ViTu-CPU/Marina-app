@@ -439,6 +439,8 @@ export const fi: Partial<Record<StringKey, string>> = {
   'anchoring.pontoonFreeboard': 'Ponttonin kansikorkeus, jos ei tiedossa (m)',
   'anchoring.lineSpacing': 'Ketjuparien väli (m)',
   'anchoring.waveLoad': 'Aaltokuorma, jos avovettä (kN/m)',
+  'anchoring.waveLoadFullHs': '50 vuoden aallonkorkeus, josta täysi aaltokuorma (m)',
+  'anchoring.waveLoadMinHs': '50 vuoden aallonkorkeus, jota pienemmistä ei aaltokuormaa (m)',
   'anchoring.splayAngle': 'Ketjujen vinous kohtisuorasta (°)',
   'anchoring.tipAnchorMinLength': 'Pistolaiturin kärkiketjut alkaen (m)',
   'anchoring.fingerPileMinLength': 'Päätypaalu yli tämän pituisille sormille (m)',

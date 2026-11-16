@@ -113,6 +113,16 @@ export interface AnchoringParams {
    */
   waveLoad: number;
   /**
+   * D57, I104: the wave load grows with the 50-year significant wave height Hm0 of each direction:
+   * none up to `waveLoadMinHs` (UFC 4-152-07 6-3.4.7.2: above 1 ft the waves "could be a
+   * significant factor in design"), the full `waveLoad` from `waveLoadFullHs` (the largest
+   * criterion of AS 3962 Table 4.2, for which 4.8.2.3 gives 2 kN/m), in proportion to Hm0²
+   * between (Assumption: wave drift forces grow with the square of the wave height). A direction
+   * whose height is not known takes the full load. `waveLoadFullHs` 0 gives the full load always.
+   */
+  waveLoadMinHs: number;
+  waveLoadFullHs: number;
+  /**
    * Plan angle of the chains of a main pier from square to the pier, degrees (0–80). The
    * splayed chains also hold the wind along the pier (D25); 0 leaves that load unheld.
    */
@@ -202,6 +212,8 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   pontoonFreeboard: 0.5,
   lineSpacing: 12,
   waveLoad: 2,
+  waveLoadMinHs: 0.3,
+  waveLoadFullHs: 0.6,
   splayAngle: 45,
   chainSafetyFactor: 3,
   corrosionAllowance: 0,
@@ -484,9 +496,27 @@ export interface AnchoringInput {
    * D45: the wave screening: bearings the waves come from (sectors with a fetch) and the sectors
    * whose waves exceed the criteria. Missing = no waves.
    */
-  waves?: { from: readonly number[]; exceeding: readonly string[] };
+  waves?: {
+    from: readonly number[];
+    exceeding: readonly string[];
+    /** I104: 50-year Hm0 of each direction of `from` (same order), m; null or missing = not known. */
+    hs50?: readonly (number | null)[];
+  };
   /** I102: also size the anchors with the other anchor type for comparison (default true). */
   compareAnchorTypes?: boolean;
+}
+
+/**
+ * I104: share of the full wave load for waves of 50-year height `hs` (m): 0 up to `waveLoadMinHs`,
+ * 1 from `waveLoadFullHs`, in proportion to Hm0² between; 1 when the height is not known or
+ * `waveLoadFullHs` is 0.
+ */
+export function waveLoadFactor(hs: number | null | undefined, p: Pick<AnchoringParams, 'waveLoadMinHs' | 'waveLoadFullHs'>): number {
+  if (hs === null || hs === undefined || !Number.isFinite(hs) || !(p.waveLoadFullHs > 0)) return 1;
+  const lo = Math.max(0, Math.min(p.waveLoadMinHs, p.waveLoadFullHs));
+  if (hs >= p.waveLoadFullHs - 1e-12) return 1;
+  if (hs <= lo + 1e-12) return 0;
+  return (hs * hs - lo * lo) / (p.waveLoadFullHs ** 2 - lo * lo);
 }
 
 /** Compass bearing of a direction in plan (x east, y north), degrees. */
@@ -864,26 +894,37 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   }));
   // D45, I99: the AS 3962 minimum wave load from the directions that have open water: across the
   // pier on its whole length, along it on its end; added to the wind of the same direction.
-  const waveFrom = input.waves?.from ?? [];
-  const qWave = Math.max(0, p.waveLoad) * 1000;
+  // D57, I104: each direction's load in proportion to its waves (waveLoadFactor).
+  const waveFrom = (input.waves?.from ?? []).map((bearing, i) => {
+    const hs = input.waves?.hs50?.[i] ?? null;
+    return { bearing, hs, q: Math.max(0, p.waveLoad) * 1000 * waveLoadFactor(hs, p) };
+  });
+  const smallWaves = waveFrom.filter((w) => w.q <= 0 && w.hs !== null);
   const waveNotes: string[] = [];
   const addWaves = (item: Held) => {
-    if (qWave <= 0 || waveFrom.length === 0) return;
+    const loading = waveFrom.filter((w) => w.q > 0);
+    if (loading.length === 0) return;
     const { length, along } = pierAxis({ id: item.id, start: item.start, end: item.end, width: item.width, locked: false, origin: 'manual' });
     if (!(length > 0)) return;
-    const actions = new Set(waveFrom.map((b) => waveAction(bearingOfVec(along), b)));
+    // The largest load of each kind (the directions do not act at the same time).
+    const q = { across: 0, fromSea: 0, fromShore: 0 };
+    for (const w of loading) {
+      const a = waveAction(bearingOfVec(along), w.bearing);
+      q[a] = Math.max(q[a], w.q);
+    }
+    const kn = (x: number) => `${(x / 1000).toFixed(1)}`;
     const parts: string[] = [];
-    if (actions.has('across')) {
-      item.lateral += qWave * length;
-      parts.push(`across ${((qWave * length) / 1000).toFixed(1)} kN`);
+    if (q.across > 0) {
+      item.lateral += q.across * length;
+      parts.push(`across ${kn(q.across * length)} kN (${kn(q.across)} kN/m)`);
     }
-    if (actions.has('fromSea')) {
-      item.axialFromSea += qWave * item.width;
-      parts.push(`from the sea ${((qWave * item.width) / 1000).toFixed(1)} kN`);
+    if (q.fromSea > 0) {
+      item.axialFromSea += q.fromSea * item.width;
+      parts.push(`from the sea ${kn(q.fromSea * item.width)} kN`);
     }
-    if (actions.has('fromShore')) {
-      item.axialFromShore += qWave * item.width;
-      parts.push(`from the shore ${((qWave * item.width) / 1000).toFixed(1)} kN`);
+    if (q.fromShore > 0) {
+      item.axialFromShore += q.fromShore * item.width;
+      parts.push(`from the shore ${kn(q.fromShore * item.width)} kN`);
     }
     if (parts.length > 0) waveNotes.push(`${item.id} ${parts.join(', ')}`);
   };
@@ -1371,10 +1412,16 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     comparison = { current, other: anchorTotals(alt.lines, otherType) };
   }
 
+  if (smallWaves.length > 0) {
+    warn(
+      'WAVE_LOAD_SMALL_WAVES',
+      `No wave load from ${smallWaves.length} direction${smallWaves.length > 1 ? 's' : ''} with open water: their 50-year Hm0 (${smallWaves.map((w) => `${w.hs!.toFixed(2)} m`).join(', ')}) is at most ${p.waveLoadMinHs.toFixed(2)} m (UFC 4-152-07 6-3.4.7.2: above 1 ft the waves "could be a significant factor in design").`,
+    );
+  }
   if (waveNotes.length > 0) {
     warn(
       'WAVE_LOAD',
-      `Wave load ${p.waveLoad.toFixed(1)} kN/m (AS 3962-2001 4.8.2.3, minimum without a specific analysis) from the directions with open water, added to the wind: ${waveNotes.join('; ')}. Across a pontoon on its whole length (the wave front along it, 4.8.2.4), along it on its end; the fingers' share is not added (not at the same time).`,
+      `Wave load from the directions with open water, up to ${p.waveLoad.toFixed(1)} kN/m (AS 3962-2001 4.8.2.3, minimum without a specific analysis, for the waves of its Table 4.2): the full load for a 50-year Hm0 of ${p.waveLoadFullHs.toFixed(2)} m or more, none up to ${p.waveLoadMinHs.toFixed(2)} m, in proportion to Hm0² between (assumption); a direction without a wave estimate takes the full load. Added to the wind: ${waveNotes.join('; ')}. Across a pontoon on its whole length (the wave front along it, 4.8.2.4), along it on its end; the fingers' share is not added (not at the same time).`,
     );
     if ((input.waves?.exceeding ?? []).length > 0) {
       warn(

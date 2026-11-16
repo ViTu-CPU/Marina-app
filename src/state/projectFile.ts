@@ -470,6 +470,9 @@ function anchoring(v: unknown): AnchoringParams {
     pontoonFreeboard: pick('pontoonFreeboard'),
     lineSpacing: pick('lineSpacing'),
     waveLoad: pick('waveLoad'),
+    // I104: missing in older files; they take the defaults (the load follows the wave height).
+    waveLoadMinHs: pick('waveLoadMinHs'),
+    waveLoadFullHs: pick('waveLoadFullHs'),
     splayAngle: pick('splayAngle'),
     chainSafetyFactor: pick('chainSafetyFactor'),
     corrosionAllowance: pick('corrosionAllowance'),

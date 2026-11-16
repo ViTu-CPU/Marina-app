@@ -24,11 +24,15 @@ export interface CostModel {
   estimate: CostEstimate;
 }
 
-/** D45: wave directions for the anchoring plan from the wave screening (sectors with a fetch). */
-export function waveInput(project: Project, layout: Layout): { from: number[]; exceeding: string[] } {
-  const from = project.waves.sectors.flatMap((x, k) => (x.fetch > 0 ? [waveSectorBearing(k)] : []));
+/**
+ * D45: wave directions for the anchoring plan from the wave screening (sectors with a fetch), and
+ * (I104) the 50-year Hm0 of each, null where the screening has no wind for it.
+ */
+export function waveInput(project: Project, layout: Layout): { from: number[]; exceeding: string[]; hs50: (number | null)[] } {
   const assessment = waveAssessment(project.waves, project.anchoring.depth, layout.piers.map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) })));
-  return { from, exceeding: (assessment?.bad ?? []).map((k) => WAVE_SECTORS[k]!) };
+  const sectors = project.waves.sectors.flatMap((x, k) => (x.fetch > 0 ? [k] : []));
+  const hs = (k: number) => assessment?.sectors.find((x) => x.sector === k)?.events.find((e) => e.event === 'fiftyYear')?.waves.hm0 ?? null;
+  return { from: sectors.map(waveSectorBearing), exceeding: (assessment?.bad ?? []).map((k) => WAVE_SECTORS[k]!), hs50: sectors.map(hs) };
 }
 
 /** I102: "12 345 kg (largest 3 260 kg, chains up to 47.0 m)" for the other anchor type. */

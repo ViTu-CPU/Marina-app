@@ -387,6 +387,12 @@ parameter is shown with its source or marked **assumption**.
    2 kN/m across; wedges 0.39 t and 3.26 t. The drawing's anchors are thus of the order of plain
    blocks under wind alone, or of anchors that dig in under the wave load. The anchoring plan shows
    both anchor types since this step.
+   **Wave load from the waves (D59, I104):** with Meri (44 × 20 m, 257 t; owner) the friction model
+   with 2 kN/m gives 0.97–1.65 × the installed anchors on the long face, so the model holds for an
+   exposed site; the wave load now follows the 50-year Hm0 (none up to 0.3 m, UFC 4-152-07
+   6-3.4.7.2; the full 2 kN/m from 0.6 m, AS 3962 Table 4.2 and 4.8.2.3; Hm0² between, assumption).
+   The Iisalmi-type case then gives 3.55 t per chain for Hm0 ≤ 0.3 m (1.1 × the drawing) and
+   29.9 t from 0.6 m.
 10. **Stern buoys (D36, D37, I78–I85).** One sinker per buoy, straight below it, from Svenska
    Båtunionen's table by boat displacement (default; §9.14), Top Marine's table (§9.13) or factor
    × boat weight; one row up in an exposed harbour; chain max(1.41 × design depth, depth at high
@@ -798,6 +804,33 @@ about 10–25**; Båtunionen and Top Marine's own table agree within a factor of
 Top Marine 2 × depth (or maximum depth + 1 m) with length + 3 × depth. The geometry has to match: a
 taut chain of length c·h lets the buoy move √(c² − 1)·h towards the pier (1:1 → h; 2 × depth →
 1,73 h). Longer chains (Ranta & Ranta's ≥ 2 × depth) are a holding argument for swing moorings.
+
+### 9.15 Finnish anchoring references (2026-11-16)
+
+- **Meri, Vaasa** (owner's information, D57, D59): floating sauna restaurant in Vaasa's inner harbour
+  on 11 pontoons of 20 × 4 × 1.4 m side by side (44 × 20 m), anchored with about 45 × 5 000 kg and
+  8 × 4 000 kg anchors (257 t); *"todella altis aallolle ja tuulelle"*. Public traces found by search
+  but **not read** (hosts not reachable from the development environment): Yle 3-11988210 (building
+  permit for Bluet's restaurant and sauna building with a pool in the inner harbour) and Yle 3-12607181
+  (the raft, *"yli tuhannen neliömetrin"* according to the search excerpt, towed from Vaskiluoto);
+  Bluet's reference list on nauticexpo (*"Floating Sauna-Restaurant, Vaasa, Finland"*, *"overall floating
+  area 1 850m2"* in the search excerpt; the page answered 403). The excerpts' areas (over 1 000 m²,
+  1 850 m²) are larger than 11 × 80 m² = 880 m²; the difference is not explained.
+- **Iisalmi** (owner's drawing, D46): see DECISIONS I96, I102, I104.
+- **Suppliers** (search excerpt of A-Marinas' product page on nauticexpo, not read): *"most frequently
+  used are 20-22 mm DIN 763 HDG chains and 800-2400 kg concrete anchors"*.
+- **UFC 4-152-07 C1** 6-3.4.7.2 (read 2026-11-16, wbdg.org): *"Generally, when the design wave height
+  exceeds 1 foot, it could be a significant factor in design and a rational method should be used to
+  determine the wave forces"*; 6-3.4.7.3: *"for floating docks … the horizontal loads are greatest when
+  the wave approach is perpendicular to the long axis"*. Used for the lower end of the wave load (I104).
+- **Not readable from the development environment** (DNS refused, or the session's permission check
+  stopped the request): permit and municipal documents found by search — ESAVI 236/2023 Rasila boat
+  harbour, Ruokolahti (ruokolahti.fi); the City of Oulu's technical guide for the floating houses of
+  Vaakunakylänranta, which says the pontoons are anchored *"meren pohjaan asennettavien, teräsbetonisten
+  ankkuripainojen ja kettinkien avulla"* (search excerpt, ouka.fi); Pyhtää, Kustavi and Naantali meeting
+  and notice documents; a Danish marina consultation (kyst.dk) whose excerpt lists concrete anchors of
+  2 000 and 3 000 kg with 20 and 22 mm chain for boats up to 24 m. The NAVFAC handbook on DTIC answered
+  403 (§9.5). These can be read in a browser and attached to a later session.
 
 ## 10. Wind waves and wave protection (read 2026-11-15)
 

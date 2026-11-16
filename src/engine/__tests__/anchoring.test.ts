@@ -14,6 +14,7 @@ import {
   resetAnchoringFactors,
   tributaryLengths,
   upliftAngle,
+  waveLoadFactor,
   WEDGE_ANGLE_LIMIT,
   wedgeWorkingCapacity,
   type AnchoringParams,
@@ -385,6 +386,32 @@ describe('anchoring plan of a pier', () => {
     expect(plan.issues.some((i) => i.code === 'WAVE_LOAD')).toBe(false);
     // Waves above the criteria: the 2 kN/m minimum is not enough on its own.
     expect(run([90], ['E']).issues.find((i) => i.code === 'WAVE_LOAD_ABOVE_CRITERIA')!.message).toMatch(/^The waves from E exceed/);
+  });
+
+  it('wave load in proportion to the 50-year wave height (D57, I104)', () => {
+    // None up to 0.3 m, full from 0.6 m, Hm0² between: 0.45 m → (0.2025 − 0.09) / (0.36 − 0.09) = 0.4167.
+    expect(waveLoadFactor(null, params)).toBe(1);
+    expect(waveLoadFactor(0.3, params)).toBe(0);
+    expect(waveLoadFactor(0.2, params)).toBe(0);
+    expect(waveLoadFactor(0.6, params)).toBe(1);
+    expect(waveLoadFactor(1.2, params)).toBe(1);
+    expect(waveLoadFactor(0.45, params)).toBeCloseTo(0.1125 / 0.27, 9);
+    expect(waveLoadFactor(0.1, { waveLoadMinHs: 0.3, waveLoadFullHs: 0 })).toBe(1);
+    const run = (hs50: (number | null)[]) =>
+      anchoringPlan({ layout: { piers: [pier], berths }, site: pierSite, classes: [boat], params, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5, waves: { from: [90], exceeding: [], hs50 } });
+    // 0.45 m from the east: 2 · 0.4167 kN/m on 30 m = 25.0 kN across.
+    const mid = run([0.45]);
+    expect(mid.loads[0]!.lateralKn).toBeCloseTo(14.036 + 60 * (0.1125 / 0.27), 6);
+    expect(mid.issues.find((i) => i.code === 'WAVE_LOAD')!.message).toContain('P1 across 25.0 kN (0.8 kN/m)');
+    expect(run([0.8]).loads).toEqual(run([null]).loads);
+    // Small waves: no wave load, and a note says why.
+    const small = run([0.25]);
+    expect(small.loads).toEqual(plan.loads);
+    expect(small.issues.some((i) => i.code === 'WAVE_LOAD')).toBe(false);
+    expect(small.issues.find((i) => i.code === 'WAVE_LOAD_SMALL_WAVES')!.message).toContain('0.25 m');
+    // The larger of two directions of the same kind: east 0.45 m and west 0.6 m across → full load.
+    const two = anchoringPlan({ layout: { piers: [pier], berths }, site: pierSite, classes: [boat], params, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5, waves: { from: [90, 270], exceeding: [], hs50: [0.45, 0.6] } });
+    expect(two.loads[0]!.lateralKn).toBeCloseTo(14.036 + 60, 6);
   });
 
   describe('access pontoon in front of the shore (D28)', () => {

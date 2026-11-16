@@ -26,7 +26,7 @@ const site: Site = {
   obstacles: [],
   zones: [],
 };
-const plan = (over: Partial<AnchoringParams>, waves: boolean) =>
+const plan = (over: Partial<AnchoringParams>, waves: boolean, hs50?: number) =>
   anchoringPlan({
     layout: { piers: [pier], berths: [] },
     site,
@@ -36,7 +36,7 @@ const plan = (over: Partial<AnchoringParams>, waves: boolean) =>
     vatPct: 25.5,
     pierFreeboard: 0.56,
     moduleLengths: [19.9, 16.05, 12.2],
-    ...(waves ? { waves: { from: [90], exceeding: [] } } : {}),
+    ...(waves ? { waves: { from: [90], exceeding: [], ...(hs50 === undefined ? {} : { hs50: [hs50] }) } } : {}),
   });
 const largest = (p: ReturnType<typeof plan>) => Math.max(...p.lines.filter((l) => l.fixing === 'seabed').map((l) => l.requiredAnchorKg));
 
@@ -60,6 +60,16 @@ describe('reference drawing, Iisalmi (I102)', () => {
     expect(largest(wedgeWaves)).toBeLessThan(3500);
     expect(largest(blockWaves) / largest(wedgeWaves)).toBeGreaterThan(8);
     expect(largest(blockWaves) / largest(wedgeWaves)).toBeLessThan(10);
+  });
+
+  it('with the wave load from the wave height (I104), lake waves bring plain blocks back towards the drawing', () => {
+    // A lake of 1–2 km fetch, 50-year wind 15–20 m/s (10 min), 4 m deep: Hm0 0.24–0.48 m (CEM, waves.ts).
+    expect(largest(plan({ seabed: 'clay', anchorType: 'block' }, true, 0.25))).toBeCloseTo(largest(blockWind), 6);
+    const mid = largest(plan({ seabed: 'clay', anchorType: 'block' }, true, 0.4));
+    expect(mid).toBeGreaterThan(largest(blockWind));
+    expect(mid).toBeLessThan(largest(blockWaves) / 2);
+    // From 0.6 m the full 2 kN/m, as before.
+    expect(largest(plan({ seabed: 'clay', anchorType: 'block' }, true, 0.6))).toBeCloseTo(largest(blockWaves), 6);
   });
 
   it('the comparison and the note say the same', () => {

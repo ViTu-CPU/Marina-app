@@ -449,6 +449,8 @@ export const en = {
   'anchoring.pontoonFreeboard': 'Pontoon freeboard if unknown (m)',
   'anchoring.lineSpacing': 'Chain pair spacing (m)',
   'anchoring.waveLoad': 'Wave load where there is open water (kN/m)',
+  'anchoring.waveLoadFullHs': '50-year wave height for the full wave load (m)',
+  'anchoring.waveLoadMinHs': '50-year wave height below which there is no wave load (m)',
   'anchoring.splayAngle': 'Chain splay from square to the pier (°)',
   'anchoring.tipAnchorMinLength': 'Tip chains on main piers from (m)',
   'anchoring.fingerPileMinLength': 'End piles for fingers longer than (m)',
