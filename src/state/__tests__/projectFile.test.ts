@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEMO_PROJECTS } from '../../engine/demos';
-import { DEFAULT_WAVES } from '../../engine/waves';
+import { DEFAULT_WAVES, emptySectors } from '../../engine/waves';
 import { loadProjectFromStorage, saveProjectToStorage, STORAGE_KEY, type StorageLike } from '../persistence';
 import { APP_ID, DISCLAIMER, parseProject, serializeProject } from '../projectFile';
 import { createAppStore } from '../store';
@@ -118,6 +118,20 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(withPontoon([-1]).ok).toBe(false);
   });
 
+  it('breakwaters (D58): kept when given, missing = none, an unknown type refused', () => {
+    const withBreakwater = (product: unknown) =>
+      parseProject(
+        fileWith((p) => {
+          (p.site as Record<string, unknown>).breakwaters = [{ id: 'breakwater-1', start: { x: 0, y: 130 }, end: { x: 100, y: 130 }, product }];
+        }),
+      );
+    const ok = withBreakwater('3800BR');
+    expect(ok.ok && ok.project.site.breakwaters).toEqual([{ id: 'breakwater-1', start: { x: 0, y: 130 }, end: { x: 100, y: 130 }, product: '3800BR' }]);
+    expect(withBreakwater('9000X').ok).toBe(false);
+    const none = parseProject(fileWith(() => {}));
+    expect(none.ok && none.project.site.breakwaters).toBeUndefined();
+  });
+
   it('stern buoys (D36): boat weight, buoy factors and sinker method are kept; older files take the defaults', () => {
     const old = parseProject(
       fileWith((p) => {
@@ -175,17 +189,45 @@ describe('project file (SPEC §2: JSON export/import)', () => {
         (p as Record<string, unknown>).waves = { fetch: 2500, fetchFrom: 450, fetchDepth: null, wind1: 15, wind50: 22, windAveragingS: 3600, quality: 'excellent' };
       }),
     );
+    // Before D47: the single fetch goes to the sector of its direction (450° = 90° = E); UFC files open with AS 3962.
+    const sectors = emptySectors();
+    sectors[2]!.fetch = 2500;
     expect(set.ok && set.project.waves).toEqual({
-      fetch: 2500,
-      fetchFrom: 90,
+      sectors,
       fetchDepth: null,
       wind1: 15,
       wind50: 22,
       windAveragingS: 3600,
       quality: 'excellent',
+      criteria: 'as3962',
       location: null,
       climate: null,
+      stationClimate: null,
+      climateChoice: 'larger',
+      autoFetch: null,
+      autoDepth: null,
     });
+    // D47: sectors and criteria are kept; wrong sector count or negative fetch refused.
+    const own = emptySectors();
+    own[0] = { fetch: 1200, depth: 3, wind1: null, wind50: 25 };
+    own[5]!.fetch = 400;
+    const kept = parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { sectors: own, criteria: 'ufc' })));
+    expect(kept.ok && kept.project.waves.sectors).toEqual(own);
+    expect(kept.ok && kept.project.waves.criteria).toBe('ufc');
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { sectors: own.slice(0, 7) }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { sectors: own.map((x) => ({ ...x, fetch: -5 })) }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { criteria: 'pianc' }))).ok).toBe(false);
+    // D47: the automatic lookup is kept; a ray count that does not match the step is refused.
+    const autoFetch = { source: 'OpenStreetMap', position: { lat: 63.56, lon: 27.19 }, radius: 20000, stepDeg: 90, distances: [1000, 2500, 300, 20000], fetchedOn: '2026-11-15' };
+    const af = parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoFetch })));
+    expect(af.ok && af.project.waves.autoFetch).toEqual(autoFetch);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoFetch: { ...autoFetch, distances: [1, 2] } }))).ok).toBe(false);
+    // I110: the depth lookup is kept; a wrong sector count or source is refused.
+    const autoDepth = { position: { lat: 63.57, lon: 27.22 }, fetchedOn: '2026-11-16', sectors: [{ depth: 3.6, source: 'syke', coverage: 0.6 }, null, null, null, { depth: 8.2, source: 'emodnet', coverage: 0.8 }, null, null, null] };
+    const ad = parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoDepth })));
+    expect(ad.ok && ad.project.waves.autoDepth).toEqual(autoDepth);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoDepth: { ...autoDepth, sectors: [null] } }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoDepth: { ...autoDepth, sectors: autoDepth.sectors.map((x) => (x ? { ...x, source: 'gebco' } : x)) } }))).ok).toBe(false);
     // D41: position and fetched wind climate are kept.
     const sector = { rose: [0.01, 0.02, 0, 0, 0], annualMax: [12, 14], oneYear: 11.5, fiftyYear: null };
     const climate = {
@@ -203,8 +245,46 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(withClimate.ok && withClimate.project.waves.location).toEqual({ lat: 60.15, lon: 24.95 });
     expect(withClimate.ok && withClimate.project.waves.climate).toEqual(climate);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { climate: { ...climate, sectors: [sector] } }))).ok).toBe(false);
+    // I108: the FMI station climate and the choice are kept; an unknown choice is refused.
+    const stationClimate = { ...climate, source: 'FMI open data; Helsinki Harmaja (fmisid 100996)', averagingS: 600 };
+    const withStation = parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { climate, stationClimate, climateChoice: 'station' })));
+    expect(withStation.ok && withStation.project.waves.stationClimate).toEqual(stationClimate);
+    expect(withStation.ok && withStation.project.waves.climateChoice).toBe('station');
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { climateChoice: 'average' }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { stationClimate: { ...climate, sectors: [sector] } }))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { fetch: -1 }))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { quality: 'superb' }))).ok).toBe(false);
+  });
+
+  it('water levels (D50): the gauge and the normal range are kept; older files have neither', () => {
+    const old = parseProject(fileWith((p) => delete (p as Record<string, unknown>).waterLevels));
+    expect(old.ok && old.project.waterLevels).toBeNull();
+    expect(old.ok && old.project.anchoring.normalHighWater).toBeNull();
+    const info = {
+      source: 'syke',
+      station: 'Porovesi, Iisalmi',
+      waterBody: 'Porovesi',
+      position: { lat: 63.555, lon: 27.18 },
+      distance: 700,
+      startYear: 1966,
+      endYear: 1995,
+      levels: { hw: 2.29, mhw: 1.7, mw: 0.92, mnw: 0.23, nw: -0.41 },
+      fetchedOn: '2026-11-15',
+    };
+    const set = parseProject(
+      fileWith((p) => {
+        (p as Record<string, unknown>).waterLevels = info;
+        (p.anchoring as Record<string, unknown>).normalHighWater = 0.8;
+        (p.anchoring as Record<string, unknown>).normalLowWater = 0.7;
+      }),
+    );
+    expect(set.ok && set.project.waterLevels).toEqual(info);
+    expect(set.ok && [set.project.anchoring.normalHighWater, set.project.anchoring.normalLowWater]).toEqual([0.8, 0.7]);
+    // D52: the quay level, missing = not known.
+    expect(old.ok && old.project.anchoring.quayLevel).toBeNull();
+    const quay = parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).quayLevel = 1.8)));
+    expect(quay.ok && quay.project.anchoring.quayLevel).toBe(1.8);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waterLevels = { ...info, source: 'smhi' }))).ok).toBe(false);
   });
 
   it('berth types (D34): params, berth types and boom fingers are kept; older files are finger piers', () => {

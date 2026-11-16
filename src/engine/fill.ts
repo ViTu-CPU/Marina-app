@@ -102,7 +102,8 @@ export interface FillContext {
   design: RowDesign;
   /**
    * Re-order each run so that larger boats sit towards the pier head (default true).
-   * The generator turns this off while searching: the order does not change berth counts.
+   * The generator turns this off while searching: on a pier of fixed length the order does not
+   * change berth counts (strategy E fills its piers again on their final length, I103).
    */
   orderRuns?: boolean;
   /** Only classes up to this boat length are placed (size zoning). */

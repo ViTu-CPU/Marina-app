@@ -10,7 +10,11 @@ import type { BoatClass, CostSettings, ObjectiveSettings, Params } from './model
  * Table B-2 (DECISIONS D27). SPEC §4 had 1.5.
  */
 export const DEFAULT_PARAMS: Params = {
-  mainPierWidth: 3.0,
+  // D44: Marinetek Premier 2700 (M2712PE / M2716PE / M2720PE): width with fenders 2,7 m, modules
+  // 12,20 / 16,05 / 19,90 m (brochure, modification date 14.11.2014, marinetek.hr, read 2026-11-15).
+  mainPierWidth: 2.7,
+  pierSeries: 'premier2700',
+  pierModuleLengths: [19.9, 16.05, 12.2],
   fingerWidth: 0.8,
   fingerLengthRatio: 0.8,
   // D29, I70: Marinetek's standard models: Steel Boat Booms FN500/FN600/FN700 (5, 6, 7 m) and
@@ -19,6 +23,8 @@ export const DEFAULT_PARAMS: Params = {
   fingerLengths: [5, 6, 7, 8, 10, 12],
   // D34: Y-boom berths use Marinetek's Steel Boat Booms FN500/FN600/FN700 (5, 6, 7 m) and
   // the decked width 0,4 m of FN600K/FN700K (brochure, marinetek.hr, read 2026-11-15).
+  // D51: 'mixed' (Y-booms for small boats, fingers for the longer ones) is offered; finger piers stay
+  // the default because mixed rows were not more efficient on the demos (I98).
   berthType: 'finger',
   boomLengths: [5, 6, 7],
   boomWidth: 0.4,
@@ -40,6 +46,9 @@ export const DEFAULT_PARAMS: Params = {
   maxMainPierLength: 150,
   orientation: 'auto',
   shoreOffset: 0,
+  // D49: owner: "if not told differently, use default: gangway 6m, pier 4m off from the shore wall".
+  shoreGap: 4,
+  gangwayLength: 6,
   berthTarget: 'share',
 };
 

@@ -74,9 +74,12 @@ describe('defaults', () => {
     expect(DEFAULT_BOAT_CLASSES.reduce((s, c) => s + c.share, 0)).toBeCloseTo(1, 12);
   });
 
-  it('default parameters match SPEC §4, except the fairway factor (D27) and the standard finger lengths (D29)', () => {
+  it('default parameters match SPEC §4, except the fairway factor (D27), the standard finger lengths (D29) and the pier modules (D44)', () => {
     expect(DEFAULT_PARAMS).toEqual({
-      mainPierWidth: 3.0,
+      // D44: Marinetek Premier 2700, 2.7 m wide, modules 19.90 / 16.05 / 12.20 m (SPEC §4: 3.0 m, any length).
+      mainPierWidth: 2.7,
+      pierSeries: 'premier2700',
+      pierModuleLengths: [19.9, 16.05, 12.2],
       fingerWidth: 0.8,
       fingerLengthRatio: 0.8,
       fingerLengths: [5, 6, 7, 8, 10, 12],
@@ -95,6 +98,9 @@ describe('defaults', () => {
       maxMainPierLength: 150,
       orientation: 'auto',
       shoreOffset: 0,
+      // D49: piers 4 m off the shore, 6 m gangway.
+      shoreGap: 4,
+      gangwayLength: 6,
       berthTarget: 'share',
     });
   });

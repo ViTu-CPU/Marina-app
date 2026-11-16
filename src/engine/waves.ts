@@ -124,42 +124,69 @@ export function designWaves(u: number, observedS: number, x: number, d: number):
 }
 
 // ---------------------------------------------------------------------------
-// Wave climate criteria: UFC 4-152-07 Change 1 (2012), Figure 4-1 "Criteria for a 'good' wave
-// climate in small craft harbors", adapted from Design Wave Climate in Small Craft Harbors
-// (Northwest Hydraulic Consultants 1980). Significant wave height; "excellent" × 0.75,
-// "moderate" × 1.25.
+// Wave climate criteria (D47). Significant wave height for the wave exceeded once a year and
+// once in 50 years; "excellent" × 0.75, "moderate" × 1.25.
+//  - 'as3962' (default): AS 3962-2001, Table 4.2 "Criteria for a 'good' wave climate in small
+//    craft harbours" (adapted from Mercer, Isaacson & Mulcahy 1982): head seas > 2 s 0.6 / 0.3 m,
+//    oblique seas > 2 s 0.4 / 0.3 m, beam seas > 2 s 0.25 / 0.15 m, head and beam seas < 2 s:
+//    1-year 0.3 m, 50-year "Conditions not likely to occur during this event". Headings by
+//    AS 3962 1.3.32–1.3.34: head within 22.5° of the boat's centre-line, beam within 22.5° of
+//    abeam, oblique between. Oblique seas below 2 s are not in the table; they take the value
+//    of head and beam seas below 2 s, which is the same for both (assumption, I90).
+//  - 'ufc': UFC 4-152-07 Change 1 (2012), Figure 4-1 (head/beam only: 2 ft, 1 ft; 0.8 ft,
+//    0.5 ft; below 2 s 1 ft and 0.5 ft for the 1-year wave), head within 45° (I86).
 // ---------------------------------------------------------------------------
 
 export type WaveEvent = 'oneYear' | 'fiftyYear';
-export type WaveHeading = 'head' | 'beam';
+export type WaveHeading = 'head' | 'oblique' | 'beam';
 export type WaveQuality = 'excellent' | 'good' | 'moderate';
+export type WaveCriteria = 'as3962' | 'ufc';
 
 export const QUALITY_FACTOR: Record<WaveQuality, number> = { excellent: 0.75, good: 1, moderate: 1.25 };
 
 const FT = 0.3048;
 
+/** AS 3962-2001 Table 4.2, 'good' climate, m: [1-year, 50-year] for periods above 2 s; below 2 s 1-year 0.3 m, 50-year none. */
+const AS3962_LIMITS: Record<WaveHeading, readonly [number, number]> = { head: [0.3, 0.6], oblique: [0.3, 0.4], beam: [0.15, 0.25] };
+const AS3962_SHORT_ONE_YEAR = 0.3;
+
 /**
- * Highest allowed significant wave height, m, or null where UFC gives none ("Conditions not
- * likely to occur during this event": 50-year waves of 2 s or less).
+ * Highest allowed significant wave height, m, or null where the criteria give none ("Conditions
+ * not likely to occur during this event": 50-year waves of 2 s or less).
  */
-export function waveLimitM(event: WaveEvent, heading: WaveHeading, tp: number, quality: WaveQuality): number | null {
+export function waveLimitM(event: WaveEvent, heading: WaveHeading, tp: number, quality: WaveQuality, criteria: WaveCriteria = 'as3962'): number | null {
   const f = QUALITY_FACTOR[quality];
-  if (event === 'oneYear') return (heading === 'head' ? 1 : 0.5) * FT * f;
-  if (tp <= 2) return null;
-  return (heading === 'head' ? 2 : 0.8) * FT * f;
+  if (criteria === 'ufc') {
+    // UFC has head and beam seas only; oblique seas are judged as beam seas (the stricter).
+    const head = heading === 'head';
+    if (event === 'oneYear') return (head ? 1 : 0.5) * FT * f;
+    if (tp <= 2) return null;
+    return (head ? 2 : 0.8) * FT * f;
+  }
+  if (tp <= 2) return event === 'oneYear' ? AS3962_SHORT_ONE_YEAR * f : null;
+  return AS3962_LIMITS[heading][event === 'oneYear' ? 0 : 1] * f;
 }
 
 /** Compass bearing (degrees clockwise from north) of a direction in local metres (x east, y north). */
 export const bearingOf = (v: Vec2): number => ((Math.atan2(v.x, v.y) * 180) / Math.PI + 360) % 360;
 
-/**
- * Head or beam seas for boats lying square to a pier whose axis has bearing `pierBearing`, for
- * waves coming from `fromBearing` (I86): head when the waves come within 45° of the boats' axis.
- */
-export function headingFor(pierBearing: number, fromBearing: number): WaveHeading {
+/** Angle between waves from `fromBearing` and the axis of boats lying square to a pier of bearing `pierBearing`, 0–90°. */
+export function angleToBoatAxis(pierBearing: number, fromBearing: number): number {
   const boatAxis = (pierBearing + 90) % 180;
-  const diff = Math.abs((((fromBearing % 180) - boatAxis + 270) % 180) - 90);
-  return diff <= 45 + 1e-9 ? 'head' : 'beam';
+  return Math.abs((((((fromBearing % 180) + 180) % 180) - boatAxis + 270) % 180) - 90);
+}
+
+/**
+ * Heading of waves from `fromBearing` for boats lying square to a pier whose axis has bearing
+ * `pierBearing`: AS 3962 (head ≤ 22.5° from the boats' axis, beam ≤ 22.5° from abeam, oblique
+ * between) or UFC (head within 45°, otherwise beam; I86).
+ */
+export function headingFor(pierBearing: number, fromBearing: number, criteria: WaveCriteria = 'as3962'): WaveHeading {
+  const diff = angleToBoatAxis(pierBearing, fromBearing);
+  if (criteria === 'ufc') return diff <= 45 + 1e-9 ? 'head' : 'beam';
+  if (diff <= 22.5 + 1e-9) return 'head';
+  if (diff >= 67.5 - 1e-9) return 'beam';
+  return 'oblique';
 }
 
 /** Marinetek: "The Marinetek Breakwaters without keels work best when the sea wave length is less than 18 m." */
@@ -188,70 +215,221 @@ export function protectionAdvice(checks: readonly WaveCheck[]): ProtectionAdvice
   return failing.every((c) => c.waves.wavelength <= FLOATING_ATTENUATOR_MAX_WAVELENGTH + 1e-9) ? 'floating' : 'fixed';
 }
 
-/** Inputs of the wave screening, stored in the project (D40). */
-export interface WaveSettings {
-  /** Longest straight-line fetch over water, m; null = not entered. */
-  fetch: number | null;
-  /** Compass bearing the wind and waves come from along that fetch, degrees. */
-  fetchFrom: number;
-  /** Mean depth along the fetch, m; null = the anchoring design depth. */
-  fetchDepth: number | null;
-  /** Extreme 10-m wind from that direction, once a year, m/s; null = not entered. */
+// ---------------------------------------------------------------------------
+// Direction sectors (D47): eight sectors of 45°, each with its own fetch (0 = no open water).
+// ---------------------------------------------------------------------------
+
+export const WAVE_SECTORS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
+export type WaveSectorName = (typeof WAVE_SECTORS)[number];
+export const WAVE_SECTOR_DEG = 360 / WAVE_SECTORS.length;
+/** Centre bearing of a wave sector, degrees. */
+export const waveSectorBearing = (k: number): number => k * WAVE_SECTOR_DEG;
+/** Wave sector of a compass bearing. */
+export const waveSectorOf = (bearing: number): number =>
+  Math.floor((((bearing % 360) + 360 + WAVE_SECTOR_DEG / 2) % 360) / WAVE_SECTOR_DEG) % WAVE_SECTORS.length;
+
+/** One direction sector of the wave screening. */
+export interface WaveSectorInput {
+  /** Straight-line fetch over open water, m; 0 = no fetch (no waves from this sector). */
+  fetch: number;
+  /** Mean depth along the fetch, m; null = the common depth. */
+  depth: number | null;
+  /** Winds from this sector (10 m, `windAveragingS`), m/s; null = from the wind climate or the common winds. */
   wind1: number | null;
-  /** Extreme 10-m wind from that direction, once in 50 years, m/s; null = not entered. */
   wind50: number | null;
-  /** Averaging time of those winds, s (600 = 10-min mean, 3600 = hourly mean). */
+}
+
+export const emptySectors = (): WaveSectorInput[] => WAVE_SECTORS.map(() => ({ fetch: 0, depth: null, wind1: null, wind50: null }));
+
+/** D47, I94: fetches measured from the OpenStreetMap shoreline, kept with the project. */
+export interface AutoFetch {
+  source: string;
+  /** Site position the rays start from, degrees. */
+  position: { lat: number; lon: number };
+  /** Search radius, m: a ray that crosses no shore is cut here. */
+  radius: number;
+  /** Angle between rays, degrees. */
+  stepDeg: number;
+  /** Distance along each ray (bearing i × stepDeg) to the first shore, m. */
+  distances: number[];
+  /** Date of the lookup, YYYY-MM-DD. */
+  fetchedOn: string;
+}
+
+export type ClimateChoice = 'era5' | 'station' | 'larger';
+
+/** Inputs of the wave screening, stored in the project (D40, D47). */
+export interface WaveSettings {
+  /** Eight sectors N, NE, … NW (D47). */
+  sectors: WaveSectorInput[];
+  /** Common mean depth along the fetches, m; null = the anchoring design depth. */
+  fetchDepth: number | null;
+  /** Common extreme 10-m wind once a year, m/s, used where neither the sector nor the wind climate gives one. */
+  wind1: number | null;
+  /** Common extreme 10-m wind once in 50 years, m/s. */
+  wind50: number | null;
+  /** Averaging time of the entered winds, s (600 = 10-min mean, 3600 = hourly mean). */
   windAveragingS: number;
   quality: WaveQuality;
+  /** Criteria set (D47); default AS 3962-2001 Table 4.2. */
+  criteria: WaveCriteria;
   /** Position for the wind data, degrees; null = the centre of the site on the map. */
   location: { lat: number; lon: number } | null;
   /** D41: wind climate fetched for the site, or null. */
   climate: WindClimate | null;
+  /** I108: wind climate of an FMI observation station near the site, or null. */
+  stationClimate: WindClimate | null;
+  /**
+   * I108: which climate gives the sectors' winds: ERA5 (`climate`), the FMI station
+   * (`stationClimate`) or, where both are present, the larger of the two (compared as 10-min means).
+   */
+  climateChoice: ClimateChoice;
+  /** D47: the last automatic fetch lookup, or null. */
+  autoFetch: AutoFetch | null;
+  /** I110: the last lookup of the depths along the fetches, or null. */
+  autoDepth: AutoDepth | null;
 }
 
-/** Nothing entered yet; 10-min winds (FMI observations, Eurocode basic wind) and a "good" climate. */
+/** I110: mean depths along the sectors' rays from open data (copied into the sectors' depths). */
+export interface AutoDepth {
+  /** Position the rays start from, degrees. */
+  position: { lat: number; lon: number };
+  fetchedOn: string;
+  /** Per sector: the depth found, its source and the share of the ray it covers; null = not found. */
+  sectors: ({ depth: number; source: 'emodnet' | 'syke'; coverage: number } | null)[];
+}
+
+/** Nothing entered yet; 10-min winds (FMI observations, Eurocode basic wind), a "good" climate, AS 3962 criteria. */
 export const DEFAULT_WAVES: WaveSettings = {
-  fetch: null,
-  fetchFrom: 0,
+  sectors: emptySectors(),
   fetchDepth: null,
   wind1: null,
   wind50: null,
   windAveragingS: 600,
   quality: 'good',
+  criteria: 'as3962',
   location: null,
   climate: null,
+  stationClimate: null,
+  climateChoice: 'larger',
+  autoFetch: null,
+  autoDepth: null,
 };
 
-export interface WaveAssessment {
-  depth: number;
-  /** Waves of each entered event. */
-  events: { event: WaveEvent; wind: number; waves: WaveEstimate }[];
-  /** Heading of the waves for each pier of the layout. */
-  piers: { id: string; bearing: number; heading: WaveHeading }[];
-  /** Checks for the headings that occur (both when there are no piers). */
-  checks: WaveCheck[];
-  advice: ProtectionAdvice;
+/**
+ * Extreme winds of a 45° wave sector from the 16-sector wind climate: the largest of the three
+ * 22.5° sectors that overlap it (its centre and the two halves on either side). Conservative:
+ * winds up to 33.75° off the centre count (assumption, I91).
+ */
+export function climateSectorWinds(climate: WindClimate, k: number): { oneYear: number | null; fiftyYear: number | null } {
+  const n = climate.sectors.length;
+  const step = n / WAVE_SECTORS.length;
+  const idx = [-1, 0, 1].map((d) => (((k * step + d) % n) + n) % n);
+  const max = (key: 'oneYear' | 'fiftyYear') => {
+    const values = idx.map((i) => climate.sectors[i]?.[key]).filter((x): x is number => typeof x === 'number');
+    return values.length === 0 ? null : Math.max(...values);
+  };
+  return { oneYear: max('oneYear'), fiftyYear: max('fiftyYear') };
 }
 
-/** The screening for the settings, the depth along the fetch and the piers' bearings. */
-export function waveAssessment(s: WaveSettings, depth: number, piers: readonly { id: string; bearing: number }[]): WaveAssessment | null {
-  if (s.fetch === null || !(s.fetch > 0)) return null;
-  const fetch = s.fetch;
-  const events = (
-    [
-      ['oneYear', s.wind1],
-      ['fiftyYear', s.wind50],
-    ] as const
-  ).flatMap(([event, wind]) => (wind !== null && wind > 0 ? [{ event, wind, waves: designWaves(wind, s.windAveragingS, fetch, depth) }] : []));
-  if (events.length === 0) return null;
-  const withHeading = piers.map((p) => ({ ...p, heading: headingFor(p.bearing, s.fetchFrom) }));
-  const headings: WaveHeading[] = withHeading.length > 0 ? [...new Set(withHeading.map((p) => p.heading))] : ['head', 'beam'];
-  const checks: WaveCheck[] = [];
-  for (const heading of (['head', 'beam'] as const).filter((h) => headings.includes(h))) {
-    for (const e of events) {
-      const limit = waveLimitM(e.event, heading, e.waves.tp, s.quality);
-      checks.push({ event: e.event, heading, waves: e.waves, limit, ok: limit === null ? null : e.waves.hm0 <= limit + 1e-9 });
-    }
+export type WindSource = 'sector' | 'climate' | 'station' | 'common';
+
+/**
+ * The wind used for a sector and event: the sector's own entry, else the wind climate (ERA5, the
+ * FMI station, or the larger of the two compared as 10-min means, I108), else the common wind.
+ */
+export function sectorWind(s: WaveSettings, k: number, event: WaveEvent): { wind: number; averagingS: number; source: WindSource } | null {
+  const sector = s.sectors[k];
+  const own = event === 'oneYear' ? sector?.wind1 : sector?.wind50;
+  if (own !== null && own !== undefined && own > 0) return { wind: own, averagingS: s.windAveragingS, source: 'sector' };
+  // A choice whose climate is missing falls back to the other one.
+  const chosen = s.climateChoice ?? 'larger';
+  const choice = chosen === 'station' && !s.stationClimate ? 'era5' : chosen === 'era5' && !s.climate ? 'station' : chosen;
+  const candidates: { wind: number; averagingS: number; source: WindSource }[] = [];
+  const add = (c: WindClimate | null | undefined, source: WindSource) => {
+    if (!c) return;
+    const w = climateSectorWinds(c, k)[event];
+    if (w !== null && w > 0) candidates.push({ wind: w, averagingS: c.averagingS, source });
+  };
+  if (choice !== 'station') add(s.climate, 'climate');
+  if (choice !== 'era5') add(s.stationClimate, 'station');
+  if (candidates.length > 0) {
+    const as10min = (x: { wind: number; averagingS: number }) => convertAveraging(x.wind, x.averagingS, 600);
+    return candidates.reduce((a, b) => (as10min(b) > as10min(a) + 1e-9 ? b : a));
   }
-  return { depth, events, piers: withHeading, checks, advice: protectionAdvice(checks) };
+  const common = event === 'oneYear' ? s.wind1 : s.wind50;
+  if (common !== null && common > 0) return { wind: common, averagingS: s.windAveragingS, source: 'common' };
+  return null;
+}
+
+export interface SectorAssessment {
+  sector: number;
+  bearing: number;
+  fetch: number;
+  depth: number;
+  events: { event: WaveEvent; wind: number; source: WindSource; waves: WaveEstimate }[];
+  /** Headings of these waves at the piers (all three when there are no piers). */
+  headings: WaveHeading[];
+  checks: WaveCheck[];
+  /** 'exceeds' when any check fails, 'ok' when all judged checks pass, 'unknown' when none is judged. */
+  status: 'ok' | 'exceeds' | 'unknown';
+}
+
+export interface WaveAssessment {
+  criteria: WaveCriteria;
+  /** Sectors with a fetch and at least one wind. */
+  sectors: SectorAssessment[];
+  /** Pier bearings and the heading of each sector's waves at each pier. */
+  piers: { id: string; bearing: number; headings: Record<number, WaveHeading> }[];
+  /** Sectors whose waves exceed the criteria. */
+  bad: number[];
+  checks: WaveCheck[];
+  advice: ProtectionAdvice;
+  /**
+   * AS 3962 3.3.3 and 4.8.2.1: mooring piles between the boats of double berths may be needed
+   * (1-year waves above 0.3 m, or 50-year head seas above 0.4 m).
+   */
+  doubleBerthPiles: boolean;
+}
+
+/** The screening for the settings, the anchoring design depth and the piers' bearings. */
+export function waveAssessment(s: WaveSettings, designDepth: number, piers: readonly { id: string; bearing: number }[]): WaveAssessment | null {
+  const commonDepth = s.fetchDepth ?? designDepth;
+  const all: WaveHeading[] = s.criteria === 'ufc' ? ['head', 'beam'] : ['head', 'oblique', 'beam'];
+  const sectors: SectorAssessment[] = [];
+  s.sectors.forEach((sector, k) => {
+    if (!(sector.fetch > 0)) return;
+    const depth = sector.depth ?? commonDepth;
+    const events = (['oneYear', 'fiftyYear'] as const).flatMap((event) => {
+      const w = sectorWind(s, k, event);
+      return w ? [{ event, wind: w.wind, source: w.source, waves: designWaves(w.wind, w.averagingS, sector.fetch, depth) }] : [];
+    });
+    if (events.length === 0) return;
+    const bearing = waveSectorBearing(k);
+    const headings = piers.length > 0 ? all.filter((h) => piers.some((p) => headingFor(p.bearing, bearing, s.criteria) === h)) : all;
+    const checks: WaveCheck[] = [];
+    for (const heading of headings) {
+      for (const e of events) {
+        const limit = waveLimitM(e.event, heading, e.waves.tp, s.quality, s.criteria);
+        checks.push({ event: e.event, heading, waves: e.waves, limit, ok: limit === null ? null : e.waves.hm0 <= limit + 1e-9 });
+      }
+    }
+    const judged = checks.filter((c) => c.ok !== null);
+    const status = judged.length === 0 ? 'unknown' : judged.some((c) => c.ok === false) ? 'exceeds' : 'ok';
+    sectors.push({ sector: k, bearing, fetch: sector.fetch, depth, events, headings, checks, status });
+  });
+  if (sectors.length === 0) return null;
+  const checks = sectors.flatMap((x) => x.checks);
+  const doubleBerthPiles = sectors.some((x) =>
+    x.events.some((e) => (e.event === 'oneYear' && e.waves.hm0 > 0.3 + 1e-9) || (e.event === 'fiftyYear' && x.headings.includes('head') && e.waves.hm0 > 0.4 + 1e-9)),
+  );
+  return {
+    criteria: s.criteria,
+    sectors,
+    piers: piers.map((p) => ({ ...p, headings: Object.fromEntries(sectors.map((x) => [x.sector, headingFor(p.bearing, x.bearing, s.criteria)])) })),
+    bad: sectors.filter((x) => x.status === 'exceeds').map((x) => x.sector),
+    checks,
+    advice: protectionAdvice(checks),
+    doubleBerthPiles,
+  };
 }

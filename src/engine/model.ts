@@ -12,6 +12,7 @@
 
 import type { AnchoringParams } from './anchoring';
 import type { PriceList } from './catalog';
+import type { WaterLevelInfo } from './waterLevels';
 import type { WaveSettings } from './waves';
 
 export interface Vec2 {
@@ -66,6 +67,20 @@ export interface AccessPontoon {
   gangways?: number[];
 }
 
+/**
+ * Extension (D58): a floating breakwater pontoon drawn by the user. It carries no berths; piers
+ * and boats keep the obstacle clearance from it (like an obstacle), and the wave screening
+ * judges the shelter it gives.
+ */
+export interface Breakwater {
+  id: string;
+  /** Centreline end points, m. */
+  start: Vec2;
+  end: Vec2;
+  /** Marinetek breakwater type (`BreakwaterId` of engine/breakwater.ts, D48). */
+  product: string;
+}
+
 export interface Site {
   /** Permitted planning water area. */
   water: Polygon;
@@ -77,6 +92,8 @@ export interface Site {
   zones: RestrictedZone[];
   /** Extension (D21): access pontoons; missing in older files. */
   accessPontoons?: AccessPontoon[];
+  /** Extension (D58): floating breakwaters; missing in older files. */
+  breakwaters?: Breakwater[];
 }
 
 // ---------------------------------------------------------------------------
@@ -108,9 +125,10 @@ export interface BoatClass {
 /**
  * Extension (D34): mooring type of a berth. 'finger': finger pier (SPEC §4); 'yBoom': one
  * boat between light booms (aisapaikka), with fingers for boats too long for a boom;
- * 'sternBuoy': bow to the pier, stern to a buoy (peräpoiju).
+ * 'sternBuoy': bow to the pier, stern to a buoy (peräpoiju); 'mixed' (D51): Y-booms for the boats
+ * a standard boom fits, fingers for the longer ones, in the same row.
  */
-export type BerthType = 'finger' | 'yBoom' | 'sternBuoy';
+export type BerthType = 'finger' | 'yBoom' | 'sternBuoy' | 'mixed';
 
 /** Extension (D20): how the boat mix is given: target shares or target berth counts. */
 export type BerthTarget = 'share' | 'count';
@@ -118,6 +136,13 @@ export type BerthTarget = 'share' | 'count';
 export interface Params {
   /** Main pier (walkway pontoon) width, m. */
   mainPierWidth: number;
+  /** Extension (D44): pier pontoon series (a preset id of engine/modules.ts, or 'custom'). */
+  pierSeries: string;
+  /**
+   * Extension (D44): module lengths of the pier pontoons, m. A generated pier is a sum of them,
+   * as many of the longest as fit; empty = any length.
+   */
+  pierModuleLengths: number[];
   /** Finger pier width, m. */
   fingerWidth: number;
   /** Finger length = ratio × boat length (assumption, not a standard). */
@@ -167,6 +192,10 @@ export interface Params {
   orientation: 'auto' | number;
   /** Extension (D5): distance from the shore end of a pier to the first finger/berth, m. */
   shoreOffset: number;
+  /** Extension (D49): water between the shoreline and a pier's shore end, bridged by a gangway, m. */
+  shoreGap: number;
+  /** Extension (D49): length of the gangway from the shore to a pier, m. */
+  gangwayLength: number;
   /** Extension (D20): the boat mix is given as target shares or as target berth counts. */
   berthTarget: BerthTarget;
 }
@@ -374,6 +403,8 @@ export interface Project {
   cost: CostSettings;
   /** Extension (D40): inputs of the wind-wave screening. */
   waves: WaveSettings;
+  /** Extension (D50): characteristic water levels of a gauge near the site, or null. */
+  waterLevels: WaterLevelInfo | null;
   /**
    * Fingerprint of the inputs (site, boat classes, parameters) the layouts were generated
    * from, or null when there are no generated layouts. Used for the "Regenerate" hint.

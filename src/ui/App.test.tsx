@@ -50,7 +50,7 @@ describe('app shell (SPEC §8)', () => {
     const alternatives = screen.getAllByTestId('alternative');
     expect(alternatives.length).toBeGreaterThanOrEqual(3);
     expect(alternatives[0]!.textContent).toContain('E – Piers sized by boat class');
-    expect(alternatives[1]!.textContent).toContain('A – Piers perpendicular to shore');
+    expect(alternatives.some((a) => a.textContent!.includes('A – Piers perpendicular to shore'))).toBe(true);
     expect(alternatives[0]!.textContent).toContain('berths');
     // Berths behind the rock were left out, so the best alternative is not "Constraints met".
     expect(alternatives[0]!.textContent).toContain('Geometry OK');
@@ -89,9 +89,11 @@ describe('app shell (SPEC §8)', () => {
     const field = screen.getByLabelText('Main pier width (m)') as HTMLInputElement;
     fireEvent.change(field, { target: { value: 'abc' } });
     expect(field.getAttribute('aria-invalid')).toBe('true');
-    expect(appStore.getState().project.params.mainPierWidth).toBe(3);
+    expect(appStore.getState().project.params.mainPierWidth).toBe(2.7);
     fireEvent.change(field, { target: { value: '2,5' } }); // decimal comma is accepted
     expect(appStore.getState().project.params.mainPierWidth).toBe(2.5);
+    // D44: a width of its own makes the pier series custom.
+    expect(appStore.getState().project.params.pierSeries).toBe('custom');
   });
 
   it('boat classes can be edited, added and deleted', () => {

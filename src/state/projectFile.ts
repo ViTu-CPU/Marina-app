@@ -2,13 +2,16 @@
  * JSON project file: export and import with structural validation (SPEC §2, persistence).
  */
 import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type Seabed } from '../engine/anchoring';
-import { DEFAULT_WAVES, type WaveSettings } from '../engine/waves';
+import { BREAKWATERS } from '../engine/breakwater';
+import type { CharacteristicLevels, WaterLevelInfo } from '../engine/waterLevels';
+import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type AutoDepth, type AutoFetch, type WaveSettings } from '../engine/waves';
 import { SECTORS, type WindClimate } from '../engine/wind';
 import { PRODUCT_CATEGORIES, PRODUCT_UNITS, type PriceList, type Product } from '../engine/catalog';
 import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import {
   PROJECT_SCHEMA_VERSION,
   type AccessPontoon,
+  type Breakwater,
   type BackgroundImage,
   type Berth,
   type BoatClass,
@@ -120,6 +123,21 @@ function site(v: unknown): Site {
             };
           }),
         }),
+    // Extension (D58): floating breakwaters; missing in older files.
+    ...(o.breakwaters === undefined
+      ? {}
+      : {
+          breakwaters: arr(o.breakwaters, 'site.breakwaters').map((item, i): Breakwater => {
+            const p = `site.breakwaters[${i}]`;
+            const e = obj(item, p);
+            return {
+              id: str(e.id, `${p}.id`),
+              start: vec(e.start, `${p}.start`),
+              end: vec(e.end, `${p}.end`),
+              product: oneOf(e.product, BREAKWATERS.map((b) => b.id), `${p}.product`),
+            };
+          }),
+        }),
   };
 }
 
@@ -155,22 +173,28 @@ function lengthList(v: unknown, key: 'fingerLengths' | 'boomLengths'): number[] 
   return [...new Set(list)].sort((a, b) => a - b);
 }
 
-const BERTH_TYPES = ['finger', 'yBoom', 'sternBuoy'] as const;
+const BERTH_TYPES = ['finger', 'yBoom', 'sternBuoy', 'mixed'] as const;
 
 function params(v: unknown): Params {
   const o = obj(v, 'params');
   // Missing keys take their defaults, so files from older versions stay readable.
-  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth'>): number =>
+  const pick = (key: Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth' | 'pierSeries' | 'pierModuleLengths' | 'shoreGap'>): number =>
     o[key] === undefined ? DEFAULT_PARAMS[key] : num(o[key], `params.${key}`);
   const boatsPerBay = o.boatsPerBay === undefined ? DEFAULT_PARAMS.boatsPerBay : o.boatsPerBay;
   if (boatsPerBay !== 1 && boatsPerBay !== 2) fail('params.boatsPerBay must be 1 or 2');
   const orientation = o.orientation === undefined || o.orientation === 'auto' ? 'auto' : num(o.orientation, 'params.orientation');
+  // D44: files from before the module rule keep piers of any length (I89).
+  const moduleLengths = o.pierModuleLengths === undefined ? [] : arr(o.pierModuleLengths, 'params.pierModuleLengths').map((x, i) => num(x, `params.pierModuleLengths[${i}]`));
+  if (moduleLengths.some((x) => !(x > 0))) fail('params.pierModuleLengths must be positive lengths');
   return {
     mainPierWidth: pick('mainPierWidth'),
+    pierSeries: o.pierSeries === undefined ? (o.pierModuleLengths === undefined ? 'free' : 'custom') : str(o.pierSeries, 'params.pierSeries'),
+    pierModuleLengths: [...new Set(moduleLengths)].sort((a, b) => b - a),
     fingerWidth: pick('fingerWidth'),
     fingerLengthRatio: pick('fingerLengthRatio'),
     fingerLengths: lengthList(o.fingerLengths, 'fingerLengths'),
-    berthType: o.berthType === undefined ? DEFAULT_PARAMS.berthType : oneOf(o.berthType, BERTH_TYPES, 'params.berthType'),
+    // D51: files from before the mixed type keep finger piers (their old default).
+    berthType: o.berthType === undefined ? 'finger' : oneOf(o.berthType, BERTH_TYPES, 'params.berthType'),
     boomLengths: lengthList(o.boomLengths, 'boomLengths'),
     boomWidth: pick('boomWidth'),
     buoyDepthFactor: pick('buoyDepthFactor'),
@@ -185,6 +209,9 @@ function params(v: unknown): Params {
     maxMainPierLength: pick('maxMainPierLength'),
     orientation,
     shoreOffset: pick('shoreOffset'),
+    // D49: files from before the gangway rule had piers touching the shore (I97).
+    shoreGap: o.shoreGap === undefined ? 0 : num(o.shoreGap, 'params.shoreGap'),
+    gangwayLength: pick('gangwayLength'),
     berthTarget:
       o.berthTarget === undefined ? DEFAULT_PARAMS.berthTarget : oneOf(o.berthTarget, ['share', 'count'] as const, 'params.berthTarget'),
   };
@@ -313,29 +340,93 @@ function mapBackground(v: unknown): MapBackground | null {
   return { provider: oneOf(o.provider, ['osm'] as const, 'map.provider'), lat, lon, opacity: Math.min(1, Math.max(0, opacity)) };
 }
 
-/** Extension (D40): wave screening inputs; missing in older files (nothing entered). */
+/**
+ * Extension (D40, D47): wave screening inputs; missing in older files (nothing entered). Files
+ * from before D47 have one fetch and its direction: the fetch goes to the sector of that direction.
+ */
 function waveSettings(v: unknown): WaveSettings {
-  if (v === undefined) return { ...DEFAULT_WAVES };
+  if (v === undefined) return structuredClone(DEFAULT_WAVES);
   const o = obj(v, 'waves');
-  const optional = (key: 'fetch' | 'fetchDepth' | 'wind1' | 'wind50'): number | null => {
-    const x = o[key];
+  const positive = (x: unknown, path: string): number | null => {
     if (x === undefined || x === null) return null;
-    const n = num(x, `waves.${key}`);
-    if (!(n > 0)) fail(`waves.${key} must be positive`);
+    const n = num(x, path);
+    if (!(n > 0)) fail(`${path} must be positive`);
     return n;
   };
   const averaging = o.windAveragingS === undefined ? DEFAULT_WAVES.windAveragingS : num(o.windAveragingS, 'waves.windAveragingS');
   if (!(averaging > 0)) fail('waves.windAveragingS must be positive');
+  let sectors = emptySectors();
+  if (o.sectors !== undefined) {
+    const list = arr(o.sectors, 'waves.sectors');
+    if (list.length !== WAVE_SECTORS.length) fail(`waves.sectors must have ${WAVE_SECTORS.length} sectors`);
+    sectors = list.map((item, i) => {
+      const path = `waves.sectors[${i}]`;
+      const x = obj(item, path);
+      const fetch = x.fetch === undefined || x.fetch === null ? 0 : num(x.fetch, `${path}.fetch`);
+      if (fetch < 0) fail(`${path}.fetch must not be negative`);
+      return { fetch, depth: positive(x.depth, `${path}.depth`), wind1: positive(x.wind1, `${path}.wind1`), wind50: positive(x.wind50, `${path}.wind50`) };
+    });
+  } else {
+    // Before D47: the longest fetch and the direction it came from.
+    const fetch = positive(o.fetch, 'waves.fetch');
+    if (fetch !== null) {
+      const from = o.fetchFrom === undefined ? 0 : num(o.fetchFrom, 'waves.fetchFrom');
+      sectors[waveSectorOf(from)]!.fetch = fetch;
+    }
+  }
   return {
-    fetch: optional('fetch'),
-    fetchFrom: o.fetchFrom === undefined ? DEFAULT_WAVES.fetchFrom : ((num(o.fetchFrom, 'waves.fetchFrom') % 360) + 360) % 360,
-    fetchDepth: optional('fetchDepth'),
-    wind1: optional('wind1'),
-    wind50: optional('wind50'),
+    sectors,
+    fetchDepth: positive(o.fetchDepth, 'waves.fetchDepth'),
+    wind1: positive(o.wind1, 'waves.wind1'),
+    wind50: positive(o.wind50, 'waves.wind50'),
     windAveragingS: averaging,
     quality: o.quality === undefined ? DEFAULT_WAVES.quality : oneOf(o.quality, ['excellent', 'good', 'moderate'] as const, 'waves.quality'),
+    // Files from before D47 were judged with UFC 4-152-07; they now open with AS 3962 like new projects.
+    criteria: o.criteria === undefined ? DEFAULT_WAVES.criteria : oneOf(o.criteria, ['as3962', 'ufc'] as const, 'waves.criteria'),
     location: o.location === undefined || o.location === null ? null : latLon(o.location, 'waves.location'),
     climate: o.climate === undefined || o.climate === null ? null : windClimateOf(o.climate),
+    // I108: missing in older files.
+    stationClimate: o.stationClimate === undefined || o.stationClimate === null ? null : windClimateOf(o.stationClimate, 'waves.stationClimate'),
+    climateChoice: o.climateChoice === undefined ? 'larger' : oneOf(o.climateChoice, ['era5', 'station', 'larger'] as const, 'waves.climateChoice'),
+    autoFetch: o.autoFetch === undefined || o.autoFetch === null ? null : autoFetchOf(o.autoFetch),
+    // I110: missing in older files.
+    autoDepth: o.autoDepth === undefined || o.autoDepth === null ? null : autoDepthOf(o.autoDepth),
+  };
+}
+
+/** D50: the levels of a gauge near the site. */
+function waterLevelInfo(v: unknown): WaterLevelInfo {
+  const o = obj(v, 'waterLevels');
+  const l = obj(o.levels, 'waterLevels.levels');
+  const level = (k: keyof CharacteristicLevels) => num(l[k], `waterLevels.levels.${k}`);
+  return {
+    source: oneOf(o.source, ['fmi', 'syke'] as const, 'waterLevels.source'),
+    station: str(o.station, 'waterLevels.station'),
+    waterBody: o.waterBody === undefined || o.waterBody === null ? null : str(o.waterBody, 'waterLevels.waterBody'),
+    position: latLon(o.position, 'waterLevels.position'),
+    distance: num(o.distance, 'waterLevels.distance'),
+    startYear: num(o.startYear, 'waterLevels.startYear'),
+    endYear: num(o.endYear, 'waterLevels.endYear'),
+    levels: { hw: level('hw'), mhw: level('mhw'), mw: level('mw'), mnw: level('mnw'), nw: level('nw') },
+    fetchedOn: str(o.fetchedOn, 'waterLevels.fetchedOn'),
+  };
+}
+
+/** D47: a saved automatic fetch lookup. */
+function autoFetchOf(v: unknown): AutoFetch {
+  const o = obj(v, 'waves.autoFetch');
+  const radius = num(o.radius, 'waves.autoFetch.radius');
+  const stepDeg = num(o.stepDeg, 'waves.autoFetch.stepDeg');
+  if (!(radius > 0) || !(stepDeg > 0) || 360 % stepDeg !== 0) fail('waves.autoFetch.radius / stepDeg are not valid');
+  const distances = arr(o.distances, 'waves.autoFetch.distances').map((x, i) => num(x, `waves.autoFetch.distances[${i}]`));
+  if (distances.length !== 360 / stepDeg) fail('waves.autoFetch.distances must have one value per ray');
+  return {
+    source: str(o.source, 'waves.autoFetch.source'),
+    position: latLon(o.position, 'waves.autoFetch.position'),
+    radius,
+    stepDeg,
+    distances,
+    fetchedOn: str(o.fetchedOn, 'waves.autoFetch.fetchedOn'),
   };
 }
 
@@ -347,12 +438,25 @@ function latLon(v: unknown, path: string): { lat: number; lon: number } {
   return { lat, lon };
 }
 
+/** I110: a saved lookup of the depths along the fetches. */
+function autoDepthOf(v: unknown): AutoDepth {
+  const o = obj(v, 'waves.autoDepth');
+  const sectors = arr(o.sectors, 'waves.autoDepth.sectors').map((item, i) => {
+    if (item === null) return null;
+    const p = `waves.autoDepth.sectors[${i}]`;
+    const e = obj(item, p);
+    return { depth: num(e.depth, `${p}.depth`), source: oneOf(e.source, ['emodnet', 'syke'] as const, `${p}.source`), coverage: num(e.coverage, `${p}.coverage`) };
+  });
+  if (sectors.length !== WAVE_SECTORS.length) fail(`waves.autoDepth.sectors must have ${WAVE_SECTORS.length} sectors`);
+  return { position: latLon(o.position, 'waves.autoDepth.position'), fetchedOn: str(o.fetchedOn, 'waves.autoDepth.fetchedOn'), sectors };
+}
+
 /** D41: a saved wind climate (summary of a fetched record). */
-function windClimateOf(v: unknown): WindClimate {
-  const o = obj(v, 'waves.climate');
+function windClimateOf(v: unknown, at = 'waves.climate'): WindClimate {
+  const o = obj(v, at);
   const nullable = (x: unknown, path: string): number | null => (x === null || x === undefined ? null : num(x, path));
-  const sectors = arr(o.sectors, 'waves.climate.sectors').map((item, i) => {
-    const p = `waves.climate.sectors[${i}]`;
+  const sectors = arr(o.sectors, `${at}.sectors`).map((item, i) => {
+    const p = `${at}.sectors[${i}]`;
     const s = obj(item, p);
     return {
       rose: arr(s.rose, `${p}.rose`).map((x, k) => num(x, `${p}.rose[${k}]`)),
@@ -361,16 +465,16 @@ function windClimateOf(v: unknown): WindClimate {
       fiftyYear: nullable(s.fiftyYear, `${p}.fiftyYear`),
     };
   });
-  if (sectors.length !== SECTORS) fail(`waves.climate.sectors must have ${SECTORS} sectors`);
+  if (sectors.length !== SECTORS) fail(`${at}.sectors must have ${SECTORS} sectors`);
   return {
-    source: str(o.source, 'waves.climate.source'),
-    requested: latLon(o.requested, 'waves.climate.requested'),
-    cell: latLon(o.cell, 'waves.climate.cell'),
-    startYear: num(o.startYear, 'waves.climate.startYear'),
-    endYear: num(o.endYear, 'waves.climate.endYear'),
-    hours: num(o.hours, 'waves.climate.hours'),
-    fetchedOn: str(o.fetchedOn, 'waves.climate.fetchedOn'),
-    averagingS: num(o.averagingS, 'waves.climate.averagingS'),
+    source: str(o.source, `${at}.source`),
+    requested: latLon(o.requested, `${at}.requested`),
+    cell: latLon(o.cell, `${at}.cell`),
+    startYear: num(o.startYear, `${at}.startYear`),
+    endYear: num(o.endYear, `${at}.endYear`),
+    hours: num(o.hours, `${at}.hours`),
+    fetchedOn: str(o.fetchedOn, `${at}.fetchedOn`),
+    averagingS: num(o.averagingS, `${at}.averagingS`),
     sectors,
   };
 }
@@ -380,7 +484,7 @@ function anchoring(v: unknown): AnchoringParams {
   if (v === undefined) return structuredClone(DEFAULT_ANCHORING);
   const o = obj(v, 'anchoring');
   const d = DEFAULT_ANCHORING;
-  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed'>): number =>
+  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed' | 'normalHighWater' | 'normalLowWater' | 'quayLevel'>): number =>
     o[key] === undefined ? d[key] : num(o[key], `anchoring.${key}`);
   const f = o.friction === undefined ? {} : obj(o.friction, 'anchoring.friction');
   const mu = (k: Seabed) => (f[k] === undefined ? d.friction[k] : num(f[k], `anchoring.friction.${k}`));
@@ -388,6 +492,10 @@ function anchoring(v: unknown): AnchoringParams {
     depth: pick('depth'),
     highWater: pick('highWater'),
     lowWater: pick('lowWater'),
+    // D50: missing in older files (not known).
+    normalHighWater: o.normalHighWater === undefined || o.normalHighWater === null ? null : num(o.normalHighWater, 'anchoring.normalHighWater'),
+    normalLowWater: o.normalLowWater === undefined || o.normalLowWater === null ? null : num(o.normalLowWater, 'anchoring.normalLowWater'),
+    quayLevel: o.quayLevel === undefined || o.quayLevel === null ? null : num(o.quayLevel, 'anchoring.quayLevel'),
     seabed: o.seabed === undefined ? d.seabed : oneOf(o.seabed, ['clay', 'sand', 'rock'] as const, 'anchoring.seabed'),
     windSpeed: pick('windSpeed'),
     airDensity: pick('airDensity'),
@@ -396,6 +504,10 @@ function anchoring(v: unknown): AnchoringParams {
     profileHeightRatio: pick('profileHeightRatio'),
     pontoonFreeboard: pick('pontoonFreeboard'),
     lineSpacing: pick('lineSpacing'),
+    waveLoad: pick('waveLoad'),
+    // I104: missing in older files; they take the defaults (the load follows the wave height).
+    waveLoadMinHs: pick('waveLoadMinHs'),
+    waveLoadFullHs: pick('waveLoadFullHs'),
     splayAngle: pick('splayAngle'),
     chainSafetyFactor: pick('chainSafetyFactor'),
     corrosionAllowance: pick('corrosionAllowance'),
@@ -525,6 +637,7 @@ export function parseProject(text: string): ParseResult {
       anchoring: anchoring(p.anchoring),
       cost: costSettings(p.cost),
       waves: waveSettings(p.waves),
+      waterLevels: p.waterLevels === undefined || p.waterLevels === null ? null : waterLevelInfo(p.waterLevels),
       generatedFrom: typeof p.generatedFrom === 'string' ? p.generatedFrom : null,
     };
     return { ok: true, project };

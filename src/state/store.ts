@@ -8,7 +8,10 @@
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { DEFAULT_ANCHORING, type AnchoringParams } from '../engine/anchoring';
-import { DEFAULT_WAVES, type WaveSettings } from '../engine/waves';
+import { anchoringLevels, type WaterLevelInfo } from '../engine/waterLevels';
+import { bearingOf, DEFAULT_WAVES, waveAssessment, type WaveSettings } from '../engine/waves';
+import { breakwaterProposal, defaultBreakwaterProduct } from '../engine/breakwater';
+import { pierAxis } from '../engine/rows';
 import type { PriceList } from '../engine/catalog';
 import { DEFAULT_BOAT_CLASSES, DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import { DEMO_PROJECTS, type DemoEntry } from '../engine/demos';
@@ -59,6 +62,7 @@ export function projectBounds(project: Project): Box {
     ...site.obstacles.flatMap((o) => o.shape),
     ...site.zones.flatMap((z) => z.shape),
     ...(site.accessPontoons ?? []).flatMap((p) => [p.start, p.end]),
+    ...(site.breakwaters ?? []).flatMap((b) => [b.start, b.end]),
   ];
   return points.length > 0 ? boundingBox(points) : { minX: 0, minY: 0, maxX: 200, maxY: 120 };
 }
@@ -79,6 +83,7 @@ export const LAYER_IDS = [
   'slots',
   'boats',
   'anchoring',
+  'fetch',
   'issues',
 ] as const;
 export type LayerId = (typeof LAYER_IDS)[number];
@@ -90,6 +95,7 @@ export type ToolId =
   | 'shoreline'
   | 'entrance'
   | 'access'
+  | 'breakwater'
   | 'pier'
   | 'obstacle'
   | 'zone'
@@ -112,7 +118,8 @@ export function emptyProject(): Project {
     map: null,
     anchoring: structuredClone(DEFAULT_ANCHORING),
     cost: { ...DEFAULT_COST },
-    waves: { ...DEFAULT_WAVES },
+    waves: structuredClone(DEFAULT_WAVES),
+    waterLevels: null,
     generatedFrom: null,
   };
 }
@@ -217,6 +224,8 @@ export interface AppState {
   setAnchoring: (patch: Partial<AnchoringParams>, options?: CommitOptions) => void;
   /** D40: inputs of the wave screening. */
   setWaves: (patch: Partial<WaveSettings>, options?: CommitOptions) => void;
+  /** D50: keep a gauge's levels and set the anchoring water levels from them (one undo step). */
+  applyWaterLevels: (info: WaterLevelInfo) => void;
   /** D24: product choices; `priceList` replaces the built-in list (null restores it). */
   setCost: (patch: Partial<CostSettings>, options?: CommitOptions) => void;
   setBuiltInPriceList: (list: PriceList | null, error?: string | null) => void;
@@ -412,6 +421,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       setMap: (map, options) => get().commit((p) => ({ ...p, map }), options),
       setAnchoring: (patch, options) => get().commit((p) => ({ ...p, anchoring: { ...p.anchoring, ...patch } }), options),
       setWaves: (patch, options) => get().commit((p) => ({ ...p, waves: { ...p.waves, ...patch } }), options),
+      applyWaterLevels: (info) => get().commit((p) => ({ ...p, waterLevels: info, anchoring: { ...p.anchoring, ...anchoringLevels(info.levels) } })),
       setCost: (patch, options) => get().commit((p) => ({ ...p, cost: { ...p.cost, ...patch } }), options),
       setBuiltInPriceList: (builtInPriceList, priceListError = null) => set({ builtInPriceList, priceListError }),
 
@@ -498,7 +508,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
           return;
         }
         set({ draft: [...draft, point] });
-        if ((tool === 'entrance' || tool === 'access' || tool === 'pier') && draft.length === 1) get().finishDraft();
+        if ((tool === 'entrance' || tool === 'access' || tool === 'breakwater' || tool === 'pier') && draft.length === 1) get().finishDraft();
       },
       removeLastDraftPoint: () => set((s) => ({ draft: s.draft.slice(0, -1) })),
       cancelDraft: () => set({ draft: [] }),
@@ -535,6 +545,19 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
             const existing = site.accessPontoons ?? [];
             const id = nextId('access', existing.map((p) => p.id));
             return { ...site, accessPontoons: [...existing, { id, start: points[0]!, end: points[1]!, width }] };
+          });
+        } else if (tool === 'breakwater' && points.length >= 2) {
+          // D58: the two clicks are the ends of its centreline; it takes the type the wave
+          // screening proposes for the selected alternative (else the lightest), changed in the
+          // list of site objects.
+          const { project, selectedLayoutId } = get();
+          const layout = project.layouts.find((l) => l.id === selectedLayoutId);
+          const piers = (layout?.piers ?? []).map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) }));
+          const product = defaultBreakwaterProduct(breakwaterProposal(waveAssessment(project.waves, project.anchoring.depth, piers)));
+          get().updateSite((site) => {
+            const existing = site.breakwaters ?? [];
+            const id = nextId('breakwater', existing.map((b) => b.id));
+            return { ...site, breakwaters: [...existing, { id, start: points[0]!, end: points[1]!, product }] };
           });
         } else if (tool === 'obstacle' && closed.length >= 3) {
           get().updateSite((site) => ({

@@ -17,7 +17,7 @@ value is an assumption of this project and not from a source, it says so.
 | Document | What it is | Availability to this project |
 |---|---|---|
 | **RIL 201-3-2013** *Suunnitteluperusteet ja rakenteiden kuormat. Vesirakenteet* | Finnish Association of Civil Engineers' guideline on design bases and loads for water structures; 75 pages, Finnish. Part of the Eurocode-based RIL 201 series. | **Paid, not available.** 70 € in RIL's 2026 price list ([RIL hinnasto 2026](https://ril.fi/wp-content/uploads/2026/01/Hinnasto_2026_-numerojarjestys.pdf); [Ellibs record](https://www.ellibslibrary.com/en/book/9789517585798)). No public summary of its numeric content was found. |
-| **AS 3962:2020** *Marina design* (supersedes AS 3962-2001 *Guidelines for design of marinas*) | Australian standard for marinas for vessels up to 50 m: fixed berths, floating pontoon systems, wave attenuators. | **Paid, not available** ([Standards Australia](https://store.standards.org.au/product/as-3962-2020)). Copies of the 2001 and 2020 editions circulate on file-sharing and personal sites; they carry licence headers and appear to be unauthorised, so they were **not used**. |
+| **AS 3962:2020** *Marina design* (supersedes AS 3962-2001 *Guidelines for design of marinas*) | Australian standard for marinas for vessels up to 50 m: fixed berths, floating pontoon systems, wave attenuators. | **Paid, not available** ([Standards Australia](https://store.standards.org.au/product/as-3962-2020)). Copies of the 2001 and 2020 editions circulate on file-sharing and personal sites; they carry licence headers and appear to be unauthorised, so they were **not used** at first. On 2026-11-15 the owner supplied a copy of the 2001 edition and asked that it be used (DECISIONS D42); see §11. |
 | Indian Ministry of Ports, Shipping and Waterways, *Guidelines for Floating Jetties / Platforms for Marinas* | Public government guideline that refers to AS 3962:2020. | Public PDF ([shipmin.gov.in](https://shipmin.gov.in/sites/default/files/finalversinGuidelines.pdf)); only search excerpts could be read from this session (see §8). |
 | UFC 4-152-07 *Design: Small Craft Berthing Facilities* (US DoD, 2009, Change 1 2012) | Public-domain design criteria for small-craft marinas incl. floating docks. | **Read** (Change 1, [WBDG file](https://www.wbdg.org/api/documents/media/b60e64cd-d255-4e98-9463-9658a772eabe/file), 2026-11-14), §9.1. WBDG lists a revision dated 2026-09-30 that moves the load calculation to a separate UFS 4-152-07 (not read; per WBDG's change summary). |
 | UFC 4-159-03 *Moorings* (US DoD, 2020) | Mooring design criteria (ships and fleet moorings). | **Read** ([WBDG file](https://www.wbdg.org/api/documents/media/83e8fe52-bb53-46af-9fde-fdb51092c4c0/file), 2026-11-14), §9.2. |
@@ -379,6 +379,20 @@ parameter is shown with its source or marked **assumption**.
    on sand, 0.9 t as wedges on clay and 0.7 t on sand; anchors per metre of pier 1.55, 0.83,
    0.17 and 0.13 t (before: 1.61, 0.86, 0.18, 0.13 t); wedge chains about 44 m (clay) and 40 m
    (sand). The total hardly changes; the peak loads at the heads are spread over all lines.
+   **Against the reference drawing (DECISIONS D55, I102, 2026-11-16):** the owner's drawing of the
+   Iisalmi breakwater (100 m of 20 m pontoons, 20 chains at about 45°, anchors of 3 200 kg, 22 mm
+   Grade 40 chains of 30 m; design data not available, D56) modelled as a 99.5 m pier of five
+   19.90 m modules gives the same 20 chains. Largest anchor per chain on clay at an assumed design
+   depth of 4 m: plain blocks 3.55 t for wind alone, 29.9 t with the AS 3962 minimum wave load of
+   2 kN/m across; wedges 0.39 t and 3.26 t. The drawing's anchors are thus of the order of plain
+   blocks under wind alone, or of anchors that dig in under the wave load. The anchoring plan shows
+   both anchor types since this step.
+   **Wave load from the waves (D59, I104):** with Meri (44 × 20 m, 257 t; owner) the friction model
+   with 2 kN/m gives 0.97–1.65 × the installed anchors on the long face, so the model holds for an
+   exposed site; the wave load now follows the 50-year Hm0 (none up to 0.3 m, UFC 4-152-07
+   6-3.4.7.2; the full 2 kN/m from 0.6 m, AS 3962 Table 4.2 and 4.8.2.3; Hm0² between, assumption).
+   The Iisalmi-type case then gives 3.55 t per chain for Hm0 ≤ 0.3 m (1.1 × the drawing) and
+   29.9 t from 0.6 m.
 10. **Stern buoys (D36, D37, I78–I85).** One sinker per buoy, straight below it, from Svenska
    Båtunionen's table by boat displacement (default; §9.14), Top Marine's table (§9.13) or factor
    × boat weight; one row up in an exposed harbour; chain max(1.41 × design depth, depth at high
@@ -535,6 +549,14 @@ anchors should be used with caution."*
   3.87 kips per US ton at 0° up angle, 2.65 at 6°. I.e. a working capacity of about 1.0 × the
   anchor's weight in air in mud, against about 0.12 × for a plain block with μ = 0.3 and
   FS 1.5. This is the main quantified reason for the gap to practice (§5 item 9).
+- Re-read 2026-11-16 (A-1.1, A-1.2, Tables 33–36; [Tethys/PNNL](https://tethys.pnnl.gov/sites/default/files/publications/Advanced-Anchor-and-Mooring-Study.pdf)):
+  the formulas above are as printed. A-1.2 adds *"keying skirts"*, which *"adds substantially to the
+  capacity of a deadweight anchor"* (cohesive: the same formula with the skirt depth z<sub>s</sub>);
+  A-1.2 also: *"for a seafloor sloping toward an anchored object, the anchor capacity is reduced,
+  reaching zero as the tangent of the slope angle reaches the effective coefficient of friction"*.
+  Savorak's 3 000 kg block worked through the cohesive formula: equivalent friction 0.26–0.39
+  (DECISIONS I102). The NAVFAC *Handbook for Marine Geotechnical Engineering* (SP-2209-OCN, 2012;
+  DTIC ADA556807), on which such procedures rest, could not be read: DTIC answered 403.
 
 ### 9.6 Vaasa 2020
 
@@ -783,6 +805,33 @@ Top Marine 2 × depth (or maximum depth + 1 m) with length + 3 × depth. The geo
 taut chain of length c·h lets the buoy move √(c² − 1)·h towards the pier (1:1 → h; 2 × depth →
 1,73 h). Longer chains (Ranta & Ranta's ≥ 2 × depth) are a holding argument for swing moorings.
 
+### 9.15 Finnish anchoring references (2026-11-16)
+
+- **Meri, Vaasa** (owner's information, D57, D59): floating sauna restaurant in Vaasa's inner harbour
+  on 11 pontoons of 20 × 4 × 1.4 m side by side (44 × 20 m), anchored with about 45 × 5 000 kg and
+  8 × 4 000 kg anchors (257 t); *"todella altis aallolle ja tuulelle"*. Public traces found by search
+  but **not read** (hosts not reachable from the development environment): Yle 3-11988210 (building
+  permit for Bluet's restaurant and sauna building with a pool in the inner harbour) and Yle 3-12607181
+  (the raft, *"yli tuhannen neliömetrin"* according to the search excerpt, towed from Vaskiluoto);
+  Bluet's reference list on nauticexpo (*"Floating Sauna-Restaurant, Vaasa, Finland"*, *"overall floating
+  area 1 850m2"* in the search excerpt; the page answered 403). The excerpts' areas (over 1 000 m²,
+  1 850 m²) are larger than 11 × 80 m² = 880 m²; the difference is not explained.
+- **Iisalmi** (owner's drawing, D46): see DECISIONS I96, I102, I104.
+- **Suppliers** (search excerpt of A-Marinas' product page on nauticexpo, not read): *"most frequently
+  used are 20-22 mm DIN 763 HDG chains and 800-2400 kg concrete anchors"*.
+- **UFC 4-152-07 C1** 6-3.4.7.2 (read 2026-11-16, wbdg.org): *"Generally, when the design wave height
+  exceeds 1 foot, it could be a significant factor in design and a rational method should be used to
+  determine the wave forces"*; 6-3.4.7.3: *"for floating docks … the horizontal loads are greatest when
+  the wave approach is perpendicular to the long axis"*. Used for the lower end of the wave load (I104).
+- **Not readable from the development environment** (DNS refused, or the session's permission check
+  stopped the request): permit and municipal documents found by search — ESAVI 236/2023 Rasila boat
+  harbour, Ruokolahti (ruokolahti.fi); the City of Oulu's technical guide for the floating houses of
+  Vaakunakylänranta, which says the pontoons are anchored *"meren pohjaan asennettavien, teräsbetonisten
+  ankkuripainojen ja kettinkien avulla"* (search excerpt, ouka.fi); Pyhtää, Kustavi and Naantali meeting
+  and notice documents; a Danish marina consultation (kyst.dk) whose excerpt lists concrete anchors of
+  2 000 and 3 000 kg with 20 and 22 mm chain for boats up to 24 m. The NAVFAC handbook on DTIC answered
+  403 (§9.5). These can be read in a browser and attached to a later session.
+
 ## 10. Wind waves and wave protection (read 2026-11-15)
 
 - **USACE, Coastal Engineering Manual EM 1110-2-1100, Part II, Chapter 2 "Meteorology and Wave
@@ -834,4 +883,164 @@ taut chain of length c·h lets the buoy move √(c² − 1)·h towards the pier 
   request returned `access-control-allow-origin: *` (browser use works). Rate limits are per IP:
   from this development environment's shared address the daily limit was already used up, so the
   tests use a mocked answer.
+- **Live test (2026-11-16)** of the tool's own `fetchWindHistory` + `windClimate` from the
+  development environment, 1996–2025, `models=era5`, `cell_selection=sea`: six 5-year requests per site,
+  about 2 s; **262 992 hours, no missing values** at both sites.
+  - Helsinki (60.155, 24.956): cell 60.0 / 25.0 (`nearest` gives 60.25 / 25.0, so `sea` did pick
+    another cell); hours < 4 m/s 21.5 %; largest hourly wind 20.9 m/s; once-a-year 12.2–16.1 m/s and
+    50-year 16.4–20.8 m/s by sector, strongest SW–W.
+  - Iisalmi (63.558, 27.19): cell 63.5 / 27.25 for `sea`, `nearest` **and** `land` alike, i.e. there is
+    no sea cell near an inland lake and the nearest (land) cell is used; hours < 4 m/s **74.5 %**;
+    largest hourly wind in 30 years **10.2 m/s**; once-a-year 6.2–7.6 m/s, 50-year 8.1–10.3 m/s.
+  - The Iisalmi winds are those of a 0.25° cell that is mostly forest; the wind over the open lake is
+    not known from this. Checking against FMI observations (handoff item 6) is needed before
+    ERA5 winds are used for lakes.
 
+
+---
+
+### 10.1 FMI weather observations (read 2026-11-16)
+
+- **Service:** FMI open data WFS, stored query `fmi::observations::weather::hourly::multipointcoverage`
+  (*"Hourly weather observations from weather stations. Default set contains … wind speed average,
+  minumum (10 minute average) and maximum (10 minute average), wind direction average, wind gust speed
+  maximum (3 second average) …"*; describeStoredQueries, 2026-11-16). Parameters used: `WS_PT1H_MAX`,
+  `WD_PT1H_AVG`. A request longer than a month is refused: *"Too long time interval requested! No more
+  than 744.000000 hours allowed."* The answer carries `access-control-allow-origin: *`.
+- **Limits** ([FMI Open data WFS services](https://en.ilmatieteenlaitos.fi/open-data-manual-fmi-wfs-services)):
+  *"Download Service has limit of 20000 requests per day … Download and View Services have combined limit
+  of 600 requests per 5 minutes"*. 30 years = 360 requests per station.
+- **Stations found** (2026-11-16): within 60 km of Iisalmi Vieremä Kaarakkala (31.6 km) and Kuopio
+  Maaninka (46.6 km); of Helsinki 16 stations from Kaisaniemi (2.3 km) and Harmaja (5.7 km) to Inkoo
+  Bågaskär (58.0 km).
+- **Comparison with ERA5** (DECISIONS I108): Vieremä Kaarakkala 2001–2025, largest hourly maximum
+  13.4 m/s, 50-year 10.2–14.6 m/s; Helsinki Harmaja 1997–2025, 23.5 m/s, 17.5–24.6 m/s; Helsinki
+  Kaisaniemi 2016–2025, 16.0 m/s. ERA5 (1 h): Iisalmi 10.2 m/s and 8.1–10.3 m/s, Helsinki sea cell
+  20.9 m/s and 16.4–20.8 m/s.
+
+### 10.2 Open depth data for the fetches (read 2026-11-16)
+
+- **EMODnet Bathymetry REST** ([EMODnet web services](https://emodnet.ec.europa.eu/en/emodnet-web-service-documentation)):
+  `https://rest.emodnet-bathymetry.eu/depth_sample?geom=POINT(lon lat)` answers e.g.
+  `{"min":-19.27,"max":-19.27,"avg":-19.27, … "reference":{"identifier":"FINCHART","type":"DTM"}}` off
+  Helsinki; `depth_profile?geom=LINESTRING(…)` answers 1 000 values along the line. Negative = depth,
+  positive = land (inland at Iisalmi `"avg":92.63`): the model covers the sea only. CORS: the answer
+  echoes the page's origin.
+- **SYKE INSPIRE elevation WFS** `https://paikkatiedot.ymparisto.fi/geoserver/inspire_el/wfs` (listed by
+  SYKE among its WFS services; dataset "Järvien ja jokien luotauspisteet",
+  [ckan.ymparisto.fi](https://ckan.ymparisto.fi/en/dataset/jarvien-ja-jokien-luotauspisteet), CC BY 4.0):
+  feature types `EL.Syvyysalue`, `EL.ContourLine`, `EL.SpotElevation`. `EL.Syvyysalue` has `syvyysvali_m`
+  ("0-1,5", "1,5-3", "3-6", "6-10", "10-15", "15-20"; "Saari" for islands), the survey area and lake codes
+  and `geom` (MultiSurface, EPSG:3067). Near Iisalmi: Kilpijärvi, Tismiö, Viitaanjärvi, Ylemmäinen (not
+  Porovesi). `Access-Control-Allow-Origin: *`. SYKE's page asks applications to request an identifier from
+  its GIS support for the WFS; not done (open question).
+- **Traficom open WFS** `https://julkinen.traficom.fi/inspirepalvelu/avoin/wfs`: layers include
+  `avoin:d_alueet` and harbour structures (`Pontoon_A`, `Berths_L`); not used (EMODnet's Finnish data is
+  FINCHART). Licence CC BY 4.0 with Traficom's attribution
+  ([bathymetric data](https://traficom.fi/en/hydrography/hydrographic-data-services/bathymetric-data)).
+
+## 11. AS 3962-2001 *Guidelines for design of marinas* (read 2026-11-15)
+
+The owner supplied a copy of AS 3962-2001 and asked that it be used to check and update the
+tool (DECISIONS D42). It is superseded by AS 3962:2020, which was not available. The copy is not
+stored in the repository; below are clause numbers, the values the tool can use, and short
+phrases only. Clause 1.1, Note 1: *"This document is intended for use as a guideline and should not
+be used as a design specification."* The tool does not claim compliance with it.
+
+| Clause | What AS 3962-2001 says | The tool before this session | Done |
+|---|---|---|---|
+| 1.3.32–1.3.34 | Head sea: waves *"up to 22.5° from the centre-line"*; beam sea: *"within 22.5° from abeam"*; oblique: everything else. | Head/beam split at 45° (I86, assumption). | Wave criteria use the three AS headings (D47). |
+| 2.3.2.2 | The wave climate needs *"water areas and fetch lengths in all directions"* and *"average depths along each of the major fetch directions"*. | One longest fetch and its direction (D40). | Fetch and depth per direction sector (D47). |
+| 2.3.2.1 | Hindcasting needs a longer-duration mean wind, *"The mean one-hourly, three-hourly or six-hourly wind speed is usually appropriate"*; directional wind data. | ERA5 hourly winds by sector (D41). | Unchanged. |
+| 3.1.1 | Entrance channel minimum the greatest of 20 m, L + 2 m and 5 B; preferred 30 m or 6 B, whichever is the minimum; a short narrowing at breakwaters at least max(15 m, 3 B). | Entrance segment drawn by the user, width not checked. | Proposed as a later check (HANDOFF). |
+| 3.1.2 | Interior channel minimum max(20 m, 1.5 L), preferred max(25 m, 1.75 L); **fairway minimum 1.5 L, preferred 1.75 L**; wider where currents exceed 0.5 m/s. | Fairway 1.75 × longest boat (D27, from DBW 2005). | Same as the AS preferred width; recorded. |
+| 3.2.1, 3.2.3, Table 3.1 | Depth at berths: draught (Table 3.1, e.g. 10 m yacht 1.8 m, power boat 1.0 m) + at least ½ Hs + under-keel clearance max(0.3 m, 10 % of draught) on soft beds or 0.5 m on hard beds, at the lowest tide. | Not checked (one design depth, D16). | Proposed as a later check (HANDOFF). |
+| 3.3.2, Table 3.2 | Clear berth width between fingers: **single berth beam + 1 m, double berth 2 × beam + 1 m** (boats up to 20 m; + 1.5 m above); Table 3.2 gives design beams by length (e.g. 6 m 2.8 m, 10 m 4.0 m, 12 m 4.4 m). For alongside berths 0.2 L up to 3.0 m between boats. | 0.5 m per boat (owner D39). | Owner kept 0.5 m, user may enter more (D43). With two boats per bay the tool's 2 × (beam + 0.5) equals the AS double berth exactly; for single berths (Y-booms) AS gives + 1.0 m. |
+| 3.3.3, 4.8.2.1 | Mooring piles between the boats of a double berth may be needed where waves or wake exceed 300 mm; consider them where the 50-year head sea exceeds 0.4 m. | — | Shown in the wave screening (D47). |
+| 3.5 | Walkways at least 1.5 m wide; 1.8 m when longer than 100 m, 2.4 m when longer than 200 m; clear width not less than the gangway's. **Fingers at least 0.8 L unless a pile is at the end**; finger width 900 mm uniform or tapered to at least 600 mm; at least three mooring points along each side of a floating berth. | Finger length ratio 0.8 (SPEC assumption); width 0.8 m. | Ratio now sourced; walkway width checked (step 11). Marinetek's steel fingers are 0.7 m wide (§9.12), between the two AS widths. |
+| 3.6, Table 3.3 | Clear gangway width by berths served: ≤ 2: 0.7 m, ≤ 10: 0.9 m, ≤ 60: 1.2 m, ≤ 120: 1.5 m, more: 1.8 m. Slope at most **1:3.5** (1:3 for private pontoons), taken *"at a water level of CD"* (the lowest); handrails on both sides for unrestricted access. | Gangway count only (I51). | Width and slope checks with the shore gangways (D49, step 8). |
+| 4.1 | Strength limit-state loads for a **1 in 50 year** return period for wind, wave, surge and flooding. | 50-year waves in the screening; design wind 22 m/s (basic wind, 50-year). | Consistent. |
+| 4.2 | Suggested combination for the marina: wind + 1.5 × current + 1.5 × wave + 1.5 × vertical wave effect (limit states). | Service loads with safety factors on chains and anchors (UFC 4-159-03, I55). | The tool keeps service loads; the AS load factors are not applied (D45). |
+| 4.7, Table 4.1, 4.12 | Floating live load 3.0 kPa; flotation 3.0 kPa (unrestricted) with 50 mm reserve buoyancy; stability load 2.0 kPa; minimum freeboard 50 mm under the worst combination. | Product data (net capacity 5.6 kN/m² for Premier). | Not computed (product property). |
+| 4.8.2.1, Table 4.2 | 'Good' wave climate, Hs: head seas > 2 s 50-year < 0.6 m, 1-year < 0.3 m; **oblique seas > 2 s < 0.4 m / < 0.3 m**; beam seas > 2 s < 0.25 m / < 0.15 m; head and beam seas < 2 s: 1-year < 0.3 m. Excellent × 0.75, moderate × 1.25; *"For vessels of less than 20 m in length, the most severe wave climate should satisfy moderate conditions."* | UFC 4-152-07 Fig. 4-1 (head/beam only, 1 ft, 2 ft, 0.5 ft, 0.8 ft). | AS Table 4.2 is the default criteria set, UFC selectable (D47). |
+| 4.8.2.3 | *"In the absence of more specific analysis, all elements of a marina should be designed for a minimum horizontal force of 2 kN/m for the wave criteria given in Table 4.2."* | Anchoring from wind only. | Applied where the screening finds waves (owner D45, step 10). |
+| 4.8.2.4 | Waves load the whole length of a structure at once *"when the wave front is parallel to the axis of the structure"*. | — | Used for the direction of the wave load (step 10). |
+| 4.8.3 | Steady 30-s wind; q<sub>z</sub> = 0.0006 V² kPa; F = C<sub>D</sub> A q<sub>z</sub>; vessels C<sub>D</sub> bow 0.7–0.9, stern 0.9–1.1, beam 0.9–1.1; Table 4.4 vessel areas (e.g. 10 m yacht head 5 m², beam 15 m²; 10 m motor vessel 7 / 22 m²); full wind on the windward boat, 20 % on the leeward boats. | UFC: p = 1.0 Pa × v² (C<sub>d</sub> 1.6 with ρ 1.25) on the 10-min wind; profile height 0.15 L; leeward 20 %. | **Checked, no change:** with the 30-s wind = 1.26 × the 10-min wind (CEM Figure II-2-1 ratio as coded in `windDurationRatio`, 1.3235 / 1.0501), AS gives 0.6 × 1.26² × 1.0 = 0.95 Pa × v₁₀² beam-on (UFC 1.0) and 0.76 bow-on. The tool's areas equal AS Table 4.4 for yachts (10 m: 15 m² beam, 5 m² head for a 3.3 m beam) but are about 30 % below it for motor vessels (proposed: a boat-type column). |
+| 4.8.4 | Currents: in estuaries a minimum design velocity of 1.0 m/s; debris 10 kN/m where flood debris can occur; C<sub>D</sub> hull beam-on 0.6, keel 1.2. | Current 0 by default (sheltered basin). | Recorded; river sites need a current (HANDOFF). |
+| 4.9–4.11 | Berthing at ≥ 0.3 m/s; anchorage elasticity; gangway loads from lateral displacement of the pontoon. | Not computed. | Listed as not computed. |
+| 5.1.1 (c), (d) | The pontoon system's ability to withstand the wave climate and the need for and type of attenuator. | — | Breakwater proposal (D48). |
+| 5.1.2 | *"The marina should allow access from the water without assistance if the freeboard is more than 500 mm."* | Ladders per pier in the BOM (I51). | Premier freeboard 0.56 m > 0.5 m: ladders needed; recorded. |
+
+## 12. Marinetek floating breakwaters (read 2026-11-15)
+
+Brochures on [marinetek.hr](https://www.marinetek.hr/en/brochures-and-specifications/) (modification
+date 14.11.2014), read for the breakwater proposal (DECISIONS D48):
+
+- **Breakwater Pontoons 3300, 3800** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Breakwater-3300-3800.pdf)):
+  M3316BR / M3320BR 16,05 / 19,90 × 3,3 m (concrete 3,0 m), height 1,0 m, 20,9 / 26,0 t, freeboard 0,55 m,
+  joints 2 × 703 kN; M3816BR / M3820BR 16,05 / 19,90 × 3,8 m (3,5 m), height 1,2 m, 31,5 / 39,2 t, freeboard
+  0,61 m, joints 2 × 812 kN (*"3800 -series pontoons have middle rubber in joints"*). *"The Marinetek
+  Breakwaters without keels work best when the sea wave length is less than 18 m."* *"Mooring with chains
+  or Seaflex."*
+- **K-series Breakwater 3300K, 4300K, 5300K** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Breakwater-K-3300-4300-5300.pdf)):
+  3312BRK / 3316BRK 12,20 / 16,05 × 3,3 m, height 1,8 m, 20,9 / 28,0 t, freeboard 0,55 m; 4320BRK 19,90 × 4,3 m,
+  41,1 t; 5320BRK 19,90 × 5,3 m, 52,4 t (freeboard 0,60 m; *"also available with 16,05 m lengths"*); joints
+  2 × 812 kN. *"The Marinetek Breakwaters with keels work best when the sea wave lengths is less than 26 m."*
+- Both have a diagram **"Wave attenuation capacity, Sheltered sea conditions"**: Ac (%) against Hs (m) and
+  L (m) on one shared horizontal axis, with scales for wind 10–20 m/s and effective fetch 1–5 km. The curves
+  were digitised for the tool from the brochures' vector drawings rendered at 400 dpi (pixel tracing of
+  each curve, axis gridlines located from the drawing; table in `src/engine/breakwater.ts`). Examples: 3300 at
+  Hs 0.32 m / L 4.8 m 74 %, at 0.69 m / 12 m 57 %, curve ends at 0.97 m / 17.8 m (25 %); 3800 ends at 1.14 m /
+  21.9 m (20 %); 3300K from 77 % (0.30 m) to 23 % (1.07 m / 20.5 m); 4300K from 87 % to 20 % (1.26 m / 26.2 m);
+  5300K from 90 % to 29 % (1.29 m / 27.4 m). The brochures do not define Ac; it is read as the reduction of
+  the wave height (DECISIONS I93).
+- **Premier Pontoons 2700, 3300** ([PDF](https://www.marinetek.hr/wp-content/uploads/2021/07/Premier-pontoons-2700-3300.pdf)):
+  M2712PE / M2716PE / M2720PE 12,20 / 16,05 / 19,90 × 2,7 m (concrete 2,4 m), 12,5 / 16,5 / 20,6 t; M3312PE /
+  M3316PE / M3320PE × 3,3 m (3,0 m), 15,6 / 20,7 / 25,7 t; height 1,0 m, net capacity 5,6 kN/m², freeboard 0,56 m,
+  joints 2 × 322 kN, joint gap 35 mm; *"Premier pontoons can be moored by piles, chain or Seaflex."* (DECISIONS D44.)
+
+## 13. OpenStreetMap shorelines through the Overpass API (2026-11-15)
+
+- **Overpass API** ([overpass-api.de](https://overpass-api.de/), documentation
+  [dev.overpass-api.de/overpass-doc](https://dev.overpass-api.de/overpass-doc/en/)): read-only query
+  service for OpenStreetMap data. Query language used: `way(around:r, lat1,lon1, lat2,lon2, …)` (elements
+  within r metres of a polyline), `rel(bw.set)` (relations having ways of a set as members),
+  `way.set(r.rels)` (member ways of relations, limited to a set), `out geom` (ways with coordinates) and
+  `out skel` (relations with their member lists). Water is tagged `natural=water` (lakes, ponds, rivers
+  with `water=*`), older river areas `waterway=riverbank`, reservoirs `landuse=reservoir`; large lakes are
+  multipolygon relations whose islands are inner members; the sea is the land side of `natural=coastline`
+  ways (OSM wiki: Tag:natural=water, Tag:natural=coastline, Relation:multipolygon).
+- Usage: the main instance is free for moderate use; its guidance is about 10 000 queries and 1 GB of
+  data a day per user (OSM wiki "Overpass API", section on public instances). The tool sends one query
+  per lookup.
+- Licence: OpenStreetMap data © OpenStreetMap contributors, Open Database Licence (ODbL); the tool shows
+  the attribution with the lookup.
+- From this development environment the main instance reset the TLS connection, so the query is tested
+  with mocked answers only (unit tests and the end-to-end test), as Open-Meteo was (§10).
+- 2026-11-16: the main instance still resets the connection from the development environment (also a
+  plain `HEAD /`). The other public instances listed on the OSM wiki page "Overpass API" (read
+  2026-11-16) were not in the environment's allowed hosts; `overpass.private.coffee` (*"Previously known
+  as overpass.kumi.systems. Feel free to use our service in any project, there is no rate limit in
+  place"*) was added to the environment for a live test, which was not run in this session (the
+  session's permission check stopped the request). The tool itself still asks only the main instance.
+
+## 14. Water levels: FMI and SYKE open data (read 2026-11-15)
+
+- **FMI open data** ([opendata.fmi.fi](https://opendata.fmi.fi/wfs), WFS 2.0, CC BY 4.0). Stored query
+  `fmi::observations::mareograph::yearly::30year::simple`: *"Yearly water level observations of 30-year normal
+  period 1991 - 2020."* Parameters for each mareograph (13 stations from Kemi to Hamina): `WLEVP1YAVG_P30Y_AVG`,
+  `_MIN`, `_MAX` (annual means), `WLEVP1YMAX_P30Y_AVG` / `_MAX` (annual maxima), `WLEVP1YMIN_P30Y_AVG` / `_MIN`
+  (annual minima), in mm from the theoretical mean water, the same in N2000 (`WLEVN2K…`), and percentiles of the
+  hourly levels (`WLEVP1H_P30Y_P001` … `P999`). Example, Helsinki Kaivopuisto: 20 / 977 / 1512 / −594 / −927 mm
+  (MW, MHW, HW, MNW, NW); the highest 1 512 mm matches FMI's record of +151 cm (§5 item 8). The `latlon`,
+  `bbox` and `maxlocations` parameters did not limit the answer; all stations come back and the nearest is
+  chosen. Station names from the same query in `timevaluepair` format (`gml:Point` with `gml:name` and
+  `gml:pos`). Answers carry `access-control-allow-origin: *`.
+- **SYKE Hydrologiarajapinta 1.1** ([rajapinnat.ymparisto.fi/api/Hydrologiarajapinta/1.1/odata](https://rajapinnat.ymparisto.fi/api/Hydrologiarajapinta/1.1/odata/),
+  OData v3, CC BY 4.0): `Suure` 1 = *"Vedenkorkeus"* (cm); `Paikka` = stations (1 754 water-level stations,
+  `Tila_Id` 1 *"Jatkuva"*, 2 *"Lopetettu"*), with ETRS-TM35FIN coordinates `KoordErTmPohj` / `KoordErTmIta`,
+  lake name `JarviNimi`; `Vedenkorkeus` = daily values (`Aika`, `Arvo`), 500 rows a page with `odata.nextLink`.
+  Example: *Porovesi, Iisalmi* (0406100) daily from 1916-08-16 to 1995-12-31 (ended); the new *Paloisjärvi*
+  station (4015) has data from 2026 only. Answers carry `access-control-allow-origin: *`.
+- **Characteristic levels** HW, MHW, MW, MNW, NW: the Finnish hydrological convention used by SYKE (highest,
+  mean high, mean, mean low, lowest water). The tool's reading of them for the anchoring plan is in DECISIONS I95.

@@ -1,8 +1,10 @@
 /** Left sidebar (SPEC §8): project, site tools, boat classes, parameters, objective, layers. */
 import { useRef, useState } from 'react';
 import { estimateBoatWeight } from '../../engine/anchoring';
+import { BREAKWATERS } from '../../engine/breakwater';
 import { distance } from '../../engine/geometry';
 import type { BerthTarget, BerthType, BoatClass, ObjectiveId, ObstacleKind, Params, ZoneKind } from '../../engine/model';
+import { PIER_SERIES } from '../../engine/modules';
 import { targetCount } from '../../engine/targets';
 import type { StringKey } from '../../i18n';
 import { originPlacing, parseLatLon } from '../../state/geo';
@@ -25,6 +27,7 @@ const TOOLS: { id: ToolId; hint: StringKey }[] = [
   { id: 'shoreline', hint: 'hint.polyline' },
   { id: 'entrance', hint: 'hint.entrance' },
   { id: 'access', hint: 'hint.access' },
+  { id: 'breakwater', hint: 'hint.breakwater' },
   { id: 'obstacle', hint: 'hint.polygon' },
   { id: 'zone', hint: 'hint.polygon' },
   { id: 'measure', hint: 'hint.measure' },
@@ -63,8 +66,8 @@ function SiteSection() {
   const language = useAppStore((s) => s.language);
   const hint = TOOLS.find((x) => x.id === tool)?.hint ?? (tool === 'calibrate' ? 'hint.calibrate' : null);
 
-  /** `width` and `gangways` are set for access pontoons, edited here (D21, D32). */
-  const objects: { key: string; label: string; width?: number; gangways?: number[] }[] = [];
+  /** `width` and `gangways` are set for access pontoons (D21, D32), `product` for breakwaters (D58), edited here. */
+  const objects: { key: string; label: string; width?: number; gangways?: number[]; product?: string }[] = [];
   if (site.water.length > 0) objects.push({ key: 'water', label: t('site.water') });
   if (site.shoreline.length > 0) objects.push({ key: 'shoreline', label: t('site.shoreline') });
   if (hasEntrance(site)) objects.push({ key: 'entrance', label: t('site.entrance') });
@@ -74,6 +77,13 @@ function SiteSection() {
       label: `${t('site.accessPontoon')} (${p.id}), ${formatLength(distance(p.start, p.end), language)} m`,
       width: p.width,
       gangways: p.gangways ?? [],
+    });
+  }
+  for (const b of site.breakwaters ?? []) {
+    objects.push({
+      key: `breakwater:${b.id}`,
+      label: `${t('site.breakwater')} (${b.id}), ${formatLength(distance(b.start, b.end), language)} m`,
+      product: b.product,
     });
   }
   for (const o of site.obstacles) objects.push({ key: `obstacle:${o.id}`, label: `${t(`kind.${o.kind}`)} (${o.id})` });
@@ -158,6 +168,34 @@ function SiteSection() {
               </li>
             )).flatMap((li, i) => {
               const o = objects[i]!;
+              if (o.product !== undefined) {
+                // D58: the Marinetek type of a breakwater.
+                return [
+                  li,
+                  <li key={`${o.key}:product`} className="pb-1 pl-2">
+                    <label className="flex items-center justify-between gap-2 text-xs text-slate-700">
+                      {t('site.breakwaterType')}
+                      <select
+                        className="min-w-0 rounded border border-slate-300 px-1 py-0.5 text-xs"
+                        aria-label={`${t('site.breakwaterType')}: ${o.label}`}
+                        value={o.product}
+                        onChange={(e) =>
+                          state().updateSite((s) => ({
+                            ...s,
+                            breakwaters: (s.breakwaters ?? []).map((b) => (`breakwater:${b.id}` === o.key ? { ...b, product: e.target.value } : b)),
+                          }))
+                        }
+                      >
+                        {BREAKWATERS.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {`${b.name} (${formatLength(b.width, language)} m)`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </li>,
+                ];
+              }
               if (o.gangways === undefined) return [li];
               return [
                 li,
@@ -534,7 +572,7 @@ function BoatClassesSection() {
   );
 }
 
-type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth'>;
+type NumericParam = Exclude<keyof Params, 'boatsPerBay' | 'orientation' | 'berthTarget' | 'fingerLengths' | 'berthType' | 'boomLengths' | 'waterDepth' | 'pierSeries' | 'pierModuleLengths'>;
 
 function ParamField({ name, min, max, step }: { name: NumericParam; min: number; max: number; step?: number }) {
   const t = useT();
@@ -548,6 +586,49 @@ function ParamField({ name, min, max, step }: { name: NumericParam; min: number;
       {...(step === undefined ? {} : { step })}
       onChange={(v) => state().setParams({ [name]: v }, { coalesce: `param:${name}` })}
     />
+  );
+}
+
+/** D44: the pier pontoon series: a preset sets the width and the module lengths; editing either makes it custom. */
+function PierSeriesField() {
+  const t = useT();
+  const series = useAppStore((s) => s.project.params.pierSeries);
+  const width = useAppStore((s) => s.project.params.mainPierWidth);
+  const lengths = useAppStore((s) => s.project.params.pierModuleLengths);
+  const preset = PIER_SERIES.find((x) => x.id === series);
+  return (
+    <>
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('param.pierSeries')}
+        <select
+          className="max-w-[11rem] rounded border border-slate-300 px-1 py-0.5 text-sm"
+          value={preset ? series : 'custom'}
+          onChange={(e) => {
+            const p = PIER_SERIES.find((x) => x.id === e.target.value);
+            if (p) state().setParams({ pierSeries: p.id, mainPierWidth: p.width, pierModuleLengths: [...p.lengths] });
+          }}
+        >
+          {PIER_SERIES.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.id === 'free' ? t('pierSeries.free') : p.name}
+            </option>
+          ))}
+          {!preset && <option value="custom">{t('pierSeries.custom')}</option>}
+        </select>
+      </label>
+      <NumberField
+        label={t('param.mainPierWidth')}
+        value={width}
+        min={0.5}
+        max={20}
+        onChange={(v) => state().setParams({ mainPierWidth: v, ...(preset && preset.width !== v ? { pierSeries: 'custom' } : {}) }, { coalesce: 'param:mainPierWidth' })}
+      />
+      <LengthListField
+        label={t('param.pierModuleLengths')}
+        value={[...lengths].sort((a, b) => a - b)}
+        onChange={(v) => state().setParams({ pierModuleLengths: [...v].sort((a, b) => b - a), pierSeries: 'custom' }, { coalesce: 'param:pierModuleLengths' })}
+      />
+    </>
   );
 }
 
@@ -574,7 +655,7 @@ function DockSection() {
         </select>
       </label>
       {berthType === 'sternBuoy' && <ParamField name="buoyDepthFactor" min={0} max={10} step={0.5} />}
-      {berthType === 'yBoom' && (
+      {(berthType === 'yBoom' || berthType === 'mixed') && (
         <>
           <ParamField name="boomWidth" min={0.1} max={2} step={0.05} />
           <LengthListField
@@ -584,7 +665,7 @@ function DockSection() {
           />
         </>
       )}
-      <ParamField name="mainPierWidth" min={0.5} max={20} />
+      <PierSeriesField />
       <ParamField name="fingerWidth" min={0.1} max={5} />
       <ParamField name="fingerLengthRatio" min={0.1} max={1.5} step={0.05} />
       <LengthListField
@@ -605,6 +686,8 @@ function DockSection() {
       <ParamField name="beamClearance" min={0} max={5} />
       <ParamField name="lengthClearance" min={0} max={5} />
       <ParamField name="shoreOffset" min={0} max={200} step={1} />
+      <ParamField name="shoreGap" min={0} max={50} step={0.5} />
+      <ParamField name="gangwayLength" min={1} max={30} step={0.5} />
       <ParamField name="maxMainPierLength" min={5} max={1000} step={5} />
       <div className="flex items-center justify-between gap-2 text-sm text-slate-700">
         <span id="pier-direction">{t('param.orientation')}</span>

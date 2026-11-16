@@ -156,7 +156,8 @@ async function waitForServer() {
       const p = toScreen(s, mid);
       await page.mouse.move(p.x, p.y);
       await page.mouse.down();
-      for (let i = 1; i <= 8; i++) await page.mouse.move(p.x + i * 4, p.y);
+      // Far enough sideways to run into the neighbouring rows (how far depends on the generated layout).
+      for (let i = 1; i <= 16; i++) await page.mouse.move(p.x + i * 6, p.y);
       await page.mouse.up();
       s = await state();
       const moved = s.project.layouts.find((l) => l.id === s.selectedLayoutId);
@@ -201,7 +202,7 @@ async function waitForServer() {
       assert.equal(layout.stats.totalBerths, berthsBefore - 1);
     });
 
-    await step('export PNG and CSV', async () => {
+    await step('export PNG, CSV and DXF', async () => {
       const png = fs.readFileSync(await download('Export PNG'));
       assert.equal(png.subarray(1, 4).toString(), 'PNG');
       assert.ok(png.length > 20000, `PNG is ${png.length} bytes`);
@@ -209,6 +210,11 @@ async function waitForServer() {
       assert.ok(csv.includes(DISCLAIMER));
       assert.ok(csv.includes('Total berths'));
       assert.ok(csv.includes('Berth,Pier,Side,Boat class,Status'));
+      // D61, I111: DXF (R12) with the product library as blocks.
+      const dxf = fs.readFileSync(await download('Export DXF'), 'utf8');
+      assert.ok(dxf.startsWith('0\r\nSECTION\r\n2\r\nHEADER\r\n9\r\n$ACADVER\r\n1\r\nAC1009'));
+      assert.ok(dxf.includes('\r\nBLOCK\r\n') && dxf.includes('\r\nINSERT\r\n') && dxf.includes('PRODUCT LIBRARY'));
+      assert.ok(dxf.endsWith('0\r\nEOF\r\n'));
     });
 
     await step('editing a point changes the site and shows the Regenerate hint', async () => {
@@ -301,7 +307,7 @@ async function waitForServer() {
       assert.deepEqual(cancelled, { running: true, after: false, same: true });
     });
 
-    await step('berth types: Y-boom (booms and fingers) and stern buoy (D33–D35)', async () => {
+    await step('berth types: Y-boom (booms and fingers), mixed and stern buoy (D33–D35, D51)', async () => {
       await page.getByRole('combobox', { name: 'Load example' }).selectOption('rectBasin');
       await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('yBoom');
       await generate();
@@ -310,6 +316,13 @@ async function waitForServer() {
       assert.ok(best.berths.every((b) => b.type === 'yBoom'), 'all berths are Y-boom berths');
       assert.ok(best.fingers.some((f) => f.kind === 'boom') && best.fingers.some((f) => !f.kind), 'booms and fingers');
       assert.equal(best.stats.issueCounts.error, 0);
+      // Mixed (D51): booms between the small boats and fingers for the large ones, in the same layout.
+      await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('mixed');
+      await generate();
+      const mixed = (await state()).project.layouts[0];
+      assert.ok(mixed.berths.every((b) => b.type === 'mixed'), 'mixed berths');
+      assert.ok(mixed.fingers.some((f) => f.kind === 'boom') && mixed.fingers.some((f) => !f.kind), 'booms and fingers');
+      assert.equal(mixed.stats.issueCounts.error, 0);
       // Stern buoys (D35): no fingers; each buoy at boat length + design depth, inside its slot.
       await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('sternBuoy');
       await generate();
@@ -374,11 +387,15 @@ async function waitForServer() {
       await page.waitForFunction(() => window.__marina.getState().builtInPriceList !== null, null, { timeout: 10000 });
       const fixings = page.getByText('Wall fixings of shore chains', { exact: true });
       await fixings.scrollIntoViewIfNeeded();
-      assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), '2');
+      // Piers beside the pontoon reach the shore by their own gangway, with 2 shore chains each (D49).
+      const onPontoon = (p) =>
+        Math.abs(p.start.y - edge) < 0.6 && p.start.x >= Math.min(pontoon.start.x, pontoon.end.x) - 0.1 && p.start.x <= Math.max(pontoon.start.x, pontoon.end.x) + 0.1;
+      const ownGangways = best.piers.filter((p) => !onPontoon(p)).length;
+      assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), String(2 + 2 * ownGangways));
       // Two gangways placed by hand (D32): 2 shore chains each.
       await page.getByLabel(`Gangways at (m from its first point) (${pontoon.id})`, { exact: true }).fill('20; 150');
       await page.waitForFunction(() => (window.__marina.getState().project.site.accessPontoons[0].gangways ?? []).length === 2);
-      assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), '4');
+      assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), String(4 + 2 * ownGangways));
       await page.screenshot({ path: path.join(outDir, 'access-pontoon.png') });
     });
 
@@ -413,6 +430,17 @@ async function waitForServer() {
       await generate();
       // The built-in price list is loaded at start-up.
       await page.waitForFunction(() => window.__marina.getState().builtInPriceList !== null, null, { timeout: 10000 });
+      // D44, D49: piers of Premier 2700 modules, 4 m off the south shore (y = 0), reached by a gangway.
+      const rect = await state();
+      const best = rect.project.layouts.find((l) => l.id === rect.selectedLayoutId);
+      for (const pier of best.piers) {
+        assert.equal(pier.width, 2.7);
+        assert.ok(Math.min(pier.start.y, pier.end.y) >= 3.9, `pier ${pier.id} starts ${Math.min(pier.start.y, pier.end.y)} m from the shore`);
+      }
+      // D52: AS 3962-2001 advisory checks, e.g. the gangway width by the berths it serves.
+      await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
+      assert.match(await page.getByTestId('as3962').textContent(), /Table 3\.3/);
+      await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
       const total = page.getByText('Total VAT 0 %', { exact: true });
       await total.scrollIntoViewIfNeeded();
       assert.ok(await total.isVisible());
@@ -444,17 +472,25 @@ async function waitForServer() {
       await page.screenshot({ path: path.join(outDir, 'cost.png') });
     });
 
-    await step('anchor type: wedge anchors need lighter anchors than blocks; splay angle; reset keeps site values and type (I59, U19, D25)', async () => {
+    await step('anchor type: wedge anchors need lighter anchors than blocks, as the comparison row says; splay angle; reset keeps site values and type (I59, I102, U19, D25)', async () => {
       const largest = async () => {
         const text = await page.getByText('Largest anchor needed', { exact: true }).locator('xpath=following-sibling::span').textContent();
         return Number(text.replace(/[^\d]/g, ''));
       };
+      // I102: the plan also shows the anchors with the other type.
+      const other = page.getByTestId('anchoring-other-type');
+      const otherLargest = async () => Number((await other.textContent()).match(/largest ([\d,]+) kg/)[1].replace(/,/g, ''));
+      assert.match(await other.textContent(), /^With concrete wedges instead/);
+      const predictedWedgeKg = await otherLargest();
       const blockKg = await largest();
       await page.getByText('Anchoring parameters', { exact: true }).click();
       await page.getByRole('combobox', { name: 'Anchor type' }).selectOption('wedge');
       await page.waitForFunction(() => window.__marina.getState().project.anchoring.anchorType === 'wedge');
       const wedgeKg = await largest();
       assert.ok(wedgeKg > 0 && wedgeKg < blockKg, `wedge ${wedgeKg} kg should be below block ${blockKg} kg`);
+      assert.equal(wedgeKg, predictedWedgeKg);
+      assert.match(await other.textContent(), /^With concrete blocks instead/);
+      assert.equal(await otherLargest(), blockKg);
       await page.getByLabel('Design water depth (m)', { exact: true }).fill('6');
       await page.getByLabel('Drag coefficient', { exact: true }).fill('1.2');
       // Square chains leave the wind along the piers unheld (D25).
@@ -490,20 +526,39 @@ async function waitForServer() {
       assert.ok(pages >= 2, `expected several pages, got ${pages}`);
     });
 
-    await step('wave screening: fetch, direction and winds give waves, criteria and advice (D40)', async () => {
+    await step('wave screening: fetches by direction sector and winds give waves, criteria, the bad directions, FMI station winds, depths along the fetches and the shelter behind a breakwater (D40, D47, D58, I108, I110)', async () => {
       await page.getByRole('button', { name: 'Waves', exact: true }).click();
       const tool = page.getByTestId('wave-tool');
       await tool.waitFor();
-      assert.ok(await tool.getByText('Enter the fetch and at least one wind to get the waves.').isVisible());
-      await tool.getByLabel('Longest fetch over water (m)').fill('2000');
-      await tool.getByLabel('Waves come from (°, compass)').fill('90');
-      await tool.getByLabel('Wind once a year (m/s)').fill('15');
-      await tool.getByLabel('Wind once in 50 years (m/s)').fill('22');
+      assert.ok(await tool.getByText(/^Enter a fetch \(m\) for at least one direction/).isVisible());
+      assert.equal(await tool.getByTestId('wave-results').locator('tbody tr').count(), 8);
+      await tool.getByLabel('Fetch (m) E', { exact: true }).fill('2000');
+      await tool.getByLabel('Fetch (m) S', { exact: true }).fill('600');
+      await tool.getByLabel('Common wind once a year (m/s)').fill('15');
+      await tool.getByLabel('Common wind once in 50 years (m/s)').fill('22');
       await page.waitForFunction(() => window.__marina.getState().project.waves.wind50 === 22);
-      assert.equal(await tool.getByTestId('wave-results').locator('tbody tr').count(), 2);
-      assert.ok((await tool.getByTestId('wave-checks').locator('tbody tr').count()) >= 2);
+      const w0 = await page.evaluate(() => window.__marina.getState().project.waves);
+      assert.deepEqual(w0.sectors.map((x) => x.fetch), [0, 0, 2000, 0, 600, 0, 0, 0]);
+      assert.equal(w0.criteria, 'as3962');
+      await tool.getByTestId('wave-checks').waitFor();
+      assert.match(await tool.locator('tr[data-sector="E"]').textContent(), /Exceeds|OK/);
       const advice = await tool.getByTestId('wave-advice').textContent();
       assert.match(advice, /floating wave attenuator|no wave protection|fixed breakwater/);
+      // D48: a direction exceeds the criteria, so Marinetek's floating breakwaters are compared.
+      assert.match(await tool.getByTestId('breakwater').textContent(), /Proposed type: Marinetek|None of Marinetek/);
+      // D58, I107: with a breakwater drawn east of the piers the shelter of the piers is listed.
+      await page.evaluate(() => {
+        const s = window.__marina.getState();
+        const layout = s.project.layouts.find((l) => l.id === s.selectedLayoutId);
+        const xs = layout.piers.flatMap((p) => [p.start.x, p.end.x]);
+        const ys = layout.piers.flatMap((p) => [p.start.y, p.end.y]);
+        const x = Math.max(...xs) + 10;
+        s.updateSite((site) => ({ ...site, breakwaters: [{ id: 'breakwater-1', start: { x, y: Math.min(...ys) - 5 }, end: { x, y: Math.max(...ys) + 5 }, product: '3300K' }] }));
+      });
+      await tool.getByTestId('shelter').waitFor();
+      assert.ok((await tool.getByTestId('shelter').locator('tbody tr').count()) > 0);
+      await page.evaluate(() => window.__marina.getState().updateSite((site) => ({ ...site, breakwaters: [] })));
+      await tool.getByTestId('shelter').waitFor({ state: 'detached' });
       // D41: wind climate from Open-Meteo (mocked: the test must not depend on the network or its quota).
       const requests = [];
       await page.route('https://archive-api.open-meteo.com/**', (route) => {
@@ -522,21 +577,119 @@ async function waitForServer() {
         route.fulfill({ json: { latitude: 60.25, longitude: 25.0, hourly: { time, wind_speed_10m: speed, wind_direction_10m: dir } } });
       });
       await tool.getByLabel('Position').fill('60.15, 24.95');
-      await tool.getByLabel('First year').fill('2016');
-      await tool.getByLabel('Last year').fill('2024');
+      await tool.getByLabel('First year', { exact: true }).fill('2016');
+      await tool.getByLabel('Last year', { exact: true }).fill('2024');
       await tool.getByRole('button', { name: 'Fetch wind data', exact: true }).click();
       await tool.getByTestId('wind-rose').waitFor({ timeout: 20000 });
       assert.deepEqual(requests, ['2016-01-01', '2021-01-01']);
       assert.equal(await tool.getByTestId('wind-sectors').locator('tbody tr').count(), 16);
-      await tool.getByRole('button', { name: /^Use the winds of the fetch direction/ }).click();
+      // D47: the sectors now take their winds from the climate (largest of the three 22.5° sectors).
       const w = await page.evaluate(() => window.__marina.getState().project.waves);
-      assert.ok(w.wind1 > 0 && w.wind50 > w.wind1, `winds ${w.wind1} / ${w.wind50}`);
-      assert.equal(w.windAveragingS, 3600);
       assert.equal(w.climate.startYear, 2016);
+      assert.ok((await tool.locator('tr[data-sector="E"] td[title*="from the wind climate"]').count()) >= 1);
       await page.unroute('https://archive-api.open-meteo.com/**');
+      // I108: FMI station observations (mocked): stations near the position, then a month per request.
+      const fmiMonths = [];
+      const point = (id, name, lat, lon) => `<gml:Point gml:id="point-${id}" srsDimension="2"><gml:name>${name}</gml:name><gml:pos>${lat} ${lon} </gml:pos></gml:Point>`;
+      await page.route('https://opendata.fmi.fi/wfs?**', (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.get('storedquery_id') !== 'fmi::observations::weather::hourly::multipointcoverage') return route.fallback();
+        let positions = '';
+        let values = '';
+        let points = '';
+        if (url.searchParams.get('bbox')) {
+          points = point('100996', 'Helsinki Harmaja', '60.10512', '24.97539') + point('100971', 'Helsinki Kaisaniemi', '60.17523', '24.94459');
+          positions = '60.10512 24.97539  1763200000\n60.17523 24.94459  1763200000';
+          values = '9.0 200.0\n4.0 190.0';
+        } else {
+          fmiMonths.push(url.searchParams.get('starttime'));
+          points = point('100996', 'Helsinki Harmaja', '60.10512', '24.97539');
+          const start = Date.parse(url.searchParams.get('starttime')) / 1000;
+          const end = Date.parse(url.searchParams.get('endtime')) / 1000;
+          const p = [];
+          const v = [];
+          for (let t = start, k = 0; t <= end; t += 3600, k++) {
+            p.push(`60.10512 24.97539  ${t}`);
+            v.push(`${(6 + 12 * Math.sin(k / 89) ** 2).toFixed(1)} ${(k * 41) % 360}.0`);
+          }
+          positions = p.join('\n');
+          values = v.join('\n');
+        }
+        route.fulfill({ contentType: 'text/xml', body: `<wfs:FeatureCollection>${points}<gmlcov:positions>${positions}</gmlcov:positions><gml:doubleOrNilReasonTupleList>${values}</gml:doubleOrNilReasonTupleList></wfs:FeatureCollection>` });
+      });
+      const stationSection = tool.getByTestId('station-wind');
+      await stationSection.getByLabel('First year of the observations').fill('2023');
+      await stationSection.getByLabel('Last year of the observations').fill('2024');
+      await stationSection.getByRole('button', { name: 'Find FMI stations', exact: true }).click();
+      await stationSection.getByTestId('station-list').waitFor();
+      // Nearest first; the island station is the one to use on the coast.
+      assert.match(await stationSection.getByTestId('station-list').textContent(), /Helsinki Kaisaniemi.*Helsinki Harmaja/);
+      await stationSection.getByTestId('station-list').locator('li', { hasText: 'Harmaja' }).getByRole('button', { name: 'Fetch' }).click();
+      await stationSection.getByTestId('station-compare').waitFor({ timeout: 20000 });
+      assert.equal(fmiMonths.length, 24);
+      const ws = await page.evaluate(() => window.__marina.getState().project.waves);
+      assert.equal(ws.stationClimate.startYear, 2023);
+      assert.equal(ws.stationClimate.averagingS, 600);
+      assert.equal(ws.climateChoice, 'larger');
+      assert.equal(await stationSection.getByTestId('station-compare').locator('tbody tr').count(), 16);
+      await page.unroute('https://opendata.fmi.fi/wfs?**');
+      // D47: fetches from the OpenStreetMap shoreline (Overpass mocked): a lake 60.14–60.16 N, 24.92–24.99 E around the position.
+      let overpassBody = '';
+      await page.route('https://overpass-api.de/**', (route) => {
+        overpassBody = route.request().postData() ?? '';
+        const g = [[60.14, 24.92], [60.14, 24.99], [60.16, 24.99], [60.16, 24.92], [60.14, 24.92]].map(([lat, lon]) => ({ lat, lon }));
+        route.fulfill({ json: { elements: [{ type: 'way', id: 1, tags: { natural: 'water' }, geometry: g }] } });
+      });
+      await tool.getByRole('button', { name: 'Find fetches from the map', exact: true }).click();
+      await page.waitForFunction(() => window.__marina.getState().project.waves.autoFetch !== null);
+      assert.match(decodeURIComponent(overpassBody), /way\(around:2,60\.150000,24\.950000/);
+      const af = await page.evaluate(() => window.__marina.getState().project.waves);
+      assert.equal(af.autoFetch.distances.length, 72);
+      // N: 1.1 km to 60.16 N (longest ray at ±20°: 1.2 km); E: 2.2 km to 24.99 E (longest about 2.4 km).
+      const fetchN = af.sectors[0].fetch;
+      const fetchE = af.sectors[2].fetch;
+      assert.ok(fetchN > 1100 && fetchN < 1300, `N ${fetchN}`);
+      assert.ok(fetchE > 2200 && fetchE < 2500, `E ${fetchE}`);
+      assert.ok(af.sectors.every((x) => x.fetch > 0));
+      await page.unroute('https://overpass-api.de/**');
+      // I110: depths along the rays (EMODnet mocked: 4.2 m everywhere; SYKE not asked).
+      await page.route('https://rest.emodnet-bathymetry.eu/**', (route) => route.fulfill({ json: new Array(1000).fill(-4.2) }));
+      await tool.getByRole('button', { name: 'Find depths along the fetches', exact: true }).click();
+      await tool.getByTestId('auto-depth-result').waitFor();
+      const wd = await page.evaluate(() => window.__marina.getState().project.waves);
+      assert.deepEqual(wd.sectors.map((x) => x.depth), new Array(8).fill(4.2));
+      assert.equal(wd.autoDepth.sectors[0].source, 'emodnet');
+      await page.unroute('https://rest.emodnet-bathymetry.eu/**');
       await page.screenshot({ path: path.join(outDir, 'waves.png'), fullPage: true });
       await tool.getByRole('button', { name: 'Close', exact: true }).click();
       assert.equal(await page.getByTestId('wave-tool').count(), 0);
+    });
+
+    await step('water levels from a gauge near the position: FMI mareograph (mocked), extremes and normal range (D50)', async () => {
+      const el = (pos, param, value) =>
+        `<BsWfs:BsWfsElement gml:id="x"><BsWfs:Location><gml:Point><gml:pos>${pos} </gml:pos></gml:Point></BsWfs:Location><BsWfs:ParameterName>${param}</BsWfs:ParameterName><BsWfs:ParameterValue>${value}</BsWfs:ParameterValue></BsWfs:BsWfsElement>`;
+      const params = ['WLEVP1YAVG_P30Y_AVG', 'WLEVP1YMAX_P30Y_AVG', 'WLEVP1YMAX_P30Y_MAX', 'WLEVP1YMIN_P30Y_AVG', 'WLEVP1YMIN_P30Y_MIN'];
+      const simple = [20, 977, 1512, -594, -927].map((v, i) => el('60.15371 24.95622', params[i], v)).join('');
+      await page.route('https://opendata.fmi.fi/**', (route) =>
+        route.fulfill({
+          contentType: 'text/xml',
+          body: route.request().url().includes('timevaluepair') ? '<gml:Point gml:id="p"><gml:name>Helsinki Kaivopuisto</gml:name><gml:pos>60.15371 24.95622 </gml:pos></gml:Point>' : simple,
+        }),
+      );
+      await page.route('https://rajapinnat.ymparisto.fi/**', (route) => route.fulfill({ json: { value: [] } }));
+      await page.getByText('Anchoring parameters', { exact: true }).click();
+      await page.getByRole('button', { name: 'Find water-level gauges', exact: true }).click();
+      const box = page.getByTestId('water-levels');
+      await box.getByText(/Helsinki Kaivopuisto/).waitFor();
+      await box.getByRole('button', { name: 'Use', exact: true }).first().click();
+      await page.waitForFunction(() => window.__marina.getState().project.waterLevels !== null);
+      const a = await page.evaluate(() => window.__marina.getState().project);
+      assert.equal(a.waterLevels.station, 'Helsinki Kaivopuisto');
+      assert.deepEqual([a.anchoring.highWater, a.anchoring.lowWater, a.anchoring.normalHighWater, a.anchoring.normalLowWater], [1.5, 1, 1, 0.6]);
+      assert.match(await box.textContent(), /Water levels from Helsinki Kaivopuisto/);
+      await page.unroute('https://opendata.fmi.fi/**');
+      await page.unroute('https://rajapinnat.ymparisto.fi/**');
+      await page.getByText('Anchoring parameters', { exact: true }).click();
     });
 
     await step('language toggle', async () => {

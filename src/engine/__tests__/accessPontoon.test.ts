@@ -10,7 +10,7 @@ import { IssueCode } from '../validate';
  * The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27)
  * and exact finger lengths, 0.8 × boat length (no standard lengths, D29).
  */
-const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [] };
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [], mainPierWidth: 3, pierModuleLengths: [], shoreGap: 0, berthType: 'finger' };
 const FIVE_M_ONLY: BoatClass[] = DEFAULT_BOAT_CLASSES.map((c) => ({ ...c, share: c.id === 'c5' ? 1 : 0 }));
 
 /** The 60 m × 80 m basin of the hand-calculated generator test, with an access pontoon. */

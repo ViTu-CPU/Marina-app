@@ -1,25 +1,43 @@
 /**
- * Wave screening window (D40): a side tool that estimates wind waves at the site from the
- * longest fetch, its direction, the depth and extreme winds, compares them with the wave
- * climate criteria of UFC 4-152-07 and tells whether the berths look to need a wave
- * attenuator or a breakwater. Preliminary only.
+ * Wave screening window (D40, D47): estimates wind waves at the site for eight direction sectors
+ * from the fetch of each (0 = no open water), the depth and extreme winds, compares them with the
+ * wave climate criteria (AS 3962-2001 Table 4.2 or UFC 4-152-07) and tells which directions
+ * exceed them and whether the berths look to need a wave attenuator or a breakwater.
+ * Preliminary only.
  */
 import { useState } from 'react';
-import { centroid } from '../../engine/geometry';
+import { breakwaterProposal, breakwaterShelter, weightPerMetre, type BreakwaterProposal, type ShelterRow } from '../../engine/breakwater';
 import { pierAxis } from '../../engine/rows';
-import { bearingOf, waveAssessment, type WaveQuality } from '../../engine/waves';
-import { sectorBearing, sectorOf, windClimate } from '../../engine/wind';
+import {
+  bearingOf,
+  sectorWind,
+  WAVE_SECTORS,
+  waveAssessment,
+  waveSectorBearing,
+  type ClimateChoice,
+  type SectorAssessment,
+  type WaveCriteria,
+  type WaveQuality,
+  type WaveSectorInput,
+} from '../../engine/waves';
+import { sectorBearing, windClimate } from '../../engine/wind';
 import type { StringKey } from '../../i18n';
-import { localToLatLon, parseLatLon } from '../../state/geo';
+import { sectorFetches, RAY_STEP_DEG } from '../../engine/fetchRays';
+import { parseLatLon } from '../../state/geo';
+import { lookupFetch, OSM_SOURCE } from '../../state/overpass';
+import { DEPTH_SOURCES, lookupFetchDepths } from '../../state/depth';
 import { fetchWindHistory } from '../../state/openMeteo';
+import { completeYears, fetchStationWind, findWindStations, FMI_WIND_SOURCE, MIN_YEAR_COVERAGE, type WindStation } from '../../state/fmiWind';
 import { appStore, useAppStore } from '../../state/store';
 import { formatCount, formatLength, formatPercent } from '../format';
+import { useSitePosition } from '../sitePosition';
 import { useT } from '../useT';
 import { Button, NumberField, OptionalNumberField } from './fields';
 import { speedClassLabel, SPEED_COLORS, WindRose } from './WindRose';
 
 const state = () => appStore.getState();
 const QUALITIES: WaveQuality[] = ['excellent', 'good', 'moderate'];
+const CRITERIA: WaveCriteria[] = ['as3962', 'ufc'];
 const AVERAGING = [600, 3600] as const;
 
 /** Wave heights with two decimals: the criteria are 0.15–0.61 m (U25). */
@@ -36,6 +54,143 @@ function OptionalRow({ label, value, min, max, placeholder, onChange }: { label:
   );
 }
 
+const RADII_KM = [5, 10, 20, 30, 50] as const;
+
+/** D47, I94: the fetch of every sector from the OpenStreetMap shoreline. */
+function AutoFetchSection() {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const waves = useAppStore((s) => s.project.waves);
+  const { position } = useSitePosition();
+  const [radiusKm, setRadiusKm] = useState<number>(waves.autoFetch ? waves.autoFetch.radius / 1000 : 20);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const af = waves.autoFetch;
+  const run = async () => {
+    if (!position) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const radius = radiusKm * 1000;
+      const r = await lookupFetch(position.lat, position.lon, radius);
+      const round = (m: number) => Math.round(m * 10) / 10;
+      state().setWaves({
+        sectors: waves.sectors.map((x, k) => ({ ...x, fetch: round(r.sectors[k]!.fetch) })),
+        autoFetch: { source: OSM_SOURCE, position, radius, stepDeg: RAY_STEP_DEG, distances: r.distances.map(round), fetchedOn: new Date().toISOString().slice(0, 10) },
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const open = af ? sectorFetches(af.distances, af.radius, af.stepDeg).map((x) => x.open) : [];
+  return (
+    <div className="space-y-1" data-testid="auto-fetch">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('autoFetch.title')}</div>
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-1">
+          {t('autoFetch.radius')}
+          <select aria-label={t('autoFetch.radius')} className="rounded border border-slate-300 px-1 py-0.5 text-sm" value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))}>
+            {RADII_KM.map((r) => (
+              <option key={r} value={r}>
+                {r} km
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button variant="primary" disabled={!position || busy} onClick={() => void run()}>
+          {t('autoFetch.run')}
+        </Button>
+        {busy && (
+          <span role="status" className="animate-pulse text-xs text-sky-800">
+            {t('autoFetch.running')}
+          </span>
+        )}
+      </div>
+      {!position && <p className="text-xs text-amber-800">{t('autoFetch.noPosition')}</p>}
+      {error && (
+        <p role="alert" className="text-xs text-red-700">
+          {t('autoFetch.error')} {error}
+        </p>
+      )}
+      {af && (
+        <p className="text-xs text-slate-600">
+          {t('autoFetch.done')} {af.position.lat.toFixed(4)}, {af.position.lon.toFixed(4)} ({formatCount(af.radius / 1000, language)} km, {af.fetchedOn})
+          {open.some((x) => x) ? ` · ${WAVE_SECTORS.filter((_, k) => open[k]).join(', ')}: ${t('autoFetch.open')}` : ''}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">{t('autoFetch.note')}</p>
+      <DepthLookup />
+    </div>
+  );
+}
+
+/** I110: mean depth along each sector's ray from EMODnet (sea) or SYKE's lake depth zones. */
+function DepthLookup() {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const waves = useAppStore((s) => s.project.waves);
+  const { position } = useSitePosition();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const af = waves.autoFetch;
+  const from = af?.position ?? position;
+  const hasFetch = waves.sectors.some((x) => x.fetch > 0);
+  const run = async () => {
+    if (!from) return;
+    setError(null);
+    setBusy(t('autoDepth.running'));
+    try {
+      // The ray of each sector: the longest of the map lookup (I94), else the sector's centre.
+      const longest = af ? sectorFetches(af.distances, af.radius, af.stepDeg) : null;
+      const rays = waves.sectors.map((x, k) => ({ bearing: longest?.[k]?.fetch ? longest[k]!.bearing : waveSectorBearing(k), fetch: x.fetch }));
+      const found = await lookupFetchDepths(from.lat, from.lon, rays, { onProgress: (d, n) => setBusy(`${t('autoDepth.running')} ${d} / ${n}`) });
+      const latest = appStore.getState().project.waves;
+      state().setWaves({
+        sectors: latest.sectors.map((x, k) => (found[k] ? { ...x, depth: Math.round(found[k]!.depth * 10) / 10 } : x)),
+        autoDepth: { position: { lat: from.lat, lon: from.lon }, fetchedOn: new Date().toISOString().slice(0, 10), sectors: found.map((f) => (f ? { depth: f.depth, source: f.source, coverage: f.coverage } : null)) },
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const ad = waves.autoDepth;
+  return (
+    <div className="space-y-1 pt-1" data-testid="auto-depth">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+        <Button disabled={!from || !hasFetch || busy !== null} onClick={() => void run()}>
+          {t('autoDepth.run')}
+        </Button>
+        {busy && (
+          <span role="status" className="animate-pulse text-xs text-sky-800">
+            {busy}
+          </span>
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-red-700">
+          {t('autoDepth.error')} {error}
+        </p>
+      )}
+      {ad && (
+        <p className="text-xs text-slate-600" data-testid="auto-depth-result">
+          {t('autoDepth.done')} ({ad.fetchedOn}):{' '}
+          {WAVE_SECTORS.map((name, k) => {
+            const x = ad.sectors[k];
+            return `${name} ${x ? `${formatLength(x.depth, language)} m (${x.source === 'emodnet' ? 'EMODnet' : 'SYKE'})` : '–'}`;
+          }).join(', ')}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">
+        {t('autoDepth.note')} {DEPTH_SOURCES.emodnet}; {DEPTH_SOURCES.syke}.
+      </p>
+    </div>
+  );
+}
+
 /** ERA5 hourly winds are taken as 1-hour means (I88). */
 const ERA5_AVERAGING_S = 3600;
 
@@ -44,17 +199,17 @@ function WindSection() {
   const t = useT();
   const language = useAppStore((s) => s.language);
   const waves = useAppStore((s) => s.project.waves);
-  const map = useAppStore((s) => s.project.map);
-  const water = useAppStore((s) => s.project.site.water);
   const lastYear = new Date().getUTCFullYear() - 1;
   const [years, setYears] = useState<[number, number]>([lastYear - 29, lastYear]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const siteCentre = map ? localToLatLon(map, water.length >= 3 ? centroid(water) : { x: 0, y: 0 }) : null;
-  const position = waves.location ?? siteCentre;
+  const { position, siteCentre } = useSitePosition();
   const [text, setText] = useState('');
   const climate = waves.climate;
-  const fetchSector = sectorOf(waves.fetchFrom);
+  // D47: the 22.5° sectors behind the wave directions that exceed the criteria.
+  const designDepth = useAppStore((s) => s.project.anchoring.depth);
+  const bad = waveAssessment(waves, designDepth, [])?.bad ?? [];
+  const highlight = bad.flatMap((k) => [2 * k]);
   const pct = (x: number) => formatPercent(x, language);
   const ms = (x: number | null) => (x === null ? '–' : formatLength(x, language));
 
@@ -130,7 +285,7 @@ function WindSection() {
       {climate && (
         <div className="flex flex-wrap gap-4">
           <div>
-            <WindRose climate={climate} highlight={fetchSector} percent={pct} />
+            <WindRose climate={climate} highlight={highlight} percent={pct} />
             <div className="mt-1 space-y-0.5 text-xs text-slate-600" data-testid="wind-legend">
               {SPEED_COLORS.map((color, i) => (
                 <div key={color} className="flex items-center gap-1">
@@ -152,7 +307,7 @@ function WindSection() {
               </thead>
               <tbody>
                 {climate.sectors.map((s, k) => (
-                  <tr key={k} className={k === fetchSector ? 'bg-orange-50 font-medium' : ''}>
+                  <tr key={k} className={highlight.includes(k) ? 'bg-orange-50 font-medium' : ''}>
                     <td className="text-left">{sectorBearing(k)}°</td>
                     <td>{pct(s.rose.reduce((a, b) => a + b, 0))}</td>
                     <td>{ms(s.oneYear)}</td>
@@ -161,18 +316,6 @@ function WindSection() {
                 ))}
               </tbody>
             </table>
-            <div className="mt-2">
-              <Button
-                disabled={climate.sectors[fetchSector]!.oneYear === null && climate.sectors[fetchSector]!.fiftyYear === null}
-                onClick={() => {
-                  const s = climate.sectors[fetchSector]!;
-                  const round = (x: number | null) => (x === null ? null : Math.round(x * 10) / 10);
-                  appStore.getState().setWaves({ wind1: round(s.oneYear), wind50: round(s.fiftyYear), windAveragingS: climate.averagingS });
-                }}
-              >
-                {t('wind.use')} ({sectorBearing(fetchSector)}°)
-              </Button>
-            </div>
             <p className="mt-2 text-xs text-slate-500">
               {t('wind.cell')} {climate.cell.lat.toFixed(2)}, {climate.cell.lon.toFixed(2)} · {climate.startYear}–{climate.endYear} ·{' '}
               {formatCount(climate.hours, language)} h · {climate.fetchedOn}
@@ -185,21 +328,329 @@ function WindSection() {
   );
 }
 
+/** I108: wind climate of an FMI observation station near the site, compared with ERA5. */
+function StationWindSection() {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const waves = useAppStore((s) => s.project.waves);
+  const lastYear = new Date().getUTCFullYear() - 1;
+  const [years, setYears] = useState<[number, number]>([lastYear - 29, lastYear]);
+  const [stations, setStations] = useState<WindStation[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { position } = useSitePosition();
+  const station = waves.stationClimate;
+  const era5 = waves.climate;
+  const ms = (x: number | null | undefined) => (x === null || x === undefined ? '–' : formatLength(x, language));
+
+  const find = async () => {
+    if (!position) return;
+    setError(null);
+    setBusy(t('station.searching'));
+    try {
+      setStations(await findWindStations(position.lat, position.lon));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const fetchOne = async (s: WindStation) => {
+    if (!position) return;
+    setError(null);
+    try {
+      const record = await fetchStationWind(s.fmisid, years[0], years[1], {
+        onProgress: (done, total) => setBusy(`${t('station.fetching')} ${formatCount(done, language)} / ${formatCount(total, language)}`),
+      });
+      const run = completeYears(record.hoursByYear, years[0], years[1]);
+      if (!run) throw new Error(`${s.name}: ${t('station.noYears')} ${Math.round(MIN_YEAR_COVERAGE * 100)} %`);
+      const result = windClimate(record, {
+        source: `${FMI_WIND_SOURCE}; ${s.name} (fmisid ${s.fmisid})`,
+        requested: { lat: position.lat, lon: position.lon },
+        cell: s.position,
+        startYear: run.startYear,
+        endYear: run.endYear,
+        fetchedOn: new Date().toISOString().slice(0, 10),
+        averagingS: 600,
+      });
+      appStore.getState().setWaves({ stationClimate: result });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-2 border-t border-slate-200 pt-3" data-testid="station-wind">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('station.title')}</div>
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+        <span>{t('wind.years')}</span>
+        <div className="w-20">
+          <NumberField bare label={t('station.startYear')} value={years[0]} min={1950} max={lastYear} step={1} onChange={(v) => setYears([Math.round(v), years[1]])} />
+        </div>
+        <span>–</span>
+        <div className="w-20">
+          <NumberField bare label={t('station.endYear')} value={years[1]} min={1950} max={lastYear} step={1} onChange={(v) => setYears([years[0], Math.round(v)])} />
+        </div>
+        <Button disabled={!position || busy !== null} onClick={() => void find()}>
+          {t('station.find')}
+        </Button>
+        {busy && (
+          <span role="status" className="animate-pulse text-xs text-sky-800">
+            {busy}
+          </span>
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-red-700">
+          {t('wind.error')} {error}
+        </p>
+      )}
+      {stations && stations.length === 0 && <p className="text-xs text-amber-800">{t('station.none')}</p>}
+      {stations && stations.length > 0 && (
+        <ul className="text-sm" data-testid="station-list">
+          {stations.slice(0, 8).map((s) => (
+            <li key={s.fmisid} className="flex items-center justify-between gap-2 py-0.5">
+              <span className="truncate">
+                {s.name} <span className="text-xs text-slate-500">({formatLength(s.distance / 1000, language)} km)</span>
+              </span>
+              <Button disabled={busy !== null || years[1] < years[0] + 1} onClick={() => void fetchOne(s)}>
+                {t('station.fetch')}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {station && (
+        <div className="space-y-1">
+          <p className="text-xs text-slate-600">
+            {station.source.split('; ').pop()} · {station.startYear}–{station.endYear} · {formatCount(station.hours, language)} h · {station.fetchedOn}
+          </p>
+          <table className="w-full text-right text-xs tabular-nums" data-testid="station-compare">
+            <thead>
+              <tr className="text-slate-500">
+                <th className="text-left font-medium">{t('wind.direction')}</th>
+                <th className="font-medium">{t('station.era5')}</th>
+                <th className="font-medium">{t('station.fmi')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {station.sectors.map((x, k) => (
+                <tr key={k}>
+                  <td className="text-left">{sectorBearing(k)}°</td>
+                  <td>{era5 ? `${ms(era5.sectors[k]?.oneYear)} / ${ms(era5.sectors[k]?.fiftyYear)}` : '–'}</td>
+                  <td>{`${ms(x.oneYear)} / ${ms(x.fiftyYear)}`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+            {t('station.choice')}
+            <select
+              className="rounded border border-slate-300 px-1 py-0.5 text-sm"
+              value={waves.climateChoice}
+              onChange={(e) => appStore.getState().setWaves({ climateChoice: e.target.value as ClimateChoice })}
+            >
+              {(['larger', 'station', 'era5'] as const).map((c) => (
+                <option key={c} value={c} disabled={c === 'era5' && !era5}>
+                  {t(`station.choice.${c}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      <p className="text-xs text-slate-500">{t('station.note')}</p>
+    </div>
+  );
+}
+
+/** D48: Marinetek's floating breakwaters against the waves that exceed the criteria. */
+function BreakwaterSection({ proposal }: { proposal: BreakwaterProposal }) {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const len = (m: number) => formatLength(m, language);
+  const h = (m: number) => formatHeight(m, language);
+  const p = proposal.proposed;
+  const th = 'px-1 font-medium';
+  return (
+    <div className="space-y-1" data-testid="breakwater">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('breakwater.title')}</div>
+      <p className={p ? 'text-slate-800' : 'text-amber-800'}>
+        {p ? (
+          <>
+            {t('breakwater.proposed')} <span className="font-medium">{p.name}</span> ({p.modules.map((m) => `${m.code} ${len(m.length)} × ${len(p.width)} m`).join(', ')})
+          </>
+        ) : (
+          t('breakwater.none')
+        )}
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-right text-xs tabular-nums">
+          <thead>
+            <tr className="text-slate-500">
+              <th className={`${th} text-left`}>{t('breakwater.product')}</th>
+              <th className={th}>{t('breakwater.modules')}</th>
+              <th className={th}>{t('breakwater.width')}</th>
+              <th className={th}>{t('breakwater.perMetre')}</th>
+              <th className={th}>{t('breakwater.worst')}</th>
+              <th className={`${th} text-left`}>{t('breakwater.result')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {proposal.evaluations.map((e) => {
+              const beyond = e.checks.some((c) => c.transmitted === null);
+              const worst = e.checks.reduce<{ tr: number; limit: number } | null>(
+                (a, c) => (c.transmitted === null ? a : !a || c.transmitted - c.check.limit! > a.tr - a.limit ? { tr: c.transmitted, limit: c.check.limit! } : a),
+                null,
+              );
+              return (
+                <tr key={e.product.id} className={e.product === p ? 'bg-emerald-50 font-medium' : ''}>
+                  <td className="px-1 text-left">{e.product.id}</td>
+                  <td className="px-1">{e.product.modules.map((m) => `${len(m.length)} (${len(m.weightT)})`).join(', ')}</td>
+                  <td className="px-1">{`${len(e.product.width)} / ${h(e.product.freeboard)}`}</td>
+                  <td className="px-1">{len(weightPerMetre(e.product))}</td>
+                  <td className="px-1">{worst ? `${h(worst.tr)} / ${h(worst.limit)}` : '–'}</td>
+                  <td className={`px-1 text-left ${e.ok ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {e.ok ? t('breakwater.ok') : beyond ? t('breakwater.beyondCurve') : t('breakwater.notEnough')}
+                    {e.beyondBestWavelength ? ` (${t('breakwater.beyondBest')} ${len(e.product.bestBelowWavelength)} m)` : ''}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-500">{t('breakwater.note')}</p>
+    </div>
+  );
+}
+
+/** D58, I107: the piers' shelter behind the drawn breakwaters, for the directions that exceed the criteria. */
+function ShelterSection({ rows }: { rows: ShelterRow[] }) {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const h = (m: number) => formatHeight(m, language);
+  const th = 'px-1 font-medium';
+  return (
+    <div className="space-y-1" data-testid="shelter">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('shelter.title')}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-right text-xs tabular-nums">
+          <thead>
+            <tr className="text-slate-500">
+              <th className={`${th} text-left`}>{t('shelter.direction')}</th>
+              <th className={`${th} text-left`}>{t('shelter.pier')}</th>
+              <th className={th}>{t('shelter.share')}</th>
+              <th className={`${th} text-left`}>{t('shelter.breakwater')}</th>
+              <th className={th}>{t('shelter.waves')}</th>
+              <th className={`${th} text-left`}>{t('shelter.result')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const worst = shelterWorst(r);
+              const result = r.breakwaterId === null ? 'shelter.unsheltered' : worst.transmitted === null ? 'shelter.beyondCurve' : worst.ok && r.share >= 1 - 1e-9 ? 'shelter.ok' : worst.ok ? 'shelter.partly' : 'shelter.notEnough';
+              return (
+                <tr key={`${r.sector}-${r.pierId}`}>
+                  <td className="px-1 text-left">{WAVE_SECTORS[r.sector]}</td>
+                  <td className="px-1 text-left">{r.pierId}</td>
+                  <td className="px-1">{formatPercent(r.share, language)}</td>
+                  <td className="px-1 text-left">{r.breakwaterId ?? '–'}</td>
+                  <td className="px-1">{`${h(worst.check.waves.hm0)} → ${worst.transmitted === null ? '–' : h(worst.transmitted)} / ${h(worst.check.limit!)}`}</td>
+                  <td className={`px-1 text-left ${result === 'shelter.ok' ? 'text-emerald-700' : result === 'shelter.partly' ? 'text-amber-700' : 'text-red-700'}`}>{t(result)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-500">{t('shelter.note')}</p>
+    </div>
+  );
+}
+
+/** The check of a shelter row that is furthest above its limit behind the breakwater (or without one). */
+export function shelterWorst(r: ShelterRow): ShelterRow['checks'][number] {
+  const over = (c: ShelterRow['checks'][number]) => (c.transmitted ?? c.check.waves.hm0) - c.check.limit!;
+  return r.checks.reduce((a, c) => (over(c) > over(a) ? c : a));
+}
+
+/** One row of the sector table: inputs and the waves of that direction. */
+function SectorRow({ k, sector, result, designDepth }: { k: number; sector: WaveSectorInput; result: SectorAssessment | undefined; designDepth: number }) {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const waves = useAppStore((s) => s.project.waves);
+  const name = WAVE_SECTORS[k]!;
+  const len = (m: number) => formatLength(m, language);
+  const h = (m: number) => formatHeight(m, language);
+  const set = (patch: Partial<WaveSectorInput>, key: string) =>
+    state().setWaves({ sectors: waves.sectors.map((x, i) => (i === k ? { ...x, ...patch } : x)) }, { coalesce: `waves:${k}:${key}` });
+  // What the sector falls back to when its own wind is empty.
+  const fallback = (event: 'oneYear' | 'fiftyYear') => {
+    const w = sectorWind({ ...waves, sectors: waves.sectors.map((x, i) => (i === k ? { ...x, wind1: null, wind50: null } : x)) }, k, event);
+    return w ? len(w.wind) : '';
+  };
+  const event = (e: 'oneYear' | 'fiftyYear') => result?.events.find((x) => x.event === e);
+  const one = event('oneYear');
+  const fifty = event('fiftyYear');
+  const failing = result?.checks.filter((c) => c.ok === false) ?? [];
+  const cell = 'px-1 py-0.5';
+  return (
+    <tr className={result?.status === 'exceeds' ? 'bg-red-50' : ''} data-sector={name}>
+      <td className={`${cell} text-left font-medium`}>
+        {name} <span className="text-xs font-normal text-slate-500">{waveSectorBearing(k)}°</span>
+      </td>
+      <td className={`${cell} w-24`}>
+        <NumberField bare label={`${t('waves.fetchCol')} ${name}`} value={sector.fetch} min={0} max={1e6} step={100} onChange={(fetch) => set({ fetch }, 'fetch')} />
+      </td>
+      <td className={`${cell} w-16`}>
+        <OptionalNumberField label={`${t('waves.depthCol')} ${name}`} value={sector.depth ?? undefined} min={0.1} max={1000} placeholder={len(waves.fetchDepth ?? designDepth)} onChange={(v) => set({ depth: v ?? null }, 'depth')} />
+      </td>
+      <td className={`${cell} w-16`}>
+        <OptionalNumberField label={`${t('waves.wind1Col')} ${name}`} value={sector.wind1 ?? undefined} min={0.1} max={80} placeholder={fallback('oneYear')} onChange={(v) => set({ wind1: v ?? null }, 'wind1')} />
+      </td>
+      <td className={`${cell} w-16`}>
+        <OptionalNumberField label={`${t('waves.wind50Col')} ${name}`} value={sector.wind50 ?? undefined} min={0.1} max={80} placeholder={fallback('fiftyYear')} onChange={(v) => set({ wind50: v ?? null }, 'wind50')} />
+      </td>
+      <td className={cell} title={one ? `${t('waves.windUsed')} ${len(one.waves.u10)} · ${t(`waves.windFrom.${one.source}`)} · ${t(`waveLimit.${one.waves.limit}`)}` : undefined}>
+        {one ? h(one.waves.hm0) : '–'}
+      </td>
+      <td className={cell} title={fifty ? `${t('waves.windUsed')} ${len(fifty.waves.u10)} · ${t(`waves.windFrom.${fifty.source}`)} · ${t(`waveLimit.${fifty.waves.limit}`)}` : undefined}>
+        {fifty ? h(fifty.waves.hm0) : '–'}
+      </td>
+      <td className={cell}>{fifty ? `${len(fifty.waves.tp)} / ${len(fifty.waves.wavelength)}` : '–'}</td>
+      <td className={`${cell} text-left text-xs`}>{result ? result.headings.map((x) => t(`waveHeading.${x}`)).join(', ') : ''}</td>
+      <td
+        className={`${cell} text-left ${result?.status === 'exceeds' ? 'font-medium text-red-700' : result?.status === 'ok' ? 'text-emerald-700' : 'text-slate-500'}`}
+        title={failing.map((c) => `${t(`waveHeading.${c.heading}`)}, ${t(`waveEvent.${c.event}`)}: ${h(c.waves.hm0)} > ${h(c.limit!)} m`).join('\n') || undefined}
+      >
+        {!result ? '' : result.status === 'exceeds' ? t('waves.exceeds') : result.status === 'ok' ? t('waves.ok') : t('waves.noCriterion')}
+      </td>
+    </tr>
+  );
+}
+
 export function WaveTool() {
   const t = useT();
   const open = useAppStore((s) => s.waveToolOpen);
   const language = useAppStore((s) => s.language);
   const waves = useAppStore((s) => s.project.waves);
   const designDepth = useAppStore((s) => s.project.anchoring.depth);
+  const boatsPerBay = useAppStore((s) => s.project.params.boatsPerBay);
   const piers = useAppStore((s) => s.project.layouts.find((l) => l.id === s.selectedLayoutId)?.piers ?? null);
+  const site = useAppStore((s) => s.project.site);
   if (!open) return null;
 
-  const depth = waves.fetchDepth ?? designDepth;
   const bearings = (piers ?? []).map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) }));
-  const result = waveAssessment(waves, depth, bearings);
+  const result = waveAssessment(waves, designDepth, bearings);
+  const proposal = breakwaterProposal(result);
+  const shelter = breakwaterShelter(site, piers ?? [], result);
   const set = (patch: Partial<typeof waves>, key: string) => state().setWaves(patch, { coalesce: `waves:${key}` });
   const len = (m: number) => formatLength(m, language);
   const h = (m: number) => formatHeight(m, language);
+  const th = 'px-1 font-medium';
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4" onClick={() => state().setWaveToolOpen(false)}>
@@ -208,18 +659,16 @@ export function WaveTool() {
         aria-modal="true"
         aria-label={t('waves.title')}
         data-testid="wave-tool"
-        className="w-full max-w-4xl rounded bg-white shadow-xl"
+        className="w-full max-w-6xl rounded bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2">
           <h2 className="text-sm font-semibold text-slate-800">{t('waves.title')}</h2>
           <Button onClick={() => state().setWaveToolOpen(false)}>{t('waves.close')}</Button>
         </div>
-        <div className="grid gap-4 p-4 md:grid-cols-[18rem_1fr]">
+        <div className="grid gap-4 p-4 lg:grid-cols-[17rem_1fr]">
           <div className="space-y-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('waves.inputs')}</div>
-            <OptionalRow label={t('waves.fetch')} value={waves.fetch} min={1} max={1e6} onChange={(fetch) => set({ fetch }, 'fetch')} />
-            <NumberField label={t('waves.fetchFrom')} value={waves.fetchFrom} min={0} max={360} step={5} onChange={(v) => set({ fetchFrom: v % 360 }, 'fetchFrom')} />
             <OptionalRow
               label={t('waves.fetchDepth')}
               value={waves.fetchDepth}
@@ -245,6 +694,16 @@ export function WaveTool() {
               </select>
             </label>
             <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+              {t('waves.criteriaSet')}
+              <select className="rounded border border-slate-300 px-1 py-0.5 text-sm" value={waves.criteria} onChange={(e) => state().setWaves({ criteria: e.target.value as WaveCriteria })}>
+                {CRITERIA.map((c) => (
+                  <option key={c} value={c}>
+                    {t(`waveCriteria.${c}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
               {t('waves.quality')}
               <select className="rounded border border-slate-300 px-1 py-0.5 text-sm" value={waves.quality} onChange={(e) => state().setWaves({ quality: e.target.value as WaveQuality })}>
                 {QUALITIES.map((q) => (
@@ -254,63 +713,63 @@ export function WaveTool() {
                 ))}
               </select>
             </label>
+            {waves.criteria === 'as3962' && <p className="text-xs text-slate-500">{t('waves.as3962Note')}</p>}
             <p className="text-xs text-slate-500">{t('waves.inputNote')}</p>
           </div>
 
           <div className="min-w-0 space-y-3 text-sm">
+            <AutoFetchSection />
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('waves.sectors')}</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-right tabular-nums" data-testid="wave-results">
+                <thead>
+                  <tr className="text-xs text-slate-500">
+                    <th className={`${th} text-left`}>{t('waves.sector')}</th>
+                    <th className={th}>{t('waves.fetchCol')}</th>
+                    <th className={th}>{t('waves.depthCol')}</th>
+                    <th className={th}>{t('waves.wind1Col')}</th>
+                    <th className={th}>{t('waves.wind50Col')}</th>
+                    <th className={th}>{t('waves.hm01')}</th>
+                    <th className={th}>{t('waves.hm050')}</th>
+                    <th className={th}>{t('waves.tpL')}</th>
+                    <th className={`${th} text-left`}>{t('waves.headingCol')}</th>
+                    <th className={`${th} text-left`}>{t('waves.statusCol')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {waves.sectors.map((sector, k) => (
+                    <SectorRow key={k} k={k} sector={sector} result={result?.sectors.find((x) => x.sector === k)} designDepth={designDepth} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
             {!result ? (
               <p className="text-slate-500">{t('waves.enter')}</p>
             ) : (
               <>
-                <table className="w-full text-right tabular-nums" data-testid="wave-results">
-                  <thead>
-                    <tr className="text-xs text-slate-500">
-                      <th className="text-left font-medium">{t('waves.event')}</th>
-                      <th className="font-medium">{t('waves.windUsed')}</th>
-                      <th className="font-medium">{t('waves.duration')}</th>
-                      <th className="font-medium">{t('waves.hm0')}</th>
-                      <th className="font-medium">{t('waves.tp')}</th>
-                      <th className="font-medium">{t('waves.length')}</th>
-                      <th className="font-medium">{t('waves.limitedBy')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.events.map((e) => (
-                      <tr key={e.event}>
-                        <td className="text-left">{t(`waveEvent.${e.event}`)}</td>
-                        <td>{len(e.waves.u10)}</td>
-                        <td>{formatCount(e.waves.averagingS / 60, language)}</td>
-                        <td>{h(e.waves.hm0)}</td>
-                        <td>{len(e.waves.tp)}</td>
-                        <td>{len(e.waves.wavelength)}</td>
-                        <td>{t(`waveLimit.${e.waves.limit}`)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('waves.criteria')}</div>
-                  <table className="w-full text-right tabular-nums" data-testid="wave-checks">
-                    <tbody>
-                      {result.checks.map((c) => (
-                        <tr key={`${c.heading}-${c.event}`}>
-                          <td className="text-left">{t(`waveHeading.${c.heading}`)}</td>
-                          <td className="text-left">{t(`waveEvent.${c.event}`)}</td>
-                          <td>
-                            {h(c.waves.hm0)} m {c.limit === null ? '' : `≤ ${h(c.limit)} m`}
-                          </td>
-                          <td className={c.ok === false ? 'font-medium text-red-700' : c.ok ? 'text-emerald-700' : 'text-slate-500'}>
-                            {c.ok === null ? t('waves.noCriterion') : c.ok ? t('waves.ok') : t('waves.exceeds')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div data-testid="wave-checks">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {t('waves.criteria')} ({t(`waveCriteria.${result.criteria}`)}, {t(`waveQuality.${waves.quality}`).toLowerCase()})
+                  </div>
+                  {result.bad.length === 0 ? (
+                    <p className="text-emerald-700">{t('waves.noneBad')}</p>
+                  ) : (
+                    <ul className="list-disc pl-5" aria-label={t('waves.bad')}>
+                      {result.sectors
+                        .filter((x) => x.status === 'exceeds')
+                        .map((x) => (
+                          <li key={x.sector}>
+                            <span className="font-medium">{WAVE_SECTORS[x.sector]}</span>:{' '}
+                            {x.checks
+                              .filter((c) => c.ok === false)
+                              .map((c) => `${t(`waveHeading.${c.heading}`).toLowerCase()}, ${t(`waveEvent.${c.event}`).toLowerCase()} ${h(c.waves.hm0)} > ${h(c.limit!)} m`)
+                              .join('; ')}
+                          </li>
+                        ))}
+                    </ul>
+                  )}
                   <p className="mt-1 text-xs text-slate-500">
-                    {result.piers.length === 0
-                      ? t('waves.noPiers')
-                      : `${t('waves.piers')}: ${result.piers.map((p) => `${p.id} ${t(`waveHeading.${p.heading}`).toLowerCase()}`).join(', ')}`}
+                    {result.piers.length === 0 ? t('waves.noPiers') : `${t('waves.piers')}: ${result.piers.map((p) => p.id).join(', ')}`}
                   </p>
                 </div>
 
@@ -320,6 +779,9 @@ export function WaveTool() {
                 >
                   {t(`waveAdvice.${result.advice}`)}
                 </div>
+                {result.doubleBerthPiles && boatsPerBay === 2 && <p className="text-xs text-amber-800">{t('waves.piles')}</p>}
+                {proposal && <BreakwaterSection proposal={proposal} />}
+                {shelter.length > 0 && <ShelterSection rows={shelter} />}
               </>
             )}
             <p className="text-xs text-slate-500">{t('waves.note')}</p>
@@ -327,6 +789,7 @@ export function WaveTool() {
         </div>
         <div className="px-4 pb-4">
           <WindSection />
+          <StationWindSection />
         </div>
       </div>
     </div>

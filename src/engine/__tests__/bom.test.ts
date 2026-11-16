@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { AnchoringResult, AnchorLine } from '../anchoring';
 import { costEstimate, moduleCombination, resolveChoices } from '../bom';
 import type { PriceList, PriceParameter, Product } from '../catalog';
-import { DEFAULT_COST, DEFAULT_PARAMS } from '../defaults';
+import { DEFAULT_COST, DEFAULT_PARAMS as DEFAULTS } from '../defaults';
+
+/** The hand-calculated cases were written for a 3.0 m main pier (SPEC §4); D44 made 2.7 m the default. */
+const DEFAULT_PARAMS = { ...DEFAULTS, mainPierWidth: 3 };
 import type { Berth, Finger, MainPier, Site } from '../model';
 
 const product = (p: Partial<Product> & Pick<Product, 'id' | 'category' | 'price'>): Product => ({
@@ -92,6 +95,8 @@ describe('product choices', () => {
       boomSeries: 'Boom',
       gangwaySeries: 'G',
       pontoonFreeboard: 0.5,
+      // D49: the project's gangway length.
+      gangwayLength: 6,
     });
     expect(resolveChoices(LIST, DEFAULT_COST, { ...DEFAULT_PARAMS, mainPierWidth: 2.4 }).pontoonSeries).toBe('S24');
   });
@@ -206,6 +211,15 @@ describe('cost estimate, hand-calculated', () => {
     expect(estimate.byGroup.gangways).toBe(1200);
   });
 
+  it('a pier 4 m off the shore still has its gangway; beyond its reach none (D49)', () => {
+    const off = (y: number) => costEstimate({ layout: { piers: [{ ...pier, start: { x: 0, y }, end: { x: 0, y: y + 30 } }], fingers, berths }, site, priceList: LIST, choices, anchoring });
+    expect(off(4).lines.find((l) => l.productId === 'g8')!.orderQuantity).toBe(1);
+    expect(off(7).lines.some((l) => l.productId === 'g8')).toBe(false);
+    // A 5 m gangway asked for: the 5 m product.
+    const short = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: LIST, choices: { ...choices, gangwayLength: 5 }, anchoring });
+    expect(short.lines.find((l) => l.productId === 'g5')!.orderQuantity).toBe(1);
+  });
+
   it('gangways of an access pontoon (D32): one per placed gangway, else one', () => {
     const withAccess = (gangways?: number[]) =>
       costEstimate({
@@ -217,7 +231,26 @@ describe('cost estimate, hand-calculated', () => {
       }).lines.find((l) => l.productId === 'g8')!;
     expect(withAccess().orderQuantity).toBe(2);
     expect(withAccess([5, 25]).orderQuantity).toBe(3);
-    expect(withAccess([5, 25]).basis).toBe('1 piers from the shore + 2 on access pontoons');
+    expect(withAccess([5, 25]).basis).toBe('P1: 4 berths → at least 0.9 m clear (AS 3962 Table 3.3); access-1: 0 berths → at least 0.7 m clear (AS 3962 Table 3.3); access-1: 0 berths → at least 0.7 m clear (AS 3962 Table 3.3)');
+  });
+
+  it('gangway widths by AS 3962 Table 3.3 (I109): the selected series if wide enough, else the cheapest wide enough one', () => {
+    const wide = { ...LIST, products: [...LIST.products, product({ id: 'w15', category: 'gangway', series: 'W', price: 2000, lengthM: 8, widthM: 1.5 })].map((p) => (p.category === 'gangway' && p.widthM === null ? { ...p, widthM: 0.8 } : p)) };
+    const run = (served: number) => {
+      const many = Array.from({ length: served }, (_, i) => ({ ...berths[0]!, id: `b${i}` }));
+      return costEstimate({ layout: { piers: [pier], fingers, berths: many }, site, priceList: wide, choices, anchoring });
+    };
+    // 4 berths: 0.9 m → the 0.8 m series is too narrow, the 1.5 m gangway is used.
+    const four = run(4);
+    expect(four.lines.find((l) => l.productId === 'w15')?.orderQuantity).toBe(1);
+    expect(four.lines.find((l) => l.productId === 'g8')).toBeUndefined();
+    expect(four.notes.some((n) => n.startsWith('Gangway widths: the product width is taken as the clear width'))).toBe(true);
+    // 2 berths: 0.7 m → the selected 0.8 m series is enough.
+    expect(run(2).lines.find((l) => l.productId === 'g8')?.orderQuantity).toBe(1);
+    // 130 berths: 1.8 m → none is wide enough: the selected series and a note.
+    const many = run(130);
+    expect(many.lines.find((l) => l.productId === 'g8')?.orderQuantity).toBe(1);
+    expect(many.notes.find((n) => n.startsWith('No gangway in the price list is as wide'))).toContain('P1 (130 berths, 1.8 m)');
   });
 
   it('anchoring: chain 2 × 16.5 m + 5 % = 34.7 m; anchors, shackles, springs, anodes = 1 223 €', () => {

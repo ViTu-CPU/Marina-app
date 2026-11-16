@@ -1,0 +1,110 @@
+import { describe, expect, it } from 'vitest';
+import { castRays, rayHit, sectorFetches } from '../../engine/fetchRays';
+import { fetchFromResponse, fetchQuery, lookupFetch, shoreSegments, tangentPlane, type OverpassResponse } from '../overpass';
+
+const LAT = 63.559;
+const LON = 27.1925;
+const plane = tangentPlane(LAT, LON);
+/** OSM geometry from local metres around the site. */
+const geom = (pts: [number, number][]) => pts.map(([x, y]) => plane.toLatLon({ x, y }));
+const ring = (pts: [number, number][]) => geom([...pts, pts[0]!]);
+
+describe('rays and sector fetches (I94)', () => {
+  it('ray–segment intersection', () => {
+    expect(rayHit({ x: 0, y: 1 }, { x: -1, y: 5 }, { x: 1, y: 5 })).toBeCloseTo(5, 12);
+    expect(rayHit({ x: 0, y: 1 }, { x: 1, y: 5 }, { x: 2, y: 5 })).toBeNull();
+    expect(rayHit({ x: 0, y: 1 }, { x: -1, y: -5 }, { x: 1, y: -5 })).toBeNull();
+  });
+
+  it('a square lake 2 km wide around the site, 500 m from its west shore; the longest ray per sector', () => {
+    const s = (a: [number, number], b: [number, number]) => ({ a: { x: a[0], y: a[1] }, b: { x: b[0], y: b[1] } });
+    // Lake from x = −500 to 1500, y = −1000 to 1000.
+    const segments = [s([-500, -1000], [1500, -1000]), s([1500, -1000], [1500, 1000]), s([1500, 1000], [-500, 1000]), s([-500, 1000], [-500, -1000])];
+    const d = castRays(segments, 20000);
+    expect(d).toHaveLength(72);
+    expect(d[0]).toBeCloseTo(1000, 6); // N
+    expect(d[18]).toBeCloseTo(1500, 6); // E
+    expect(d[54]).toBeCloseTo(500, 6); // W
+    const f = sectorFetches(d, 20000);
+    // E sector: rays 70°…110°; the longest hits the corner region: at 70° x = 1500 → 1500 / sin 70° = 1596 m, y = 546 < 1000.
+    expect(f[2]!.fetch).toBeCloseTo(1500 / Math.sin((70 * Math.PI) / 180), 3);
+    expect([70, 110]).toContain(f[2]!.bearing);
+    // NE: 25°…65°; the corner (1500, 1000) is at 56.3°, the longest ray just beside it: 55° → y = 1000 / cos 55° = 1743 m (x = 1428 < 1500).
+    expect(f[1]!.fetch).toBeCloseTo(1000 / Math.cos((55 * Math.PI) / 180), 3);
+    expect(f.every((x) => !x.open)).toBe(true);
+    // Nothing crossed: the search radius, flagged open.
+    expect(sectorFetches(castRays([], 5000), 5000)[0]).toEqual({ fetch: 5000, bearing: 0, open: true });
+  });
+});
+
+describe('OpenStreetMap shorelines from Overpass (D47)', () => {
+  it('query: water areas and coastline near the rays, relation members, one polyline through the site', () => {
+    const q = fetchQuery(LAT, LON, 3000, 45);
+    expect(q.startsWith('[out:json]')).toBe(true);
+    expect(q).toContain('way(around:2,63.559000,27.192500,');
+    expect(q).toContain('rel(bw.near)[natural=water]');
+    expect(q).toContain('way.near(r.rels)->.members;');
+    expect(q.endsWith('.rels out skel;')).toBe(true);
+    // 8 rays: centre and end per ray, back to the centre: 17 coordinate pairs.
+    expect(q.match(/around:2,([^)]*)\)/)![1]!.split(',').length).toBe(34);
+    // The northern ray ends 3 000 m north.
+    const north = q.match(/around:2,[^,]+,[^,]+,([^,]+),([^,]+),/)!;
+    expect(plane.toLocal(Number(north[1]), Number(north[2])).y).toBeCloseTo(3000, 0);
+  });
+
+  // Lake A (relation 1) from x = −500 to 1500, an island inside it (inner ring, same relation), and
+  // lake B (relation 2) east of x = 1500 sharing that boundary way (member of both) up to x = 4000.
+  const lakes: OverpassResponse = {
+    elements: [
+      { type: 'way', id: 10, geometry: geom([[1500, -1000], [1500, 1000]]) }, // shared A|B
+      { type: 'way', id: 11, geometry: geom([[1500, 1000], [-500, 1000], [-500, -1000], [1500, -1000]]) }, // rest of A
+      { type: 'way', id: 12, geometry: ring([[-200, 200], [-100, 200], [-100, 400], [-200, 400]]) }, // island in A
+      { type: 'way', id: 13, geometry: geom([[1500, 1000], [4000, 1000], [4000, -1000], [1500, -1000]]) }, // rest of B
+      { type: 'relation', id: 1, members: [{ type: 'way', ref: 10, role: 'outer' }, { type: 'way', ref: 11, role: 'outer' }, { type: 'way', ref: 12, role: 'inner' }] },
+      { type: 'relation', id: 2, members: [{ type: 'way', ref: 10, role: 'outer' }, { type: 'way', ref: 13, role: 'outer' }] },
+    ],
+  };
+
+  it('a boundary between two water areas is not a shore; islands are', () => {
+    const segs = shoreSegments(lakes, LAT, LON);
+    // Way 10 (1 segment) dropped; way 11: 3, island: 4, way 13: 3.
+    expect(segs).toHaveLength(10);
+    const r = fetchFromResponse(lakes, LAT, LON, 20000);
+    expect(r.distances[18]).toBeCloseTo(4000, 0); // E: across the shared boundary to lake B's far shore
+    expect(r.distances[0]).toBeCloseTo(1000, 0); // N
+    // The island (x −200…−100, y 200…400): the ray at 340° passes its south edge east of it (x = −72.8 at
+    // y = 200) and meets its east edge x = −100 at 100 / sin 20° = 292.4 m.
+    expect(r.distances[68]).toBeCloseTo(100 / Math.sin((20 * Math.PI) / 180), 6);
+  });
+
+  it('coastline ways and closed water-area ways count as one feature each', () => {
+    const r: OverpassResponse = {
+      elements: [
+        { type: 'way', id: 20, tags: { natural: 'coastline' }, geometry: geom([[-3000, 2000], [3000, 2000]]) },
+        { type: 'way', id: 21, tags: { natural: 'water' }, geometry: ring([[-50, -800], [50, -800], [50, -900], [-50, -900]]) },
+        { type: 'way', id: 22, tags: { highway: 'residential' }, geometry: geom([[-3000, 500], [3000, 500]]) },
+      ],
+    };
+    const f = fetchFromResponse(r, LAT, LON, 10000);
+    expect(f.segments).toBe(5);
+    expect(f.distances[0]).toBeCloseTo(2000, 0);
+    expect(f.distances[36]).toBeCloseTo(800, 0);
+    expect(f.distances[18]).toBe(10000);
+  });
+
+  it('lookup: one POST to the Overpass API; errors carry the reason', async () => {
+    let body = '';
+    const ok = (async (_url: string, init?: RequestInit) => {
+      body = String(init?.body);
+      return new Response(JSON.stringify(lakes), { status: 200 });
+    }) as typeof fetch;
+    const r = await lookupFetch(LAT, LON, 5000, { fetchImpl: ok });
+    expect(decodeURIComponent(body.replace(/\+/g, ' '))).toContain('data=[out:json]');
+    // E sector: the longest ray is at 80° (or 100°): x = 4000 at 4000 / sin 80° = 4061.7 m (y = 705 < 1000).
+    expect(r.sectors[2]!.fetch).toBeCloseTo(4000 / Math.sin((80 * Math.PI) / 180), 3);
+    const busy = (async () => new Response('', { status: 429 })) as unknown as typeof fetch;
+    await expect(lookupFetch(LAT, LON, 5000, { fetchImpl: busy })).rejects.toThrow(/429/);
+    const timeout = (async () => new Response(JSON.stringify({ elements: [], remark: 'runtime error: Query timed out' }), { status: 200 })) as unknown as typeof fetch;
+    await expect(lookupFetch(LAT, LON, 5000, { fetchImpl: timeout })).rejects.toThrow(/timed out/);
+  });
+});

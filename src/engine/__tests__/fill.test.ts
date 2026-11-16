@@ -11,7 +11,7 @@ import { prepareSite } from '../site';
  * The hand calculations in this file use fairway factor 1.5 (the default before DECISIONS D27)
  * and exact finger lengths, 0.8 × boat length (no standard lengths, D29).
  */
-const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [] };
+const PARAMS: typeof DEFAULT_PARAMS = { ...DEFAULT_PARAMS, fairwayFactor: 1.5, fingerLengths: [], mainPierWidth: 3, pierModuleLengths: [], shoreGap: 0, berthType: 'finger' };
 const OPEN_BASIN: Site = { ...RECT_BASIN_SITE, obstacles: [] };
 
 const only = (id: string): BoatClass[] => DEFAULT_BOAT_CLASSES.filter((c) => c.id === id).map((c) => ({ ...c, share: 1 }));
@@ -40,7 +40,7 @@ describe('rowDesign (SPEC §5.3, uniform pitch by the longest class — DECISION
   it('with the default fairway factor 1.75 (D27) the 12 m boats need a 21 m fairway', () => {
     const d = rowDesign(DEFAULT_BOAT_CLASSES, DEFAULT_PARAMS, fingerPierPattern)!;
     expect(d.fairwayWidth).toBe(21); // max(8, 1.75 × 12)
-    expect(d.pitch).toBe(49); // 3.0 + 2 × 12.5 + 21
+    expect(d.pitch).toBeCloseTo(48.7, 9); // 2.7 (Premier 2700, D44) + 2 × 12.5 + 21
   });
 
   it('5 m boats only: the minimum fairway width governs', () => {

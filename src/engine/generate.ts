@@ -54,6 +54,7 @@ import type {
 } from './model';
 import { localRectToPolygon, patternFor, type BerthPattern } from './patterns';
 import { buildReachGrid, isSwept, reachableCells, type OccupiedBox, type ReachGrid } from './reach';
+import { combinationLength, moduleCombination } from './modules';
 import { layoutRows, pierAxis, rowFrame, toLocalRect } from './rows';
 import { rankLayouts } from './score';
 import { berthCaps, effectiveObjective, mixClasses } from './targets';
@@ -102,7 +103,7 @@ export const OFFSET_STEP = 1;
 /** Orientation sweep step, degrees (SPEC §5.2). */
 export const ANGLE_STEP = 5;
 /** Offset sweep step of the size-zoned strategy E, m. */
-export const ZONED_OFFSET_STEP = 2;
+export const ZONED_OFFSET_STEP = 1;
 /** For how many start offsets (per direction) strategy E runs its exact search. */
 const ZONED_SHORTLIST = 6;
 /** How many berth-less piers are remembered for the diagnostics. */
@@ -415,6 +416,29 @@ function fillPier(
   return { segment: shrinkToBerths(cut(hi), best.rows), rows: best.rows };
 }
 
+/**
+ * D44: build the pier from whole modules. `segment` is the length the berths need (shorter than
+ * `available` when target counts ran out), `available` the longest the site allows. The pier
+ * becomes the shortest module combination that holds the berths within `available`, else the
+ * longest that fits; bays beyond its head are dropped. Null when not even one module fits or
+ * no berth is left.
+ */
+function snapToModules(ctx: SearchContext, segment: PierSegment, available: number, rows: FilledRow[], mix: MixState): { segment: PierSegment; rows: FilledRow[] } | null {
+  const lengths = ctx.params.pierModuleLengths;
+  if (lengths.length === 0) return { segment, rows };
+  const length = distance(segment.start, segment.end);
+  const modules = moduleCombination(length, available, lengths);
+  if (!modules) {
+    trimRows(rows, 0, mix);
+    return null;
+  }
+  const built = combinationLength(modules);
+  const kept = built < length - 1e-6 ? trimRows(rows, built, mix) : rows;
+  if (kept.length === 0) return null;
+  const end = roundVec(add(segment.start, scale(sub(segment.end, segment.start), built / length)));
+  return { segment: { start: segment.start, end }, rows: kept };
+}
+
 /** Step by which a pier is shortened when its head is not clear, m. */
 const HEAD_SHORTEN_STEP = 1;
 
@@ -493,7 +517,7 @@ function parallelCandidate(
       prepared,
       scale(lateral, u),
       dir,
-      { width: params.mainPierWidth, maxLength: params.maxMainPierLength, headClearance: design.fairwayWidth, minLength },
+      { width: params.mainPierWidth, maxLength: params.maxMainPierLength, headClearance: design.fairwayWidth, minLength, shoreGap: params.shoreGap },
       ctx.report,
     );
     for (const raw of placed) segments.push({ start: roundVec(raw.start), end: roundVec(raw.end) });
@@ -522,7 +546,8 @@ function parallelCandidate(
     const fitted = fitHead(ctx, filled.segment, rows, mix, minLength, design.fairwayWidth);
     if (fitted) {
       const segment = ctx.caps ? shrinkToBerths(fitted.segment, fitted.rows) : fitted.segment;
-      piers.push({ segment, rows: fitted.rows, fillOptions: {} });
+      const built = snapToModules(ctx, segment, distance(fitted.segment.start, fitted.segment.end), fitted.rows, mix);
+      if (built) piers.push({ segment: built.segment, rows: built.rows, fillOptions: {} });
     }
   }
   return summarize(ctx, strategy, angle, piers, floor);
@@ -580,7 +605,8 @@ function bestShoreParallel(ctx: SearchContext): Candidate | null {
         : null;
     if (!side) continue;
     const toWater = side === 'left' ? left : scale(left, -1);
-    const base = add(a, scale(toWater, width / 2));
+    // D49: the pier lies the gangway gap off the shore.
+    const base = add(a, scale(toWater, width / 2 + params.shoreGap));
 
     // The centreline and both edges of the pier must be in buildable water.
     let intervals: [number, number][] | null = null;
@@ -601,13 +627,14 @@ function bestShoreParallel(ctx: SearchContext): Candidate | null {
       // The whole pier lies on the shore, so there is no shore end to keep clear.
       const fillOptions: FillOptions = { sides: [side], rowStart: 0 };
       const filled = fillPier(ctx, segment, mix, design.minBayFootprint, fillOptions);
-      const rows = filled.rows;
-      if (rows.length === 0) {
+      if (filled.rows.length === 0) {
         if (ctx.report.blockedPiers.length < MAX_BLOCKED_SAMPLE) ctx.report.blockedPiers.push(segment);
         ctx.report.berthlessPiers++;
         continue;
       }
-      const candidate = summarize(ctx, 'D', vectorToBearing(dir) % 180, [{ segment: filled.segment, rows, fillOptions }]);
+      const built = snapToModules(ctx, filled.segment, length, filled.rows, mix);
+      if (!built) continue;
+      const candidate = summarize(ctx, 'D', vectorToBearing(dir) % 180, [{ segment: built.segment, rows: built.rows, fillOptions }]);
       if (better(candidate, best, ctx.objective)) best = candidate;
     }
   }
@@ -684,6 +711,7 @@ function sizeZonedLayout(ctx: SearchContext, zoned: ZonedContext, options: Zoned
     const headWidth = options.head === 'widest' ? zoned.zones[0]!.fairway : back.fairway;
     const segments = placePiersOnLine(prepared, scale(forward, u), dir, {
       width,
+      shoreGap: params.shoreGap,
       maxLength: params.maxMainPierLength,
       headClearance: headWidth,
       minLength: params.shoreOffset + back.minFootprint,
@@ -697,18 +725,37 @@ function sizeZonedLayout(ctx: SearchContext, zoned: ZonedContext, options: Zoned
       // Which side of this pier looks forward depends on which way the pier runs.
       const frontSide: PierSide = dot({ x: -along.y, y: along.x }, forward) > 0 ? 'left' : 'right';
       const backSide: PierSide = frontSide === 'left' ? 'right' : 'left';
-      const pier = { id: '', ...segment, width };
+      const filled = segment.end;
+      const fillBoth = (on: PierSegment, order: boolean) => {
+        const pier = { id: '', ...on, width };
+        let rows = fillPierRows(pier, zoned.context(back, gap, order), mix, { sides: [backSide] });
+        const front = nextClass();
+        if (front) rows = [...rows, ...fillPierRows(pier, zoned.context(front, front.fairway, order), mix, { sides: [frontSide] })];
+        return { rows, front };
+      };
 
-      let rows = fillPierRows(pier, zoned.context(back, gap, options.order), mix, { sides: [backSide] });
-      const front = nextClass();
-      if (front) rows = [...rows, ...fillPierRows(pier, zoned.context(front, front.fairway, options.order), mix, { sides: [frontSide] })];
-      if (rows.length === 0) continue;
-      const fitted = fitHead(ctx, segment, rows, mix, params.shoreOffset + back.minFootprint, headWidth);
+      // Unordered first: it decides the pier's final length (head clearance, target counts, modules).
+      const first = fillBoth(segment, false);
+      if (first.rows.length === 0) continue;
+      const fitted = fitHead(ctx, segment, first.rows, mix, params.shoreOffset + back.minFootprint, headWidth);
       if (!fitted) continue;
       segment = ctx.caps ? shrinkToBerths(fitted.segment, fitted.rows) : fitted.segment;
-      piers.push({ segment, rows: fitted.rows, fillOptions: {} });
+      let built = snapToModules(ctx, segment, distance(fitted.segment.start, fitted.segment.end), fitted.rows, mix);
+      if (!built) continue;
+      let front = first.front;
+      // I103: the rows are filled again on the final length, so that the search and the final
+      // build (runs ordered, larger boats towards the head) keep the same boats. Trimming rows
+      // that were ordered first would drop the largest boats at the head.
+      if (options.order || distance(built.segment.end, filled) > 1e-9) {
+        trimRows(built.rows, 0, mix);
+        const again = fillBoth(built.segment, options.order);
+        if (again.rows.length === 0) continue;
+        built = { segment: built.segment, rows: again.rows };
+        front = again.front;
+      }
+      piers.push({ segment: built.segment, rows: built.rows, fillOptions: {} });
       placedHere = true;
-      if (front && fitted.rows.some((r) => r.side === frontSide)) frontDesign = front;
+      if (front && built.rows.some((r) => r.side === frontSide)) frontDesign = front;
     }
 
     if (!placedHere) {
@@ -1093,8 +1140,12 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = pa
     return fail('ALL_BERTHS_BLOCKED', 'No berth can be reached from the entrance through a fairway of the required width.');
   }
   const ranked = rankLayouts(evaluated, objective);
+  // I98: an orientation of the sweep (C) that is a near-duplicate of the perpendicular layout (A)
+  // adds nothing; A is kept as the named family (SPEC §5.7) whichever ranks higher.
+  const perpendicular = ranked.filter((l) => l.strategy === 'A');
+  const distinct = ranked.filter((l) => l.strategy !== 'C' || !perpendicular.some((a) => isNearDuplicate(a, l)));
   const kept: Layout[] = [];
-  for (const layout of ranked) {
+  for (const layout of distinct) {
     if (kept.some((k) => isNearDuplicate(k, layout))) continue;
     kept.push(layout);
     if (kept.length >= topN) break;

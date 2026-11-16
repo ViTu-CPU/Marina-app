@@ -5,6 +5,7 @@ import { appStore, needsRegeneration, useAppStore } from '../../state/store';
 import { buildCsv } from '../export/csv';
 import { canvasImage, downloadText, exportPng, printHtml, readFileAsText, safeFileName } from '../export/download';
 import { buildReportHtml } from '../export/report';
+import { buildDxf } from '../export/dxf';
 import { computeCostModel } from '../costModel';
 import { useT } from '../useT';
 import { Button } from './fields';
@@ -35,6 +36,18 @@ export function Toolbar() {
     printHtml(buildReportHtml({ project: s.project, layout, model, image: canvasImage(), language: s.language, date: new Date().toISOString().slice(0, 10) }));
   };
   const hasLayouts = useAppStore((s) => s.project.layouts.length > 0);
+  /** D61, I111: the selected alternative as DXF with the product library as blocks. */
+  const exportDxf = () => {
+    const s = state();
+    const layout = s.project.layouts.find((l) => l.id === s.selectedLayoutId);
+    if (!layout) {
+      s.setNotice(t('report.noLayout'));
+      return;
+    }
+    const model = computeCostModel(s.project, layout, s.builtInPriceList);
+    const text = buildDxf({ project: s.project, layout, priceList: model?.priceList ?? null, choices: model?.choices ?? null, vatPct: model?.vatPct ?? 0, date: new Date().toISOString().slice(0, 10) });
+    downloadText(`${safeFileName(`${s.project.name}-${layout.name.split(' ')[0]}`)}.dxf`, text, 'application/dxf');
+  };
 
   const confirmDiscard = (): boolean => isPristine() || window.confirm(t('confirm.discard'));
   const state = () => appStore.getState();
@@ -122,6 +135,9 @@ export function Toolbar() {
         }
       >
         {t('toolbar.exportCsv')}
+      </Button>
+      <Button disabled={!hasLayouts} title={t('toolbar.exportDxfHint')} onClick={exportDxf}>
+        {t('toolbar.exportDxf')}
       </Button>
       <Button disabled={!hasLayouts} title={t('report.printHint')} onClick={printReport}>
         {t('report.button')}

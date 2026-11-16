@@ -94,7 +94,8 @@ function demoProject(name: string, site: Site): Project {
     map: null,
     anchoring: DEFAULT_ANCHORING,
     cost: DEFAULT_COST,
-    waves: DEFAULT_WAVES,
+    waves: structuredClone(DEFAULT_WAVES),
+    waterLevels: null,
     generatedFrom: null,
   };
 }

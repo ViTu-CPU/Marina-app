@@ -14,7 +14,9 @@ import { DEFAULT_VAT_PCT, parameter, unitPriceVat0, type PriceList, type Product
 import { distance, distancePointToPolyline } from './geometry';
 import type { CostSettings, Layout, Params, Site } from './model';
 import { rowFrame, toLocalRect } from './rows';
-import { accessPontoonsOf, gangwayPositions, SHORE_TOLERANCE } from './site';
+import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierPolygon, pierShoreLink, SHORE_TOLERANCE } from './site';
+import { gangwayClearWidth } from './as3962';
+import { breakwaterModules, breakwaterProductOf, breakwatersOf } from './breakwater';
 
 export type BomGroup = 'pontoons' | 'fingers' | 'gangways' | 'anchoring' | 'fittings' | 'labour' | 'plant';
 export const BOM_GROUPS: BomGroup[] = ['pontoons', 'fingers', 'gangways', 'anchoring', 'fittings', 'labour', 'plant'];
@@ -47,6 +49,8 @@ export interface ResolvedChoices {
   gangwaySeries: string | null;
   /** Freeboard of the chosen pontoon series, m (for the anchoring wind area), or null. */
   pontoonFreeboard: number | null;
+  /** D49: gangway length to buy, m: the project's (`Params.gangwayLength`), else the price list's `gangway_length_m`. */
+  gangwayLength?: number;
 }
 
 export interface CostEstimate {
@@ -73,7 +77,7 @@ export interface CostEstimate {
 }
 
 const priced = (p: Product, vat: number) => unitPriceVat0(p, vat);
-const seriesOf = (list: PriceList, category: Product['category'], series: string) =>
+export const seriesOf = (list: PriceList, category: Product['category'], series: string) =>
   list.products.filter((p) => p.category === category && p.series === series);
 
 /** Series names of a category, in price-list order. */
@@ -115,7 +119,7 @@ export function resolveChoices(list: PriceList, cost: CostSettings, params: Para
   const pontoonSeries = pick(cost.pontoonSeries, 'pontoon', () => closestByWidth(list, 'pontoon', params.mainPierWidth, vat));
   const fingerSeries = pick(cost.fingerSeries, 'finger', () => closestByWidth(list, 'finger', params.fingerWidth, vat));
   const boomSeries = pick(cost.boomSeries ?? '', 'finger', () => closestByWidth(list, 'finger', params.boomWidth, vat));
-  const wanted = parameter(list, 'gangway_length_m', 6);
+  const wanted = params.gangwayLength ?? parameter(list, 'gangway_length_m', 6);
   const gangwaySeries = pick(cost.gangwaySeries, 'gangway', () => {
     let best: { name: string; price: number } | null = null;
     for (const name of seriesNames(list, 'gangway')) {
@@ -134,11 +138,12 @@ export function resolveChoices(list: PriceList, cost: CostSettings, params: Para
     boomSeries,
     gangwaySeries,
     pontoonFreeboard: freeboards.length > 0 ? Math.max(...freeboards) : null,
+    ...(params.gangwayLength === undefined ? {} : { gangwayLength: params.gangwayLength }),
   };
 }
 
 /** The shortest product at least `length` long (ties: cheaper), else the longest. */
-function pickByLength(products: Product[], length: number, vat: number): { product: Product; longEnough: boolean } | null {
+export function pickByLength(products: Product[], length: number, vat: number): { product: Product; longEnough: boolean } | null {
   const withLength = products.filter((p) => p.lengthM !== null);
   if (withLength.length === 0) return null;
   const enough = withLength.filter((p) => p.lengthM! >= length - 0.05);
@@ -147,6 +152,23 @@ function pickByLength(products: Product[], length: number, vat: number): { produ
     return { product: enough[0]!, longEnough: true };
   }
   return { product: withLength.reduce((a, b) => (b.lengthM! > a.lengthM! ? b : a)), longEnough: false };
+}
+
+/**
+ * I109: the gangway for `served` berths: of the selected series when wide (AS 3962 Table 3.3) and long
+ * enough, else the cheapest wide enough gangway of the price list, else the selected series. A price
+ * list without gangway widths is not judged (`wideEnough` true).
+ */
+export function chooseGangway(list: PriceList, seriesProducts: Product[], served: number, length: number, vat: number): { product: Product; longEnough: boolean; wideEnough: boolean } | null {
+  const all = list.products.filter((p) => p.category === 'gangway');
+  const hasWidths = all.some((p) => p.widthM !== null);
+  const width = gangwayClearWidth(served);
+  const wide = (products: Product[]) => (hasWidths ? products.filter((p) => p.widthM !== null && p.widthM >= width - 0.005) : products);
+  const inSeries = pickByLength(wide(seriesProducts), length, vat);
+  const anywhere = inSeries?.longEnough ? inSeries : (pickByLength(wide(all), length, vat) ?? inSeries);
+  if (anywhere) return { ...anywhere, wideEnough: true };
+  const fallback = pickByLength(seriesProducts, length, vat);
+  return fallback ? { ...fallback, wideEnough: false } : null;
 }
 
 /**
@@ -283,17 +305,43 @@ export function costEstimate(input: CostInput): CostEstimate {
 
   // --- Gangways: one per pier that starts at the shoreline, one per access pontoon -----
   const gangwayProducts = choices.gangwaySeries ? seriesOf(list, 'gangway', choices.gangwaySeries) : [];
-  const fromShore = layout.piers.filter(
-    (p) => site.shoreline.length >= 2 && distancePointToPolyline(p.start, site.shoreline) <= SHORE_TOLERANCE + p.width / 2,
-  ).length;
+  // D49: every pier reached from the shoreline by its gangway (not those on an access pontoon).
+  const fromShore = layout.piers.filter((p) => pierShoreLink(p, site, choices.gangwayLength ?? DEFAULT_GANGWAY_LENGTH)?.kind === 'gangway').length;
   const accessGangways = accessPontoonsOf(site).reduce((n, a) => n + gangwayPositions(a).length, 0);
   const gangways = fromShore + accessGangways;
-  const wantedGangway = par('gangway_length_m', 6);
-  const gangway = pickByLength(gangwayProducts, wantedGangway, vat);
-  if (gangways > 0 && gangway) {
-    addQty('gangways', gangway.product, gangways, `${fromShore} piers from the shore + ${accessGangways} on access pontoons`);
-    if (!gangway.longEnough) notes.push(`No gangway of "${choices.gangwaySeries}" is ${fmt(wantedGangway)} m long; the longest is used.`);
+  const wantedGangway = choices.gangwayLength ?? par('gangway_length_m', 6);
+  // I109: each gangway at least the clear width of AS 3962-2001 Table 3.3 for the berths it serves:
+  // a pier's own berths, or an access pontoon's attached piers shared by its gangways. The selected
+  // series first, else the cheapest wide enough gangway of the price list (product width taken as
+  // the clear width: assumption).
+  const berthsOf = (pierId: string) => layout.berths.filter((b) => b.pierId === pierId && !b.removed).length;
+  const needs: { what: string; served: number }[] = [
+    ...layout.piers
+      .filter((p) => pierShoreLink(p, site, choices.gangwayLength ?? DEFAULT_GANGWAY_LENGTH)?.kind === 'gangway')
+      .map((p) => ({ what: p.id, served: berthsOf(p.id) })),
+    ...accessPontoonsOf(site).flatMap((a) => {
+      const edges = pierPolygon(a.start, a.end, a.width);
+      const attached = layout.piers.filter((p) => distancePointToPolyline(p.start, [edges[0]!, edges[1]!]) <= SHORE_TOLERANCE || distancePointToPolyline(p.start, [edges[3]!, edges[2]!]) <= SHORE_TOLERANCE);
+      const served = attached.reduce((n, p) => n + berthsOf(p.id), 0);
+      const count = gangwayPositions(a).length;
+      return Array.from({ length: count }, () => ({ what: a.id, served: Math.ceil(served / count) }));
+    }),
+  ];
+  const hasWidths = list.products.some((p) => p.category === 'gangway' && p.widthM !== null);
+  const narrow: string[] = [];
+  let short = false;
+  for (const need of needs) {
+    const width = gangwayClearWidth(need.served);
+    const pick = chooseGangway(list, gangwayProducts, need.served, wantedGangway, vat);
+    if (!pick) continue;
+    const chosen = pick;
+    if (!pick.wideEnough) narrow.push(`${need.what} (${need.served} berths, ${fmt(width)} m)`);
+    if (!chosen.longEnough) short = true;
+    addQty('gangways', chosen.product, 1, `${need.what}: ${need.served} berths → at least ${fmt(width)} m clear (AS 3962 Table 3.3)`);
   }
+  if (narrow.length > 0) notes.push(`No gangway in the price list is as wide as AS 3962 Table 3.3 asks for ${narrow.join(', ')}; the selected series is used.`);
+  if (short) notes.push(`No gangway wide enough is ${fmt(wantedGangway)} m long; the longest is used.`);
+  if (needs.length > 0 && hasWidths) notes.push('Gangway widths: the product width is taken as the clear width between the handrails (assumption); AS 3962 Table 3.3 gives the clear width.');
 
   // --- Anchoring -----------------------------------------------------------------------
   const lineCount = anchoring.lines.length;
@@ -348,6 +396,22 @@ export function costEstimate(input: CostInput): CostEstimate {
       .sort((a, b) => priced(a, vat)! - priced(b, vat)! || (a.id < b.id ? -1 : 1))[0];
     if (fixing) addQty('anchoring', fixing, wallLines, `${wallLines} shore chains`);
     else notes.push('No wall fixing in the price list: the wall fixings of the shore chains are not priced.');
+  }
+  // D58, I106: breakwater modules; Marinetek's breakwater prices are not public and not in the price list.
+  for (const b of breakwatersOf(site)) {
+    const product = breakwaterProductOf(b);
+    const length = distance(b.start, b.end);
+    const modules = breakwaterModules(length, product);
+    const byCode = new Map<string, { count: number; weightT: number }>();
+    for (const module of modules) {
+      const entry = byCode.get(module.code) ?? { count: 0, weightT: module.weightT };
+      entry.count++;
+      byCode.set(module.code, entry);
+    }
+    const list = [...byCode.entries()].map(([code, e]) => `${e.count} × ${code}`).join(' + ');
+    const weight = [...byCode.values()].reduce((t, e) => t + e.count * e.weightT, 0);
+    const built = modules.reduce((t, m) => t + m.length, 0);
+    notes.push(`Breakwater ${b.id}: ${product.name}, drawn ${fmt(length)} m: ${list} = ${fmt(built)} m (${fmt(weight)} t), not priced: no breakwater in the price list.`);
   }
   // End piles of long fingers (D31): no public prices.
   if (anchoring.piles.length > 0) {

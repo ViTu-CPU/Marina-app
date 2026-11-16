@@ -11,10 +11,12 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Image as KonvaImage, Layer, Line, Rect, Shape, Stage, Text } from 'react-konva';
 import { add, centroid, distance, dot, sub } from '../../engine/geometry';
 import type { BackgroundImage, BoatClass, Layout, Polygon, Site, Vec2 } from '../../engine/model';
+import { sectorFetches } from '../../engine/fetchRays';
 import { pierAxis } from '../../engine/rows';
-import { gangwayLinks, pierPolygon } from '../../engine/site';
+import { gangwayLinks, pierPolygon, pierShoreLink } from '../../engine/site';
+import { breakwaterProductOf, breakwatersOf } from '../../engine/breakwater';
 import { appStore, useAppStore, type LayerId, type Selection, type ToolId } from '../../state/store';
-import { OSM_ATTRIBUTION } from '../../state/geo';
+import { latLonToLocal, OSM_ATTRIBUTION } from '../../state/geo';
 import { gridStep, panBy, scaleBar, screenToWorld, visibleBounds, worldToScreen, zoomAt, type Size, type View } from '../../state/view';
 import { loadImage, registerStage } from '../export/download';
 import { formatLength } from '../format';
@@ -40,7 +42,7 @@ const PIER_DRAG_STEP = 0.1;
 /** A custom attribute of the node under the pointer (set as a prop on the shape). */
 const attr = (node: unknown, name: string): unknown => (node as { attrs: Record<string, unknown> }).attrs[name];
 
-const DRAWING_TOOLS: ToolId[] = ['water', 'shoreline', 'entrance', 'access', 'pier', 'obstacle', 'zone', 'measure', 'calibrate'];
+const DRAWING_TOOLS: ToolId[] = ['water', 'shoreline', 'entrance', 'access', 'breakwater', 'pier', 'obstacle', 'zone', 'measure', 'calibrate'];
 const flat = (points: Vec2[]): number[] => points.flatMap((p) => [p.x, p.y]);
 
 // ---------------------------------------------------------------------------
@@ -80,6 +82,20 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
         ))}
       {layers.obstacles &&
         site.obstacles.map((o) => <Line key={o.id} points={flat(o.shape)} closed fill={COLORS.obstacle} listening={false} />)}
+      {layers.obstacles &&
+        // D58: floating breakwaters at their product's width.
+        breakwatersOf(site).map((b) => (
+          <Line
+            key={b.id}
+            points={flat(pierPolygon(b.start, b.end, breakwaterProductOf(b).width))}
+            closed
+            fill={COLORS.breakwater}
+            stroke={COLORS.waterEdge}
+            strokeWidth={1.5}
+            strokeScaleEnabled={false}
+            listening={false}
+          />
+        ))}
       {layers.shoreline && site.shoreline.length >= 2 && (
         <Line points={flat(site.shoreline)} stroke={COLORS.shoreline} strokeWidth={4} strokeScaleEnabled={false} lineCap="round" lineJoin="round" listening={false} />
       )}
@@ -170,6 +186,61 @@ function AnchorShapes() {
           listening={false}
         />
       ))}
+    </>
+  );
+}
+
+/**
+ * D47: the rays of the automatic fetch lookup, from the site to the first shore; the longest ray
+ * of each sector (its fetch) thicker. Drawn only with a map position, which places the rays.
+ */
+function FetchRays() {
+  const map = useAppStore((s) => s.project.map);
+  const af = useAppStore((s) => s.project.waves.autoFetch);
+  if (!map || !af) return null;
+  const o = latLonToLocal(map, af.position.lat, af.position.lon);
+  const end = (i: number) => {
+    const r = (i * af.stepDeg * Math.PI) / 180;
+    return { x: o.x + af.distances[i]! * Math.sin(r), y: o.y + af.distances[i]! * Math.cos(r) };
+  };
+  const longest = new Set(sectorFetches(af.distances, af.radius, af.stepDeg).map((x) => Math.round(x.bearing / af.stepDeg)));
+  return (
+    <>
+      {af.distances.map((_, i) => (
+        <Line
+          key={`ray-${i}`}
+          points={flat([o, end(i)])}
+          stroke={longest.has(i) ? COLORS.fetchMax : COLORS.fetchRay}
+          strokeWidth={longest.has(i) ? 2 : 1}
+          opacity={0.8}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      ))}
+    </>
+  );
+}
+
+/** D49: the gangway of each pier reached from the shoreline, from its shore end to the shore. */
+function PierGangways({ layout, site }: { layout: Layout; site: Site }) {
+  const reach = useAppStore((s) => s.project.params.gangwayLength);
+  return (
+    <>
+      {layout.piers.map((p) => {
+        const link = pierShoreLink(p, site, reach);
+        if (!link || link.kind !== 'gangway' || link.gap < 0.05) return null;
+        return (
+          <Line
+            key={`${p.id}-gangway`}
+            points={flat([link.from, link.to])}
+            stroke={COLORS.gangway}
+            strokeWidth={4}
+            strokeScaleEnabled={false}
+            lineCap="butt"
+            listening={false}
+          />
+        );
+      })}
     </>
   );
 }
@@ -386,7 +457,7 @@ export function MarinaCanvas() {
     const s = appStore.getState();
     // An access pontoon lies off the wall on purpose; snapping would pull its centreline
     // onto the shoreline (D21).
-    if (s.tool === 'access' || exclude?.key.startsWith('access:')) return toWorld(screen);
+    if (s.tool === 'access' || s.tool === 'breakwater' || exclude?.key.startsWith('access:') || exclude?.key.startsWith('breakwater:')) return toWorld(screen);
     const targets = siteSnapTargets(s.project.site, s.draft);
     if (exclude) {
       const own = sitePaths(s.project.site).find((p) => p.key === exclude.key)?.points[exclude.index];
@@ -634,7 +705,9 @@ export function MarinaCanvas() {
             {layout && (
               <LayoutShapes layout={layout} classes={project.boatClasses} layers={layers} selection={selection} patternScale={patternScale} />
             )}
+            {layout && layers.piers && <PierGangways layout={layout} site={project.site} />}
             {layout && layers.anchoring && <AnchorShapes />}
+            {layers.fetch && <FetchRays />}
           </Group>
         </Layer>
 

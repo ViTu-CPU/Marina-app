@@ -6,6 +6,7 @@ export const COLORS = {
   shoreline: '#15803d',
   entrance: '#f59e0b',
   access: '#6b7280',
+  breakwater: '#334155',
   gangway: '#b45309',
   chain: '#92400e',
   anchor: '#78350f',
@@ -22,6 +23,8 @@ export const COLORS = {
   draft: '#7c3aed',
   grid: '#e2e8f0',
   gridMajor: '#cbd5e1',
+  fetchRay: '#0284c7',
+  fetchMax: '#c2410c',
 };
 
 /** Hatched fills (background, line) of fairways and restricted zones; see patterns.ts. */

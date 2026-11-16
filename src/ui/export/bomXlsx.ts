@@ -98,7 +98,8 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
   const params: CellValue[][] = [
     ['parameter', 'value'],
     ...Object.entries(a).flatMap(([k, v]): CellValue[][] =>
-      typeof v === 'object' ? Object.entries(v as Record<string, number>).map(([kk, vv]) => [`${k}.${kk}`, vv]) : [[k, v as CellValue]],
+      // D50: unknown normal water levels are null (an empty cell).
+      v === null ? [[k, '']] : typeof v === 'object' ? Object.entries(v as Record<string, number>).map(([kk, vv]) => [`${k}.${kk}`, vv]) : [[k, v as CellValue]],
     ),
     [],
     ['price list parameter', 'value', 'unit', 'source'],
