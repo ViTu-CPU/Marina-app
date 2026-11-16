@@ -221,7 +221,9 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   I54–I61, D25, D46). Nothing is checked against RIL 201-3-2013; AS 3962-2001 is used for
   advisory checks only.
 - The automatic fetch and the water-level lookups need the Overpass API, FMI and SYKE services
-  in the browser; the fetch lookup was tested only with mocked answers.
+  in the browser; the fetch lookup was tested only with mocked answers. It asks
+  overpass.private.coffee first and overpass-api.de if that fails; when no ray meets a shore,
+  the fetches are left unchanged and the error says what the map answer held (I112).
 - Costs come from public list prices and stated assumptions (labour output, work-boat
   rate, Marinetek prices); they are a feasibility-stage estimate, not a quote.
 - No environmental constraints.

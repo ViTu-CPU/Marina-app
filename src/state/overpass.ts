@@ -1,19 +1,24 @@
 /**
- * Shorelines from OpenStreetMap for the automatic fetch (DECISIONS D47, I94): the Overpass API
+ * Shorelines from OpenStreetMap for the automatic fetch (DECISIONS D47, I94, I112): the Overpass API
  * returns the water areas (lakes, rivers, reservoirs) and the sea coastline that the rays from the
  * site cross; a boundary shared by two water areas (e.g. two named basins of one lake) is not a
- * shore and is dropped. Data © OpenStreetMap contributors, ODbL.
+ * shore and is dropped, the sea coastline always is one. Data © OpenStreetMap contributors, ODbL.
  *
  * Overpass API usage (https://dev.overpass-api.de/overpass-doc/en/preface/commons.html and the
- * OSM wiki "Overpass API", read 2026-11-15): free for moderate use, about 10 000 queries and 1 GB
- * a day; one query per lookup here.
+ * OSM wiki "Overpass API", read 2026-11-15 and 2026-11-16): free for moderate use, about 10 000
+ * queries and 1 GB a day on the main instance, which the wiki now calls overloaded (*"do not expect
+ * high reliability. Use alternatives if possible"*); overpass.private.coffee (formerly
+ * overpass.kumi.systems): *"Feel free to use our service in any project, there is no rate limit in
+ * place."* One query per lookup; the next server only when the previous one fails (I112).
  */
 import { castRays, RAY_STEP_DEG, sectorFetches, type SectorFetch } from '../engine/fetchRays';
 import type { Segment, Vec2 } from '../engine/model';
 import { WGS84_A, WGS84_E2 } from './geo';
 
-export const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-export const OSM_SOURCE = 'OpenStreetMap (Overpass API), © OpenStreetMap contributors, ODbL';
+/** Overpass instances tried in this order (I112): the next only when the previous one fails. */
+export const OVERPASS_URLS = ['https://overpass.private.coffee/api/interpreter', 'https://overpass-api.de/api/interpreter'] as const;
+/** The source line kept with the project: which Overpass instance answered. */
+export const osmSource = (server: string): string => `OpenStreetMap (Overpass API, ${new URL(server).host}), © OpenStreetMap contributors, ODbL`;
 
 const rad = (d: number): number => (d * Math.PI) / 180;
 
@@ -77,33 +82,51 @@ export interface OverpassResponse {
 const isWaterArea = (tags: Record<string, string> | undefined): boolean =>
   tags?.natural === 'water' || tags?.waterway === 'riverbank' || tags?.landuse === 'reservoir';
 
+/** What an Overpass answer held, for the diagnosis when no shore is found (I112). */
+export interface ShoreStats {
+  /** Ways in the answer (coastline, water-area ways and members of water relations). */
+  ways: number;
+  /** Water relations (multipolygons) in the answer. */
+  relations: number;
+  /** Segments kept as shore. */
+  shore: number;
+  /** Segments dropped because they bound two water areas (water on both sides). */
+  waterWater: number;
+}
+
 /**
- * Shore segments in local metres around the site: every segment of a coastline way or of a water
- * area's boundary that bounds exactly one water feature (a coastline, a water area way, or a water
- * relation). Segments bounding two features (the same nodes in both) separate water from water.
+ * Shore segments in local metres around the site: every segment of a coastline way, and every
+ * segment of a water area's boundary that bounds exactly one water feature (a water area way or a
+ * water relation). Segments bounding two features (the same nodes in both) separate water from
+ * water. The coastline is always a shore (land on its left, water on its right; OSM wiki
+ * "Tag:natural=coastline"), also where a water area (a bay, a lagoon) is drawn against it (I112).
  */
-export function shoreSegments(response: OverpassResponse, lat0: number, lon0: number): Segment[] {
+export function shoreAnalysis(response: OverpassResponse, lat0: number, lon0: number): { segments: Segment[]; stats: ShoreStats } {
   const plane = tangentPlane(lat0, lon0);
   const elements = response.elements ?? [];
   const parents = new Map<number, number[]>();
+  let relations = 0;
+  let ways = 0;
   for (const e of elements) {
     if (e.type !== 'relation') continue;
+    relations++;
     for (const m of (e as OsmRelation).members ?? []) {
       if (m.type !== 'way') continue;
       parents.set(m.ref, [...(parents.get(m.ref) ?? []), e.id]);
     }
   }
   const key = (p: { lat: number; lon: number }) => `${p.lat.toFixed(7)},${p.lon.toFixed(7)}`;
-  const features = new Map<string, { a: { lat: number; lon: number }; b: { lat: number; lon: number }; of: Set<string> }>();
+  const features = new Map<string, { a: { lat: number; lon: number }; b: { lat: number; lon: number }; of: Set<string>; coast: boolean }>();
   for (const e of elements) {
     if (e.type !== 'way') continue;
+    ways++;
     const way = e as OsmWay;
     const geometry = way.geometry ?? [];
     const of: string[] = (parents.get(way.id) ?? []).map((r) => `r${r}`);
     const closed = geometry.length > 3 && geometry[0] && geometry[geometry.length - 1] && key(geometry[0]) === key(geometry[geometry.length - 1]!);
-    if (way.tags?.natural === 'coastline') of.push('coast');
-    else if (isWaterArea(way.tags) && closed) of.push(`w${way.id}`);
-    if (of.length === 0) continue;
+    const coast = way.tags?.natural === 'coastline';
+    if (!coast && isWaterArea(way.tags) && closed) of.push(`w${way.id}`);
+    if (of.length === 0 && !coast) continue;
     for (let i = 1; i < geometry.length; i++) {
       const a = geometry[i - 1];
       const b = geometry[i];
@@ -112,42 +135,98 @@ export function shoreSegments(response: OverpassResponse, lat0: number, lon0: nu
       const kb = key(b);
       if (ka === kb) continue;
       const k = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
-      const entry = features.get(k) ?? { a, b, of: new Set<string>() };
+      const entry = features.get(k) ?? { a, b, of: new Set<string>(), coast: false };
       of.forEach((f) => entry.of.add(f));
+      entry.coast ||= coast;
       features.set(k, entry);
     }
   }
-  const out: Segment[] = [];
-  for (const { a, b, of } of features.values()) {
-    if (of.size === 1) out.push({ a: plane.toLocal(a.lat, a.lon), b: plane.toLocal(b.lat, b.lon) });
+  const segments: Segment[] = [];
+  let waterWater = 0;
+  for (const { a, b, of, coast } of features.values()) {
+    if (coast || of.size === 1) segments.push({ a: plane.toLocal(a.lat, a.lon), b: plane.toLocal(b.lat, b.lon) });
+    else if (of.size > 1) waterWater++;
   }
-  return out;
+  return { segments, stats: { ways, relations, shore: segments.length, waterWater } };
+}
+
+/** Shore segments in local metres around the site (see shoreAnalysis). */
+export function shoreSegments(response: OverpassResponse, lat0: number, lon0: number): Segment[] {
+  return shoreAnalysis(response, lat0, lon0).segments;
 }
 
 export interface FetchLookup {
   distances: number[];
   sectors: SectorFetch[];
   segments: number;
+  /** Rays that met a shore within the radius. */
+  hits: number;
+  stats: ShoreStats;
+  /** The Overpass instance that answered (set by lookupFetch). */
+  server?: string;
 }
 
 /** Rays and sector fetches for the site from an Overpass answer. */
 export function fetchFromResponse(response: OverpassResponse, lat: number, lon: number, radius: number, stepDeg = RAY_STEP_DEG): FetchLookup {
-  const segments = shoreSegments(response, lat, lon);
+  const { segments, stats } = shoreAnalysis(response, lat, lon);
   const distances = castRays(segments, radius, stepDeg);
-  return { distances, sectors: sectorFetches(distances, radius, stepDeg), segments: segments.length };
+  const hits = distances.filter((d) => d < radius).length;
+  return { distances, sectors: sectorFetches(distances, radius, stepDeg), segments: segments.length, hits, stats };
 }
 
-/** Looks the shoreline up around (lat, lon) and measures the fetch of every sector. Throws with the server's reason. */
-export async function lookupFetch(lat: number, lon: number, radius: number, options: { fetchImpl?: typeof fetch; signal?: AbortSignal } = {}): Promise<FetchLookup> {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(OVERPASS_URL, {
+/**
+ * The answer held no shore in any direction within the radius (I112). A marina lies at a shore, so
+ * this means the map data did not arrive as expected, not that the water is open all round; the
+ * caller keeps the fetches it had.
+ */
+export class NoShoreError extends Error {
+  constructor(
+    readonly radius: number,
+    readonly stats: ShoreStats,
+  ) {
+    super(
+      `no shore in any direction within ${Math.round(radius / 100) / 10} km; the answer held ${stats.ways} ways, ${stats.relations} water areas (relations), ` +
+        `${stats.shore} shore segments and ${stats.waterWater} segments between two water areas`,
+    );
+    this.name = 'NoShoreError';
+  }
+}
+
+async function queryServer(server: string, lat: number, lon: number, radius: number, fetchImpl: typeof fetch, signal?: AbortSignal): Promise<FetchLookup> {
+  const response = await fetchImpl(server, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ data: fetchQuery(lat, lon, radius) }).toString(),
-    ...(options.signal ? { signal: options.signal } : {}),
+    ...(signal ? { signal } : {}),
   });
-  if (!response.ok) throw new Error(`Overpass API answered ${response.status}${response.status === 429 ? ' (too many requests; try again in a minute)' : ''}`);
+  if (!response.ok) throw new Error(`answered ${response.status}${response.status === 429 ? ' (too many requests; try again in a minute)' : ''}`);
   const body = (await response.json()) as OverpassResponse;
   if (body.remark && /error|timed out|runtime/i.test(body.remark)) throw new Error(body.remark);
-  return fetchFromResponse(body, lat, lon, radius);
+  const r = fetchFromResponse(body, lat, lon, radius);
+  if (r.hits === 0) throw new NoShoreError(radius, r.stats);
+  return { ...r, server };
+}
+
+/**
+ * Looks the shoreline up around (lat, lon) and measures the fetch of every sector. The Overpass
+ * instances are tried in turn (OVERPASS_URLS) until one answers with a shore; when none does, the
+ * error names every server and its reason (I112), e.g. "no shore in any direction" (NoShoreError).
+ */
+export async function lookupFetch(
+  lat: number,
+  lon: number,
+  radius: number,
+  options: { fetchImpl?: typeof fetch; signal?: AbortSignal; servers?: readonly string[] } = {},
+): Promise<FetchLookup> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const failures: string[] = [];
+  for (const server of options.servers ?? OVERPASS_URLS) {
+    try {
+      return await queryServer(server, lat, lon, radius, fetchImpl, options.signal);
+    } catch (e) {
+      if (options.signal?.aborted) throw e;
+      failures.push(`${new URL(server).host}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  throw new Error(failures.join('; '));
 }

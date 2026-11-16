@@ -24,7 +24,7 @@ import { sectorBearing, windClimate } from '../../engine/wind';
 import type { StringKey } from '../../i18n';
 import { sectorFetches, RAY_STEP_DEG } from '../../engine/fetchRays';
 import { parseLatLon } from '../../state/geo';
-import { lookupFetch, OSM_SOURCE } from '../../state/overpass';
+import { lookupFetch, osmSource, type FetchLookup } from '../../state/overpass';
 import { DEPTH_SOURCES, lookupFetchDepths } from '../../state/depth';
 import { fetchWindHistory } from '../../state/openMeteo';
 import { completeYears, fetchStationWind, findWindStations, FMI_WIND_SOURCE, MIN_YEAR_COVERAGE, type WindStation } from '../../state/fmiWind';
@@ -65,19 +65,22 @@ function AutoFetchSection() {
   const [radiusKm, setRadiusKm] = useState<number>(waves.autoFetch ? waves.autoFetch.radius / 1000 : 20);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [found, setFound] = useState<FetchLookup | null>(null);
   const af = waves.autoFetch;
   const run = async () => {
     if (!position) return;
     setBusy(true);
     setError(null);
+    setFound(null);
     try {
       const radius = radiusKm * 1000;
       const r = await lookupFetch(position.lat, position.lon, radius);
       const round = (m: number) => Math.round(m * 10) / 10;
       state().setWaves({
         sectors: waves.sectors.map((x, k) => ({ ...x, fetch: round(r.sectors[k]!.fetch) })),
-        autoFetch: { source: OSM_SOURCE, position, radius, stepDeg: RAY_STEP_DEG, distances: r.distances.map(round), fetchedOn: new Date().toISOString().slice(0, 10) },
+        autoFetch: { source: osmSource(r.server!), position, radius, stepDeg: RAY_STEP_DEG, distances: r.distances.map(round), fetchedOn: new Date().toISOString().slice(0, 10) },
       });
+      setFound(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -118,6 +121,12 @@ function AutoFetchSection() {
         <p className="text-xs text-slate-600">
           {t('autoFetch.done')} {af.position.lat.toFixed(4)}, {af.position.lon.toFixed(4)} ({formatCount(af.radius / 1000, language)} km, {af.fetchedOn})
           {open.some((x) => x) ? ` · ${WAVE_SECTORS.filter((_, k) => open[k]).join(', ')}: ${t('autoFetch.open')}` : ''}
+        </p>
+      )}
+      {found && (
+        <p className="text-xs text-slate-600" data-testid="auto-fetch-found">
+          {t('autoFetch.found')} {formatCount(found.hits, language)} / {found.distances.length} {t('autoFetch.rays')} · {formatCount(found.stats.shore, language)}{' '}
+          {t('autoFetch.segments')} ({new URL(found.server!).host})
         </p>
       )}
       <p className="text-xs text-slate-500">{t('autoFetch.note')}</p>
