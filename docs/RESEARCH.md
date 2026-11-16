@@ -1023,6 +1023,29 @@ date 14.11.2014), read for the breakwater proposal (DECISIONS D48):
   as overpass.kumi.systems. Feel free to use our service in any project, there is no rate limit in
   place"*) was added to the environment for a live test, which was not run in this session (the
   session's permission check stopped the request). The tool itself still asks only the main instance.
+- 2026-11-16 (later): the owner reported 20 km in every direction (DECISIONS I112). Still no live answer:
+  overpass-api.de reset the connection from the development environment, and through the web-fetch tool
+  it answered HTTP 503 to every request, also `[out:json];node(1);out;`. The OSM wiki page "Overpass API"
+  (read 2026-11-16) now says of the main instance: *"Nowadays this server is overloaded - be mindful of
+  that, do not overconsume resources and do not expect high reliability. Use alternatives if possible."*
+  and *"If you receive an HTTP error code such as 429 or 406, pause for 30 seconds before making a new
+  request"*; it lists `overpass.private.coffee` (*"Previously known as overpass.kumi.systems … there is no
+  rate limit in place. Please notify us in advance if you intend to use our service in a large scale
+  project."*) and the VK Maps instance `maps.mail.ru/osm/tools/overpass` (Russia; not used).
+- Overpass source (github.com/drolbr/Overpass-API, master, `src/overpass_api/statements/around.cc` and
+  `src/overpass_api/core/index_computations.h`, read 2026-11-16, AGPL-3.0): for a polyline, a way matches
+  when one of its nodes is within the radius of a polyline segment, a polyline vertex is within the radius
+  of one of its segments, or one of its segments crosses a polyline segment (`intersect`, no radius
+  term); candidate ways come from the tiles of the polyline's bounding tile and their parents
+  (`calc_parents`). A zero-length polyline segment (two equal consecutive points) would disable the
+  segment tests; the tool's star-shaped polyline has none.
+- Live test (2026-11-16, owner's position 60.15675 N, 24.88781 E): `overpass.private.coffee` answered the
+  tool's query for 8 rays of 5 km once (HTTP 200, 120.4 s, 415 530 B, `"generator": "Overpass API 0.7.62.11
+  87bfad18"`, `"timestamp_osm_base": "2026-07-24T11:04:51Z"`): 25 `natural=coastline` ways and 3
+  `natural=water` ways; shores found on all 8 rays at 44–199 m, the position on the water side of coastline
+  way 1103221519 (a basin in Lauttasaari's east shore). Later requests to the same server (`node(1)`, the
+  72-ray queries) got no byte in 200 s. The OSM standard tile server returned 103-byte blank tiles to the
+  development environment's command-line client, so the basin was drawn from the Overpass geometry only.
 
 ## 14. Water levels: FMI and SYKE open data (read 2026-11-15)
 

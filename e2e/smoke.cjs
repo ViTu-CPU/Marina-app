@@ -633,8 +633,10 @@ async function waitForServer() {
       assert.equal(ws.climateChoice, 'larger');
       assert.equal(await stationSection.getByTestId('station-compare').locator('tbody tr').count(), 16);
       await page.unroute('https://opendata.fmi.fi/wfs?**');
-      // D47: fetches from the OpenStreetMap shoreline (Overpass mocked): a lake 60.14–60.16 N, 24.92–24.99 E around the position.
+      // D47, I112: fetches from the OpenStreetMap shoreline (Overpass mocked): the first server answers with
+      // no data at all (no shore in any direction), the second with a lake 60.14–60.16 N, 24.92–24.99 E around the position.
       let overpassBody = '';
+      await page.route('https://overpass.private.coffee/**', (route) => route.fulfill({ json: { elements: [] } }));
       await page.route('https://overpass-api.de/**', (route) => {
         overpassBody = route.request().postData() ?? '';
         const g = [[60.14, 24.92], [60.14, 24.99], [60.16, 24.99], [60.16, 24.92], [60.14, 24.92]].map(([lat, lon]) => ({ lat, lon }));
@@ -642,9 +644,11 @@ async function waitForServer() {
       });
       await tool.getByRole('button', { name: 'Find fetches from the map', exact: true }).click();
       await page.waitForFunction(() => window.__marina.getState().project.waves.autoFetch !== null);
-      assert.match(decodeURIComponent(overpassBody), /way\(around:2,60\.150000,24\.950000/);
+      assert.match(decodeURIComponent(overpassBody), /way\.candidates\(around:2,60\.150000,24\.950000/);
       const af = await page.evaluate(() => window.__marina.getState().project.waves);
       assert.equal(af.autoFetch.distances.length, 72);
+      assert.match(af.autoFetch.source, /overpass-api\.de/);
+      assert.match(await tool.getByTestId('auto-fetch-found').innerText(), /Shore met by 72 \/ 72 rays · 4 shore segments/);
       // N: 1.1 km to 60.16 N (longest ray at ±20°: 1.2 km); E: 2.2 km to 24.99 E (longest about 2.4 km).
       const fetchN = af.sectors[0].fetch;
       const fetchE = af.sectors[2].fetch;
@@ -652,6 +656,7 @@ async function waitForServer() {
       assert.ok(fetchE > 2200 && fetchE < 2500, `E ${fetchE}`);
       assert.ok(af.sectors.every((x) => x.fetch > 0));
       await page.unroute('https://overpass-api.de/**');
+      await page.unroute('https://overpass.private.coffee/**');
       // I110: depths along the rays (EMODnet mocked: 4.2 m everywhere; SYKE not asked).
       await page.route('https://rest.emodnet-bathymetry.eu/**', (route) => route.fulfill({ json: new Array(1000).fill(-4.2) }));
       await tool.getByRole('button', { name: 'Find depths along the fetches', exact: true }).click();
