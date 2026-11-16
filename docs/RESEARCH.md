@@ -834,6 +834,18 @@ taut chain of length c·h lets the buoy move √(c² − 1)·h towards the pier 
   request returned `access-control-allow-origin: *` (browser use works). Rate limits are per IP:
   from this development environment's shared address the daily limit was already used up, so the
   tests use a mocked answer.
+- **Live test (2026-11-16)** of the tool's own `fetchWindHistory` + `windClimate` from the
+  development environment, 1996–2025, `models=era5`, `cell_selection=sea`: six 5-year requests per site,
+  about 2 s; **262 992 hours, no missing values** at both sites.
+  - Helsinki (60.155, 24.956): cell 60.0 / 25.0 (`nearest` gives 60.25 / 25.0, so `sea` did pick
+    another cell); hours < 4 m/s 21.5 %; largest hourly wind 20.9 m/s; once-a-year 12.2–16.1 m/s and
+    50-year 16.4–20.8 m/s by sector, strongest SW–W.
+  - Iisalmi (63.558, 27.19): cell 63.5 / 27.25 for `sea`, `nearest` **and** `land` alike, i.e. there is
+    no sea cell near an inland lake and the nearest (land) cell is used; hours < 4 m/s **74.5 %**;
+    largest hourly wind in 30 years **10.2 m/s**; once-a-year 6.2–7.6 m/s, 50-year 8.1–10.3 m/s.
+  - The Iisalmi winds are those of a 0.25° cell that is mostly forest; the wind over the open lake is
+    not known from this. Checking against FMI observations (handoff item 6) is needed before
+    ERA5 winds are used for lakes.
 
 
 ---
@@ -916,6 +928,12 @@ date 14.11.2014), read for the breakwater proposal (DECISIONS D48):
   the attribution with the lookup.
 - From this development environment the main instance reset the TLS connection, so the query is tested
   with mocked answers only (unit tests and the end-to-end test), as Open-Meteo was (§10).
+- 2026-11-16: the main instance still resets the connection from the development environment (also a
+  plain `HEAD /`). The other public instances listed on the OSM wiki page "Overpass API" (read
+  2026-11-16) were not in the environment's allowed hosts; `overpass.private.coffee` (*"Previously known
+  as overpass.kumi.systems. Feel free to use our service in any project, there is no rate limit in
+  place"*) was added to the environment for a live test, which was not run in this session (the
+  session's permission check stopped the request). The tool itself still asks only the main instance.
 
 ## 14. Water levels: FMI and SYKE open data (read 2026-11-15)
 
