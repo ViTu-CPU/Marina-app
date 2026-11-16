@@ -205,6 +205,7 @@ describe('project file (SPEC §2: JSON export/import)', () => {
       stationClimate: null,
       climateChoice: 'larger',
       autoFetch: null,
+      autoDepth: null,
     });
     // D47: sectors and criteria are kept; wrong sector count or negative fetch refused.
     const own = emptySectors();
@@ -221,6 +222,12 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     const af = parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoFetch })));
     expect(af.ok && af.project.waves.autoFetch).toEqual(autoFetch);
     expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoFetch: { ...autoFetch, distances: [1, 2] } }))).ok).toBe(false);
+    // I110: the depth lookup is kept; a wrong sector count or source is refused.
+    const autoDepth = { position: { lat: 63.57, lon: 27.22 }, fetchedOn: '2026-11-16', sectors: [{ depth: 3.6, source: 'syke', coverage: 0.6 }, null, null, null, { depth: 8.2, source: 'emodnet', coverage: 0.8 }, null, null, null] };
+    const ad = parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoDepth })));
+    expect(ad.ok && ad.project.waves.autoDepth).toEqual(autoDepth);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoDepth: { ...autoDepth, sectors: [null] } }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => ((p as Record<string, unknown>).waves = { autoDepth: { ...autoDepth, sectors: autoDepth.sectors.map((x) => (x ? { ...x, source: 'gebco' } : x)) } }))).ok).toBe(false);
     // D41: position and fetched wind climate are kept.
     const sector = { rose: [0.01, 0.02, 0, 0, 0], annualMax: [12, 14], oneYear: 11.5, fiftyYear: null };
     const climate = {

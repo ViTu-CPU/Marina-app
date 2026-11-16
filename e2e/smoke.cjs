@@ -521,7 +521,7 @@ async function waitForServer() {
       assert.ok(pages >= 2, `expected several pages, got ${pages}`);
     });
 
-    await step('wave screening: fetches by direction sector and winds give waves, criteria, the bad directions, FMI station winds and the shelter behind a breakwater (D40, D47, D58, I108)', async () => {
+    await step('wave screening: fetches by direction sector and winds give waves, criteria, the bad directions, FMI station winds, depths along the fetches and the shelter behind a breakwater (D40, D47, D58, I108, I110)', async () => {
       await page.getByRole('button', { name: 'Waves', exact: true }).click();
       const tool = page.getByTestId('wave-tool');
       await tool.waitFor();
@@ -647,6 +647,14 @@ async function waitForServer() {
       assert.ok(fetchE > 2200 && fetchE < 2500, `E ${fetchE}`);
       assert.ok(af.sectors.every((x) => x.fetch > 0));
       await page.unroute('https://overpass-api.de/**');
+      // I110: depths along the rays (EMODnet mocked: 4.2 m everywhere; SYKE not asked).
+      await page.route('https://rest.emodnet-bathymetry.eu/**', (route) => route.fulfill({ json: new Array(1000).fill(-4.2) }));
+      await tool.getByRole('button', { name: 'Find depths along the fetches', exact: true }).click();
+      await tool.getByTestId('auto-depth-result').waitFor();
+      const wd = await page.evaluate(() => window.__marina.getState().project.waves);
+      assert.deepEqual(wd.sectors.map((x) => x.depth), new Array(8).fill(4.2));
+      assert.equal(wd.autoDepth.sectors[0].source, 'emodnet');
+      await page.unroute('https://rest.emodnet-bathymetry.eu/**');
       await page.screenshot({ path: path.join(outDir, 'waves.png'), fullPage: true });
       await tool.getByRole('button', { name: 'Close', exact: true }).click();
       assert.equal(await page.getByTestId('wave-tool').count(), 0);

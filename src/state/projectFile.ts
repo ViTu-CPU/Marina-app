@@ -4,7 +4,7 @@
 import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type Seabed } from '../engine/anchoring';
 import { BREAKWATERS } from '../engine/breakwater';
 import type { CharacteristicLevels, WaterLevelInfo } from '../engine/waterLevels';
-import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type AutoFetch, type WaveSettings } from '../engine/waves';
+import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type AutoDepth, type AutoFetch, type WaveSettings } from '../engine/waves';
 import { SECTORS, type WindClimate } from '../engine/wind';
 import { PRODUCT_CATEGORIES, PRODUCT_UNITS, type PriceList, type Product } from '../engine/catalog';
 import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
@@ -389,6 +389,8 @@ function waveSettings(v: unknown): WaveSettings {
     stationClimate: o.stationClimate === undefined || o.stationClimate === null ? null : windClimateOf(o.stationClimate, 'waves.stationClimate'),
     climateChoice: o.climateChoice === undefined ? 'larger' : oneOf(o.climateChoice, ['era5', 'station', 'larger'] as const, 'waves.climateChoice'),
     autoFetch: o.autoFetch === undefined || o.autoFetch === null ? null : autoFetchOf(o.autoFetch),
+    // I110: missing in older files.
+    autoDepth: o.autoDepth === undefined || o.autoDepth === null ? null : autoDepthOf(o.autoDepth),
   };
 }
 
@@ -434,6 +436,19 @@ function latLon(v: unknown, path: string): { lat: number; lon: number } {
   const lon = num(o.lon, `${path}.lon`);
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) fail(`${path} is not a valid position`);
   return { lat, lon };
+}
+
+/** I110: a saved lookup of the depths along the fetches. */
+function autoDepthOf(v: unknown): AutoDepth {
+  const o = obj(v, 'waves.autoDepth');
+  const sectors = arr(o.sectors, 'waves.autoDepth.sectors').map((item, i) => {
+    if (item === null) return null;
+    const p = `waves.autoDepth.sectors[${i}]`;
+    const e = obj(item, p);
+    return { depth: num(e.depth, `${p}.depth`), source: oneOf(e.source, ['emodnet', 'syke'] as const, `${p}.source`), coverage: num(e.coverage, `${p}.coverage`) };
+  });
+  if (sectors.length !== WAVE_SECTORS.length) fail(`waves.autoDepth.sectors must have ${WAVE_SECTORS.length} sectors`);
+  return { position: latLon(o.position, 'waves.autoDepth.position'), fetchedOn: str(o.fetchedOn, 'waves.autoDepth.fetchedOn'), sectors };
 }
 
 /** D41: a saved wind climate (summary of a fetched record). */

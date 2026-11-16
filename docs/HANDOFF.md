@@ -18,7 +18,7 @@ mainista uuteen haaraan.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D62, I110, U26**).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D62, I111, U26**).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
   (vahvistettu, D54): aallonkorkeudet 2 desimaalilla.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
@@ -28,7 +28,7 @@ mainista uuteen haaraan.
   NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt`.
 
 ## Tilanne (2026-11-16, viidennen istunnon jälkeen)
-Testit 474/474, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset D53–D59):
+Testit 479/479, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset D53–D59):
 
 1. **Vastaukset** (D53–D56): aisalaituri pysyy oletuksena; aallonkorkeudet 2 desimaalilla
    vahvistettu; ankkurimalli kalibroidaan; Iisalmen mitoitustietoja ei ole.
@@ -70,7 +70,8 @@ Testit 474/474, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset
    istuntoon, niin ankkurointivertailua voi täydentää.
 4. **Kulkusillan leveys tuotteesta: tehty (I109).** Laiturimuurin korkeus MML:n korkeusmallista on
    kesken: MML:n korkeusmallien kyselypalvelu (WCS) vaatii henkilökohtaisen API-avaimen.
-5. **Syvyys avovesimatkalla** syvyysaineistosta (esim. Traficomin avoimet aineistot).
+5. **Syvyys avovesimatkalla: tehty (I110).** "Find depths along the fetches": merellä EMODnet, järvillä
+   SYKEn syvyysvyöhykkeet. Avoin kysymys: SYKE pyytää sovelluksilta tunnisteen WFS-käyttöön (gis-tuki).
 6. **Hinnaston aukot**: Marinetekin tarjous (Premier, aallonmurtajat, sormet, puomit), paalut,
    A-Laiturit G40 -ketjun murtokuorma, asennuksen tuntimenekit ja työveneen hinta (oletuksia), Top
    Marinen MD-paketin ristiriitainen hinta.
@@ -83,5 +84,6 @@ Testit 474/474, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset
 ## Ympäristö
 Tässä istunnossa sallittuihin palvelimiin lisättiin overpass.private.coffee, yle.fi, bluet.fi,
 kyst.dk, ruokolahti.fi, ouka.fi, pyhtaa10.oncloudos.com, asiakirjat.kustavi.fi ja
-naantali.oncloudos.com. Aiemmin lisättyjä ovat muun muassa overpass-api.de, opendata.fmi.fi,
+naantali.oncloudos.com sekä syvyyshakua varten julkinen.traficom.fi, paikkatiedot.ymparisto.fi ja
+rest.emodnet-bathymetry.eu. Aiemmin lisättyjä ovat muun muassa overpass-api.de, opendata.fmi.fi,
 rajapinnat.ymparisto.fi, archive-api.open-meteo.com, batunionen.se, marinetek.hr ja wbdg.org.

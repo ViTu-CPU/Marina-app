@@ -918,6 +918,27 @@ taut chain of length c·h lets the buoy move √(c² − 1)·h towards the pier 
   Kaisaniemi 2016–2025, 16.0 m/s. ERA5 (1 h): Iisalmi 10.2 m/s and 8.1–10.3 m/s, Helsinki sea cell
   20.9 m/s and 16.4–20.8 m/s.
 
+### 10.2 Open depth data for the fetches (read 2026-11-16)
+
+- **EMODnet Bathymetry REST** ([EMODnet web services](https://emodnet.ec.europa.eu/en/emodnet-web-service-documentation)):
+  `https://rest.emodnet-bathymetry.eu/depth_sample?geom=POINT(lon lat)` answers e.g.
+  `{"min":-19.27,"max":-19.27,"avg":-19.27, … "reference":{"identifier":"FINCHART","type":"DTM"}}` off
+  Helsinki; `depth_profile?geom=LINESTRING(…)` answers 1 000 values along the line. Negative = depth,
+  positive = land (inland at Iisalmi `"avg":92.63`): the model covers the sea only. CORS: the answer
+  echoes the page's origin.
+- **SYKE INSPIRE elevation WFS** `https://paikkatiedot.ymparisto.fi/geoserver/inspire_el/wfs` (listed by
+  SYKE among its WFS services; dataset "Järvien ja jokien luotauspisteet",
+  [ckan.ymparisto.fi](https://ckan.ymparisto.fi/en/dataset/jarvien-ja-jokien-luotauspisteet), CC BY 4.0):
+  feature types `EL.Syvyysalue`, `EL.ContourLine`, `EL.SpotElevation`. `EL.Syvyysalue` has `syvyysvali_m`
+  ("0-1,5", "1,5-3", "3-6", "6-10", "10-15", "15-20"; "Saari" for islands), the survey area and lake codes
+  and `geom` (MultiSurface, EPSG:3067). Near Iisalmi: Kilpijärvi, Tismiö, Viitaanjärvi, Ylemmäinen (not
+  Porovesi). `Access-Control-Allow-Origin: *`. SYKE's page asks applications to request an identifier from
+  its GIS support for the WFS; not done (open question).
+- **Traficom open WFS** `https://julkinen.traficom.fi/inspirepalvelu/avoin/wfs`: layers include
+  `avoin:d_alueet` and harbour structures (`Pontoon_A`, `Berths_L`); not used (EMODnet's Finnish data is
+  FINCHART). Licence CC BY 4.0 with Traficom's attribution
+  ([bathymetric data](https://traficom.fi/en/hydrography/hydrographic-data-services/bathymetric-data)).
+
 ## 11. AS 3962-2001 *Guidelines for design of marinas* (read 2026-11-15)
 
 The owner supplied a copy of AS 3962-2001 and asked that it be used to check and update the

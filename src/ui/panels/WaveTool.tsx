@@ -25,6 +25,7 @@ import type { StringKey } from '../../i18n';
 import { sectorFetches, RAY_STEP_DEG } from '../../engine/fetchRays';
 import { parseLatLon } from '../../state/geo';
 import { lookupFetch, OSM_SOURCE } from '../../state/overpass';
+import { DEPTH_SOURCES, lookupFetchDepths } from '../../state/depth';
 import { fetchWindHistory } from '../../state/openMeteo';
 import { completeYears, fetchStationWind, findWindStations, FMI_WIND_SOURCE, MIN_YEAR_COVERAGE, type WindStation } from '../../state/fmiWind';
 import { appStore, useAppStore } from '../../state/store';
@@ -120,6 +121,72 @@ function AutoFetchSection() {
         </p>
       )}
       <p className="text-xs text-slate-500">{t('autoFetch.note')}</p>
+      <DepthLookup />
+    </div>
+  );
+}
+
+/** I110: mean depth along each sector's ray from EMODnet (sea) or SYKE's lake depth zones. */
+function DepthLookup() {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const waves = useAppStore((s) => s.project.waves);
+  const { position } = useSitePosition();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const af = waves.autoFetch;
+  const from = af?.position ?? position;
+  const hasFetch = waves.sectors.some((x) => x.fetch > 0);
+  const run = async () => {
+    if (!from) return;
+    setError(null);
+    setBusy(t('autoDepth.running'));
+    try {
+      // The ray of each sector: the longest of the map lookup (I94), else the sector's centre.
+      const longest = af ? sectorFetches(af.distances, af.radius, af.stepDeg) : null;
+      const rays = waves.sectors.map((x, k) => ({ bearing: longest?.[k]?.fetch ? longest[k]!.bearing : waveSectorBearing(k), fetch: x.fetch }));
+      const found = await lookupFetchDepths(from.lat, from.lon, rays, { onProgress: (d, n) => setBusy(`${t('autoDepth.running')} ${d} / ${n}`) });
+      const latest = appStore.getState().project.waves;
+      state().setWaves({
+        sectors: latest.sectors.map((x, k) => (found[k] ? { ...x, depth: Math.round(found[k]!.depth * 10) / 10 } : x)),
+        autoDepth: { position: { lat: from.lat, lon: from.lon }, fetchedOn: new Date().toISOString().slice(0, 10), sectors: found.map((f) => (f ? { depth: f.depth, source: f.source, coverage: f.coverage } : null)) },
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const ad = waves.autoDepth;
+  return (
+    <div className="space-y-1 pt-1" data-testid="auto-depth">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+        <Button disabled={!from || !hasFetch || busy !== null} onClick={() => void run()}>
+          {t('autoDepth.run')}
+        </Button>
+        {busy && (
+          <span role="status" className="animate-pulse text-xs text-sky-800">
+            {busy}
+          </span>
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-red-700">
+          {t('autoDepth.error')} {error}
+        </p>
+      )}
+      {ad && (
+        <p className="text-xs text-slate-600" data-testid="auto-depth-result">
+          {t('autoDepth.done')} ({ad.fetchedOn}):{' '}
+          {WAVE_SECTORS.map((name, k) => {
+            const x = ad.sectors[k];
+            return `${name} ${x ? `${formatLength(x.depth, language)} m (${x.source === 'emodnet' ? 'EMODnet' : 'SYKE'})` : '–'}`;
+          }).join(', ')}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">
+        {t('autoDepth.note')} {DEPTH_SOURCES.emodnet}; {DEPTH_SOURCES.syke}.
+      </p>
     </div>
   );
 }

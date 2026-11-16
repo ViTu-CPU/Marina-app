@@ -286,6 +286,17 @@ export interface WaveSettings {
   climateChoice: ClimateChoice;
   /** D47: the last automatic fetch lookup, or null. */
   autoFetch: AutoFetch | null;
+  /** I110: the last lookup of the depths along the fetches, or null. */
+  autoDepth: AutoDepth | null;
+}
+
+/** I110: mean depths along the sectors' rays from open data (copied into the sectors' depths). */
+export interface AutoDepth {
+  /** Position the rays start from, degrees. */
+  position: { lat: number; lon: number };
+  fetchedOn: string;
+  /** Per sector: the depth found, its source and the share of the ray it covers; null = not found. */
+  sectors: ({ depth: number; source: 'emodnet' | 'syke'; coverage: number } | null)[];
 }
 
 /** Nothing entered yet; 10-min winds (FMI observations, Eurocode basic wind), a "good" climate, AS 3962 criteria. */
@@ -302,6 +313,7 @@ export const DEFAULT_WAVES: WaveSettings = {
   stationClimate: null,
   climateChoice: 'larger',
   autoFetch: null,
+  autoDepth: null,
 };
 
 /**
