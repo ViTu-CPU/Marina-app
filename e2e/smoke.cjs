@@ -467,17 +467,25 @@ async function waitForServer() {
       await page.screenshot({ path: path.join(outDir, 'cost.png') });
     });
 
-    await step('anchor type: wedge anchors need lighter anchors than blocks; splay angle; reset keeps site values and type (I59, U19, D25)', async () => {
+    await step('anchor type: wedge anchors need lighter anchors than blocks, as the comparison row says; splay angle; reset keeps site values and type (I59, I102, U19, D25)', async () => {
       const largest = async () => {
         const text = await page.getByText('Largest anchor needed', { exact: true }).locator('xpath=following-sibling::span').textContent();
         return Number(text.replace(/[^\d]/g, ''));
       };
+      // I102: the plan also shows the anchors with the other type.
+      const other = page.getByTestId('anchoring-other-type');
+      const otherLargest = async () => Number((await other.textContent()).match(/largest ([\d,]+) kg/)[1].replace(/,/g, ''));
+      assert.match(await other.textContent(), /^With concrete wedges instead/);
+      const predictedWedgeKg = await otherLargest();
       const blockKg = await largest();
       await page.getByText('Anchoring parameters', { exact: true }).click();
       await page.getByRole('combobox', { name: 'Anchor type' }).selectOption('wedge');
       await page.waitForFunction(() => window.__marina.getState().project.anchoring.anchorType === 'wedge');
       const wedgeKg = await largest();
       assert.ok(wedgeKg > 0 && wedgeKg < blockKg, `wedge ${wedgeKg} kg should be below block ${blockKg} kg`);
+      assert.equal(wedgeKg, predictedWedgeKg);
+      assert.match(await other.textContent(), /^With concrete blocks instead/);
+      assert.equal(await otherLargest(), blockKg);
       await page.getByLabel('Design water depth (m)', { exact: true }).fill('6');
       await page.getByLabel('Drag coefficient', { exact: true }).fill('1.2');
       // Square chains leave the wind along the piers unheld (D25).

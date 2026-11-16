@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   anchoringPlan,
+  anchorTotals,
   waveAction,
   chainLengthFor,
   chainLine,
@@ -635,6 +636,21 @@ describe('anchoring plan of a pier', () => {
     expect(line.chainLength).toBeCloseTo(22, 9);
     expect(line.requiredAnchorKg).toBeCloseTo(requiredAnchorMass(line.horizontalKn * 1000, line.upliftKn * 1000, rock), 6);
     expect(onRock.issues.some((i) => i.code === 'WEDGE_NOT_ON_ROCK')).toBe(true);
+    // I102: no comparison on rock (no wedge tables).
+    expect(onRock.comparison).toBeUndefined();
+  });
+
+  it('compares the anchors with the other anchor type (I102)', () => {
+    const input = { layout: { piers: [pier], berths }, site: pierSite, classes: [boat], priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 };
+    const wedge = anchoringPlan({ ...input, params: { ...params, anchorType: 'wedge' } });
+    expect(plan.comparison).toEqual({ current: anchorTotals(plan.lines, 'block'), other: anchorTotals(wedge.lines, 'wedge') });
+    expect(wedge.comparison).toEqual({ current: anchorTotals(wedge.lines, 'wedge'), other: anchorTotals(plan.lines, 'block') });
+    const total = plan.lines.filter((l) => l.fixing === 'seabed').reduce((s, l) => s + l.requiredAnchorKg, 0);
+    expect(plan.comparison!.current.totalKg).toBeCloseTo(total, 6);
+    expect(plan.comparison!.other.longestChainM).toBeGreaterThan(plan.comparison!.current.longestChainM);
+    // Without waves no note; turned off, no comparison.
+    expect(plan.issues.some((i) => i.code === 'WAVE_LOAD_PLAIN_BLOCKS')).toBe(false);
+    expect(anchoringPlan({ ...input, params, compareAnchorTypes: false }).comparison).toBeUndefined();
   });
 });
 

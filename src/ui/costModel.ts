@@ -3,13 +3,16 @@
  * the project and the price list. Like fairways and issues, nothing here is stored.
  */
 import { useMemo } from 'react';
-import { anchoringPlan, type AnchoringResult } from '../engine/anchoring';
+import { anchoringPlan, type AnchoringResult, type AnchorTotals } from '../engine/anchoring';
 import { costEstimate, resolveChoices, type CostEstimate, type ResolvedChoices } from '../engine/bom';
 import { DEFAULT_VAT_PCT, parameter, type PriceList } from '../engine/catalog';
 import type { Layout, Project } from '../engine/model';
 import { pierAxis } from '../engine/rows';
 import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../engine/waves';
+import type { Language } from '../i18n';
+import type { StringKey } from '../i18n';
 import { useAppStore } from '../state/store';
+import { formatCount, formatLength } from './format';
 
 export interface CostModel {
   priceList: PriceList;
@@ -26,6 +29,11 @@ export function waveInput(project: Project, layout: Layout): { from: number[]; e
   const from = project.waves.sectors.flatMap((x, k) => (x.fetch > 0 ? [waveSectorBearing(k)] : []));
   const assessment = waveAssessment(project.waves, project.anchoring.depth, layout.piers.map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) })));
   return { from, exceeding: (assessment?.bad ?? []).map((k) => WAVE_SECTORS[k]!) };
+}
+
+/** I102: "12 345 kg (largest 3 260 kg, chains up to 47.0 m)" for the other anchor type. */
+export function otherTypeText(o: AnchorTotals, t: (key: StringKey) => string, language: Language): string {
+  return `${formatCount(o.totalKg, language)} kg (${t('anchoring.largest')} ${formatCount(o.maxKg, language)} kg, ${t('anchoring.chainsUpTo')} ${formatLength(o.longestChainM, language)} m)`;
 }
 
 /** The price list in use: the project's imported one, else the built-in one. */

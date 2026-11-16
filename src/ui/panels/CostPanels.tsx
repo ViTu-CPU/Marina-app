@@ -7,7 +7,7 @@ import { BOM_GROUPS, seriesNames, type BomGroup } from '../../engine/bom';
 import type { Layout } from '../../engine/model';
 import { parsePriceListFile, priceListToXlsx } from '../../catalog/priceList';
 import { appStore, useAppStore } from '../../state/store';
-import { useCostModel, type CostModel } from '../costModel';
+import { otherTypeText, useCostModel, type CostModel } from '../costModel';
 import { bomWorkbook } from '../export/bomXlsx';
 import { downloadBytes, readFileAsBytes, safeFileName, XLSX_MIME } from '../export/download';
 import { formatCount, formatEuro, formatKn, formatLength } from '../format';
@@ -307,6 +307,19 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
           <span className="text-slate-600">{t('anchoring.maxMass')}</span>
           <span>{formatCount(maxMass, language)} kg</span>
         </div>
+        {anchoring.comparison && (
+          <>
+            <div className="flex justify-between">
+              <span className="text-slate-600">{t('anchoring.totalMass')}</span>
+              <span>{formatCount(anchoring.comparison.current.totalKg, language)} kg</span>
+            </div>
+            {/* I102: the same plan with the other anchor type. */}
+            <div className="flex justify-between gap-2" data-testid="anchoring-other-type">
+              <span className="text-slate-600">{t(`anchoring.ifOther.${anchoring.comparison.other.anchorType}`)}</span>
+              <span className="text-right">{otherTypeText(anchoring.comparison.other, t, language)}</span>
+            </div>
+          </>
+        )}
         {buoys.length > 0 && (
           <>
             <div className="flex justify-between">

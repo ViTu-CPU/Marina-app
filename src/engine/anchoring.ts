@@ -245,6 +245,12 @@ export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
 });
 
 const G = 9.81;
+/**
+ * I102: blocks needing more than this many times the wedges' anchor mass under the wave load get
+ * the WAVE_LOAD_PLAIN_BLOCKS note (Assumption: twice is where the choice of anchor type matters more
+ * than the other uncertain factors).
+ */
+export const WAVE_BLOCK_RATIO = 2;
 /** Largest splay angle accepted, degrees. */
 export const MAX_SPLAY_ANGLE = 80;
 
@@ -421,6 +427,30 @@ export interface FingerPile {
   guide: PileGuideId | null;
 }
 
+/**
+ * I102: the seabed anchors of a plan in one figure: required mass in air of the anchors of piers
+ * and access pontoons (stern-buoy sinkers excluded; they do not depend on the anchor type).
+ */
+export interface AnchorTotals {
+  anchorType: AnchorType;
+  /** Sum of the required anchor masses, kg. */
+  totalKg: number;
+  /** Largest required anchor mass of one line, kg. */
+  maxKg: number;
+  /** Longest chain of those lines, m. */
+  longestChainM: number;
+}
+
+export function anchorTotals(lines: readonly AnchorLine[], anchorType: AnchorType): AnchorTotals {
+  const own = lines.filter((l) => l.fixing === 'seabed' && l.role !== 'buoy');
+  return {
+    anchorType,
+    totalKg: own.reduce((s, l) => s + l.requiredAnchorKg, 0),
+    maxKg: own.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0),
+    longestChainM: own.reduce((m, l) => Math.max(m, l.chainLength), 0),
+  };
+}
+
 export interface AnchoringResult {
   lines: AnchorLine[];
   /** End piles of fingers longer than `fingerPileMinLength` (D31); not priced. */
@@ -428,6 +458,11 @@ export interface AnchoringResult {
   /** Per pier / access pontoon: design wind loads across (larger side) and along the pier, kN. */
   loads: { id: string; lateralKn: number; axialFromSeaKn: number; axialFromShoreKn: number }[];
   issues: Issue[];
+  /**
+   * I102: the same plan's anchors with the other anchor type (block ↔ wedge), for comparison;
+   * missing on rock (no wedge tables), without seabed anchors, or when not asked for.
+   */
+  comparison?: { current: AnchorTotals; other: AnchorTotals };
 }
 
 export interface AnchoringInput {
@@ -450,6 +485,8 @@ export interface AnchoringInput {
    * whose waves exceed the criteria. Missing = no waves.
    */
   waves?: { from: readonly number[]; exceeding: readonly string[] };
+  /** I102: also size the anchors with the other anchor type for comparison (default true). */
+  compareAnchorTypes?: boolean;
 }
 
 /** Compass bearing of a direction in plan (x east, y north), degrees. */
@@ -1325,6 +1362,15 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       item.id,
     );
   }
+  // I102: the other anchor type, for comparison (not on rock: the wedge tables cover clay and sand).
+  let comparison: AnchoringResult['comparison'];
+  const current = anchorTotals(lines, usesWedge(p) ? 'wedge' : 'block');
+  if (input.compareAnchorTypes !== false && p.seabed !== 'rock' && current.totalKg > 0) {
+    const otherType: AnchorType = p.anchorType === 'wedge' ? 'block' : 'wedge';
+    const alt = anchoringPlan({ ...input, params: { ...p, anchorType: otherType }, compareAnchorTypes: false });
+    comparison = { current, other: anchorTotals(alt.lines, otherType) };
+  }
+
   if (waveNotes.length > 0) {
     warn(
       'WAVE_LOAD',
@@ -1336,10 +1382,19 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
         `The waves from ${input.waves!.exceeding.join(', ')} exceed the wave climate criteria; AS 3962's 2 kN/m is a minimum "for the wave criteria given in Table 4.2". Larger waves need a specific wave load analysis (and probably wave protection).`,
       );
     }
+    // I102: with the wave load, plain blocks holding by friction become several times heavier
+    // than shaped anchors that dig in.
+    if (comparison && comparison.current.anchorType === 'block' && comparison.current.totalKg > WAVE_BLOCK_RATIO * comparison.other.totalKg) {
+      const t = (kg: number) => (kg / 1000).toFixed(1);
+      warn(
+        'WAVE_LOAD_PLAIN_BLOCKS',
+        `With the wave load, plain concrete blocks holding by friction need ${t(comparison.current.totalKg)} t of anchors (largest ${t(comparison.current.maxKg)} t); concrete wedges (Pearl Harbor type, Sound & Sea Technology 2009 Tables 35–36) would need ${t(comparison.other.totalKg)} t (largest ${t(comparison.other.maxKg)} t) with chains up to ${comparison.other.longestChainM.toFixed(1)} m. Shaped or embedded anchors that dig into the seabed hold several times their friction; choose the anchor type with the designer and the installer.`,
+      );
+    }
   }
   warn(
     'ANCHORING_NOT_A_DESIGN',
     `Preliminary quantity estimate from wind${waveNotes.length > 0 ? ' and the AS 3962 minimum wave load' : ' only'}. ${waveNotes.length > 0 ? 'Wave dynamics' : 'Waves'}, ice, currents, berthing loads and the capacity of the pontoon fixings are not calculated. Requires design by a qualified engineer (e.g. RIL 201-3-2013, AS 3962).`,
   );
-  return { lines, piles, loads, issues };
+  return { lines, piles, loads, issues, ...(comparison ? { comparison } : {}) };
 }

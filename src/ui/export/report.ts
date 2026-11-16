@@ -13,7 +13,7 @@ import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../.
 import { targetCount } from '../../engine/targets';
 import { translate, type Language, type StringKey } from '../../i18n';
 import { comparisonRows } from '../compare';
-import type { CostModel } from '../costModel';
+import { otherTypeText, type CostModel } from '../costModel';
 import { formatCount, formatEuro, formatKn, formatLength } from '../format';
 import { groupIssues } from '../issueGroups';
 
@@ -318,6 +318,12 @@ export function buildReportHtml(input: ReportInput): string {
         [t('anchoring.lines'), formatCount(anchoring.lines.length, language)],
         [t('anchoring.maxLine'), `${formatKn(anchoring.lines.reduce((m, l) => Math.max(m, l.horizontalKn), 0), language)} kN`],
         [t('anchoring.maxMass'), `${formatCount(anchoring.lines.filter((l) => l.role !== 'buoy').reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0), language)} kg`],
+        ...(anchoring.comparison
+          ? ([
+              [t('anchoring.totalMass'), `${formatCount(anchoring.comparison.current.totalKg, language)} kg`],
+              [t(`anchoring.ifOther.${anchoring.comparison.other.anchorType}`), otherTypeText(anchoring.comparison.other, t, language)],
+            ] as [string, string][])
+          : []),
         ...(anchoring.lines.some((l) => l.role === 'buoy')
           ? ([
               [t('anchoring.buoys'), formatCount(anchoring.lines.filter((l) => l.role === 'buoy').length, language)],

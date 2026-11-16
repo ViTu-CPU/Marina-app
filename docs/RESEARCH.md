@@ -379,6 +379,14 @@ parameter is shown with its source or marked **assumption**.
    on sand, 0.9 t as wedges on clay and 0.7 t on sand; anchors per metre of pier 1.55, 0.83,
    0.17 and 0.13 t (before: 1.61, 0.86, 0.18, 0.13 t); wedge chains about 44 m (clay) and 40 m
    (sand). The total hardly changes; the peak loads at the heads are spread over all lines.
+   **Against the reference drawing (DECISIONS D55, I102, 2026-11-16):** the owner's drawing of the
+   Iisalmi breakwater (100 m of 20 m pontoons, 20 chains at about 45°, anchors of 3 200 kg, 22 mm
+   Grade 40 chains of 30 m; design data not available, D56) modelled as a 99.5 m pier of five
+   19.90 m modules gives the same 20 chains. Largest anchor per chain on clay at an assumed design
+   depth of 4 m: plain blocks 3.55 t for wind alone, 29.9 t with the AS 3962 minimum wave load of
+   2 kN/m across; wedges 0.39 t and 3.26 t. The drawing's anchors are thus of the order of plain
+   blocks under wind alone, or of anchors that dig in under the wave load. The anchoring plan shows
+   both anchor types since this step.
 10. **Stern buoys (D36, D37, I78–I85).** One sinker per buoy, straight below it, from Svenska
    Båtunionen's table by boat displacement (default; §9.14), Top Marine's table (§9.13) or factor
    × boat weight; one row up in an exposed harbour; chain max(1.41 × design depth, depth at high
@@ -535,6 +543,14 @@ anchors should be used with caution."*
   3.87 kips per US ton at 0° up angle, 2.65 at 6°. I.e. a working capacity of about 1.0 × the
   anchor's weight in air in mud, against about 0.12 × for a plain block with μ = 0.3 and
   FS 1.5. This is the main quantified reason for the gap to practice (§5 item 9).
+- Re-read 2026-11-16 (A-1.1, A-1.2, Tables 33–36; [Tethys/PNNL](https://tethys.pnnl.gov/sites/default/files/publications/Advanced-Anchor-and-Mooring-Study.pdf)):
+  the formulas above are as printed. A-1.2 adds *"keying skirts"*, which *"adds substantially to the
+  capacity of a deadweight anchor"* (cohesive: the same formula with the skirt depth z<sub>s</sub>);
+  A-1.2 also: *"for a seafloor sloping toward an anchored object, the anchor capacity is reduced,
+  reaching zero as the tangent of the slope angle reaches the effective coefficient of friction"*.
+  Savorak's 3 000 kg block worked through the cohesive formula: equivalent friction 0.26–0.39
+  (DECISIONS I102). The NAVFAC *Handbook for Marine Geotechnical Engineering* (SP-2209-OCN, 2012;
+  DTIC ADA556807), on which such procedures rest, could not be read: DTIC answered 403.
 
 ### 9.6 Vaasa 2020
 
