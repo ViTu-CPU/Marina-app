@@ -145,7 +145,7 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 - Wave screening by eight direction sectors (N … NW), each with its own fetch (0 = no open
   water), depth and winds; CEM growth, AS 3962-2001 Table 4.2 criteria (head, oblique and beam
   seas; UFC 4-152-07 selectable); every direction that exceeds the criteria is listed.
-- Fetches measured from the OpenStreetMap shoreline (Overpass API), rays every 5° drawn on the
+- Fetches measured from OpenStreetMap water areas (VersaTiles vector tiles), rays every 5° drawn on the
   map; wind climate from ERA5 (Open-Meteo), per sector.
 - Proposal of a Marinetek floating breakwater (3300, 3300K, 3800, 4300K, 5300K) from the
   brochures' attenuation diagrams, or "none fits".
@@ -220,10 +220,10 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   real installations take that load is not documented publicly (docs/DECISIONS.md I49,
   I54–I61, D25, D46). Nothing is checked against RIL 201-3-2013; AS 3962-2001 is used for
   advisory checks only.
-- The automatic fetch and the water-level lookups need the Overpass API, FMI and SYKE services
-  in the browser; the fetch lookup was tested only with mocked answers. It asks
-  overpass.private.coffee first and overpass-api.de if that fails; when no ray meets a shore,
-  the fetches are left unchanged and the error says what the map answer held (I112).
+- The automatic fetch and the water-level lookups need the VersaTiles tile server, FMI and SYKE
+  services in the browser. The fetch is measured from OpenStreetMap water polygons in vector
+  tiles (tiles.versatiles.org, a free demo server without guarantees); the position must be in
+  the water (I113).
 - Costs come from public list prices and stated assumptions (labour output, work-boat
   rate, Marinetek prices); they are a feasibility-stage estimate, not a quote.
 - No environmental constraints.

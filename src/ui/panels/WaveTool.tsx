@@ -24,7 +24,7 @@ import { sectorBearing, windClimate } from '../../engine/wind';
 import type { StringKey } from '../../i18n';
 import { sectorFetches, RAY_STEP_DEG } from '../../engine/fetchRays';
 import { parseLatLon } from '../../state/geo';
-import { lookupFetch, osmSource, OVERPASS_URLS, type FetchLookup } from '../../state/overpass';
+import { lookupWaterFetch, VT_SOURCE, type WaterFetchLookup } from '../../state/vectorTiles';
 import { DEPTH_SOURCES, lookupFetchDepths } from '../../state/depth';
 import { fetchWindHistory } from '../../state/openMeteo';
 import { completeYears, fetchStationWind, findWindStations, FMI_WIND_SOURCE, MIN_YEAR_COVERAGE, type WindStation } from '../../state/fmiWind';
@@ -65,10 +65,10 @@ function AutoFetchSection() {
   const [radiusKm, setRadiusKm] = useState<number>(waves.autoFetch ? waves.autoFetch.radius / 1000 : 20);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [found, setFound] = useState<FetchLookup | null>(null);
+  const [found, setFound] = useState<WaterFetchLookup | null>(null);
   const [cancelled, setCancelled] = useState(false);
-  /** The server being asked and when (I112): shown with the seconds waited, as public servers can be slow. */
-  const [asking, setAsking] = useState<{ host: string; index: number; count: number; since: number; limitS: number } | null>(null);
+  /** Map tiles read so far and when the lookup started (I113). */
+  const [progress, setProgress] = useState<{ tiles: number; since: number } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const abort = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -82,24 +82,23 @@ function AutoFetchSection() {
     if (!position) return;
     const controller = new AbortController();
     abort.current = controller;
+    const since = Date.now();
     setBusy(true);
     setError(null);
     setFound(null);
     setCancelled(false);
+    setNow(since);
+    setProgress({ tiles: 0, since });
     try {
       const radius = radiusKm * 1000;
-      const r = await lookupFetch(position.lat, position.lon, radius, {
+      const r = await lookupWaterFetch(position.lat, position.lon, radius, {
         signal: controller.signal,
-        onServer: (server, index, timeoutMs) => {
-          const at = Date.now();
-          setNow(at);
-          setAsking({ host: new URL(server).host, index, count: OVERPASS_URLS.length, since: at, limitS: Math.round(timeoutMs / 1000) });
-        },
+        onProgress: (tiles) => setProgress({ tiles, since }),
       });
       const round = (m: number) => Math.round(m * 10) / 10;
       state().setWaves({
         sectors: waves.sectors.map((x, k) => ({ ...x, fetch: round(r.sectors[k]!.fetch) })),
-        autoFetch: { source: osmSource(r.server!), position, radius, stepDeg: RAY_STEP_DEG, distances: r.distances.map(round), fetchedOn: new Date().toISOString().slice(0, 10) },
+        autoFetch: { source: VT_SOURCE, position, radius, stepDeg: RAY_STEP_DEG, distances: r.distances.map(round), fetchedOn: new Date().toISOString().slice(0, 10) },
       });
       setFound(r);
     } catch (e) {
@@ -108,7 +107,7 @@ function AutoFetchSection() {
     } finally {
       if (abort.current === controller) abort.current = null;
       setBusy(false);
-      setAsking(null);
+      setProgress(null);
     }
   };
   const open = af ? sectorFetches(af.distances, af.radius, af.stepDeg).map((x) => x.open) : [];
@@ -133,10 +132,7 @@ function AutoFetchSection() {
           <>
             <span role="status" className="animate-pulse text-xs text-sky-800" data-testid="auto-fetch-status">
               {t('autoFetch.running')}
-              {asking &&
-                ` ${asking.host} (${asking.index + 1} / ${asking.count}), ${formatCount(Math.max(0, Math.round((now - asking.since) / 1000)), language)} s · ${
-                  asking.index + 1 < asking.count ? t('autoFetch.nextAfter') : t('autoFetch.givesUpAfter')
-                } ${formatCount(asking.limitS, language)} s`}
+              {progress && ` ${formatCount(progress.tiles, language)} ${t('autoFetch.tiles')}, ${formatCount(Math.max(0, Math.round((now - progress.since) / 1000)), language)} s`}
             </span>
             <Button onClick={() => abort.current?.abort()}>{t('autoFetch.cancel')}</Button>
           </>
@@ -157,8 +153,7 @@ function AutoFetchSection() {
       )}
       {found && (
         <p className="text-xs text-slate-600" data-testid="auto-fetch-found">
-          {t('autoFetch.found')} {formatCount(found.hits, language)} / {found.distances.length} {t('autoFetch.rays')} · {formatCount(found.stats.shore, language)}{' '}
-          {t('autoFetch.segments')} ({new URL(found.server!).host})
+          {t('autoFetch.found')} {formatCount(found.hits, language)} / {found.distances.length} {t('autoFetch.rays')} · {formatCount(found.tiles, language)} {t('autoFetch.tilesRead')}
         </p>
       )}
       <p className="text-xs text-slate-500">{t('autoFetch.note')}</p>

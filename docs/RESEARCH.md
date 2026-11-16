@@ -1047,6 +1047,41 @@ date 14.11.2014), read for the breakwater proposal (DECISIONS D48):
   72-ray queries) got no byte in 200 s. The OSM standard tile server returned 103-byte blank tiles to the
   development environment's command-line client, so the basin was drawn from the Overpass geometry only.
 
+## 13b. OpenStreetMap water polygons in vector tiles (read 2026-11-16; DECISIONS I113)
+
+- **VersaTiles** (versatiles.org; docs.versatiles.org): *"VersaTiles is fully self-hostable, requires no API
+  keys, charges no usage fees, and does not track your users."* Guide "How to use tiles.versatiles.org": *"We
+  run tiles.versatiles.org as a demo server for VersaTiles. It is free and open to everyone, but it comes
+  without any guarantees"*; *"You can access tiles directly via the URL pattern
+  https://tiles.versatiles.org/tiles/<tileset>/{z}/{x}/{y}"*; *"A tile that does not exist is answered with 404
+  and may be cached for five minutes"*; *"Requests are rate-limited per IP address. The limit is far above what
+  normal map use needs; requests beyond it are answered with 429 Too Many Requests and a Retry-After header."*;
+  *"If you use the tile URLs directly … you have to add the attribution yourself."* Tilesets page: "OSM
+  Shortbread vector 0–14 … stable"; *"OpenStreetMap data is licensed under Open Database License 1.0 and
+  requires attribution to OpenStreetMap contributors. The Shortbread schema is licensed under CC-0"*. TileJSON
+  (`/tiles/osm/tiles.json`): layers include `ocean` (z0–14), `water_polygons` (z4–14), `land`, `pier_polygons`.
+  Tile answers: `content-type: application/vnd.mapbox-vector-tile`, `cache-control: public, max-age=21600`,
+  `access-control-allow-origin: *`.
+- **Shortbread schema 1.0** (shortbread-tiles.org/schema/1.0): *"Layer “ocean” This layer contains oceans. There
+  are no attributes."*; `water_polygons`: glaciers, `natural=water` (and rivers), `waterway=riverbank`,
+  `landuse=reservoir`, `landuse=basin` from z4, `waterway=dock` and `waterway=canal` from z10; *"Shortbread vector
+  tiles have a minzoom of 0 and a maxzoom of 14. Higher client zooms are achieved with overzoomed zoom 14
+  tiles."*
+- **OpenFreeMap** (openfreemap.org, Terms of Service updated October 14, 2026): *"Using our public instance is
+  completely free: there are no limits on the number of map views or requests. There’s no registration, no user
+  database, no API keys, and no cookies."* But under User Conduct: *"You will not: … Collect data from the service
+  in automated ways, except for offline downloads as described below"* (each download *"at most 3,000 tiles or
+  50 MB"*, *"at most 4 parallel requests"*, *"a unique User-Agent identifying your app"*). Schema: unmodified
+  OpenMapTiles (`water` layer, z0–14). Not used (I113).
+- **MML** (avoin-karttakuva.maanmittauslaitos.fi): WMTS and vector tiles answer `401 Unauthorized`,
+  `WWW-Authenticate: Basic realm="API-key required to access"` without a key (checked 2026-11-16). Not used (owner).
+- **Traficom open WFS** (julkinen.traficom.fi/inspirepalvelu/avoin/wfs, GetCapabilities 2026-11-16): 36 feature
+  types (berths, pontoons, shoreline constructions, fairway areas, chart product grids, territorial sea), no land
+  areas or shoreline; not usable for fetches.
+- Comparison at the owner's position (60.15675 N, 24.88781 E): the VersaTiles z14 tile 14/9324/4743 and the
+  OpenFreeMap tile show the same basin as the Overpass coastline way 1103221519 (I112); VersaTiles also shows the
+  basin's piers (`pier_polygons`).
+
 ## 14. Water levels: FMI and SYKE open data (read 2026-11-15)
 
 - **FMI open data** ([opendata.fmi.fi](https://opendata.fmi.fi/wfs), WFS 2.0, CC BY 4.0). Stored query
