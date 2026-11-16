@@ -13,6 +13,34 @@ const os = require('node:os');
 const path = require('node:path');
 const { chromium } = require('playwright');
 
+/**
+ * I113: a vector tile (Mapbox Vector Tile 2.1) whose `ocean` layer holds the part of the lake
+ * 60.14–60.16 N, 24.92–24.99 E that lies in tile z/x/y (clipped to the tile with a small buffer).
+ */
+async function lakeTile(z, x, y) {
+  const { PbfWriter } = await import('pbf');
+  const n = 2 ** z;
+  const tx = (lon) => ((lon + 180) / 360) * n - x;
+  const ty = (lat) => ((1 - Math.asinh(Math.tan((lat * Math.PI) / 180)) / Math.PI) / 2) * n - y;
+  const clamp = (v) => Math.round(Math.max(-0.05, Math.min(1.05, v)) * 4096);
+  const [x0, x1, y0, y1] = [clamp(tx(24.92)), clamp(tx(24.99)), clamp(ty(60.16)), clamp(ty(60.14))];
+  const pbf = new PbfWriter();
+  if (x1 > x0 && y1 > y0) {
+    const zz = (v) => (v << 1) ^ (v >> 31);
+    const geometry = [9, zz(x0), zz(y0), 26, zz(x1 - x0), 0, 0, zz(y1 - y0), zz(x0 - x1), 0, 15];
+    pbf.writeMessage(3, () => {
+      pbf.writeVarintField(15, 2);
+      pbf.writeStringField(1, 'ocean');
+      pbf.writeMessage(2, () => {
+        pbf.writeVarintField(3, 3);
+        pbf.writePackedVarint(4, geometry);
+      });
+      pbf.writeVarintField(5, 4096);
+    });
+  }
+  return Buffer.from(pbf.finish());
+}
+
 const PORT = 4173;
 const URL_BASE = `http://localhost:${PORT}/`;
 const DISCLAIMER = 'Preliminary geometric study. Not an engineering design. Requires verification by a qualified marina engineer.';
@@ -633,40 +661,38 @@ async function waitForServer() {
       assert.equal(ws.climateChoice, 'larger');
       assert.equal(await stationSection.getByTestId('station-compare').locator('tbody tr').count(), 16);
       await page.unroute('https://opendata.fmi.fi/wfs?**');
-      // D47, I112: fetches from the OpenStreetMap shoreline (Overpass mocked): the first server answers with
-      // no data at all (no shore in any direction), the second with a lake 60.14–60.16 N, 24.92–24.99 E around the position.
-      // I112: a server that does not answer: the status names it and counts the seconds; Cancel stops the lookup.
+      // D47, I113: fetches from OpenStreetMap water polygons in vector tiles (tiles.versatiles.org mocked):
+      // a lake 60.14–60.16 N, 24.92–24.99 E around the position, land elsewhere.
+      // First a tile server that does not answer: the status counts tiles and seconds; Cancel stops the lookup.
       const fetchesBefore = await page.evaluate(() => window.__marina.getState().project.waves.sectors.map((x) => x.fetch));
-      await page.route('https://overpass.private.coffee/**', () => {});
+      await page.route('https://tiles.versatiles.org/**', () => {});
       await tool.getByRole('button', { name: 'Find fetches from the map', exact: true }).click();
-      await tool.getByTestId('auto-fetch-status').filter({ hasText: /overpass\.private\.coffee \(1 \/ 2\), \d+ s · next server after 150 s/ }).waitFor();
+      await tool.getByTestId('auto-fetch-status').filter({ hasText: /Reading the map… 0 map tiles, \d+ s/ }).waitFor();
       await tool.getByRole('button', { name: 'Cancel', exact: true }).click();
       await tool.getByText('Lookup cancelled; the fetches were not changed.').waitFor();
       assert.deepEqual(await page.evaluate(() => window.__marina.getState().project.waves.sectors.map((x) => x.fetch)), fetchesBefore);
       assert.equal(await page.evaluate(() => window.__marina.getState().project.waves.autoFetch), null);
-      await page.unroute('https://overpass.private.coffee/**');
-      let overpassBody = '';
-      await page.route('https://overpass.private.coffee/**', (route) => route.fulfill({ json: { elements: [] } }));
-      await page.route('https://overpass-api.de/**', (route) => {
-        overpassBody = route.request().postData() ?? '';
-        const g = [[60.14, 24.92], [60.14, 24.99], [60.16, 24.99], [60.16, 24.92], [60.14, 24.92]].map(([lat, lon]) => ({ lat, lon }));
-        route.fulfill({ json: { elements: [{ type: 'way', id: 1, tags: { natural: 'water' }, geometry: g }] } });
+      await page.unroute('https://tiles.versatiles.org/**');
+      const tilesAsked = [];
+      await page.route('https://tiles.versatiles.org/tiles/osm/**', async (route) => {
+        const [z, x, y] = route.request().url().split('/').slice(-3).map(Number);
+        tilesAsked.push(`${z}/${x}/${y}`);
+        route.fulfill({ status: 200, contentType: 'application/vnd.mapbox-vector-tile', body: await lakeTile(z, x, y) });
       });
       await tool.getByRole('button', { name: 'Find fetches from the map', exact: true }).click();
       await page.waitForFunction(() => window.__marina.getState().project.waves.autoFetch !== null);
-      assert.match(decodeURIComponent(overpassBody), /way\.candidates\(around:2,60\.150000,24\.950000/);
       const af = await page.evaluate(() => window.__marina.getState().project.waves);
       assert.equal(af.autoFetch.distances.length, 72);
-      assert.match(af.autoFetch.source, /overpass-api\.de/);
-      assert.match(await tool.getByTestId('auto-fetch-found').innerText(), /Shore met by 72 \/ 72 rays · 4 shore segments/);
+      assert.match(af.autoFetch.source, /VersaTiles/);
+      assert.ok(tilesAsked.length > 0 && tilesAsked.every((k) => /^1[34]\//.test(k)), tilesAsked.join(' '));
+      assert.match(await tool.getByTestId('auto-fetch-found').innerText(), new RegExp(`Shore met by 72 / 72 rays · ${tilesAsked.length} map tiles read`));
       // N: 1.1 km to 60.16 N (longest ray at ±20°: 1.2 km); E: 2.2 km to 24.99 E (longest about 2.4 km).
       const fetchN = af.sectors[0].fetch;
       const fetchE = af.sectors[2].fetch;
       assert.ok(fetchN > 1100 && fetchN < 1300, `N ${fetchN}`);
       assert.ok(fetchE > 2200 && fetchE < 2500, `E ${fetchE}`);
       assert.ok(af.sectors.every((x) => x.fetch > 0));
-      await page.unroute('https://overpass-api.de/**');
-      await page.unroute('https://overpass.private.coffee/**');
+      await page.unroute('https://tiles.versatiles.org/tiles/osm/**');
       // I110: depths along the rays (EMODnet mocked: 4.2 m everywhere; SYKE not asked).
       await page.route('https://rest.emodnet-bathymetry.eu/**', (route) => route.fulfill({ json: new Array(1000).fill(-4.2) }));
       await tool.getByRole('button', { name: 'Find depths along the fetches', exact: true }).click();
