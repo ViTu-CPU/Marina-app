@@ -18,7 +18,7 @@ mainista uuteen haaraan.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D60, I110, U26**).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D62, I110, U26**).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
   (vahvistettu, D54): aallonkorkeudet 2 desimaalilla.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
@@ -74,7 +74,11 @@ Testit 474/474, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset
 6. **Hinnaston aukot**: Marinetekin tarjous (Premier, aallonmurtajat, sormet, puomit), paalut,
    A-Laiturit G40 -ketjun murtokuorma, asennuksen tuntimenekit ja työveneen hinta (oletuksia), Top
    Marinen MD-paketin ristiriitainen hinta.
-7. Roadmap: kylkipaikka, GeoJSON-tuonti, DXF-vienti, T- ja L-päät.
+7. **CAD-vienti tuotekirjastoineen (D61, omistajan pyyntö):** valittu vaihtoehto CAD-tiedostoon niin,
+   että jokainen tuote on lohko (BLOCK), laituri koostuu lohkojen sijoituksista ja koko tuotekirjasto on
+   samassa tiedostossa sivussa (helppo kopioida ponttoneja, aisoja jne.). Ehdotus: DXF (AutoCAD
+   tallentaa DWG:nä); vahvista omistajalta ennen toteutusta.
+8. Roadmap: kylkipaikka, GeoJSON-tuonti, T- ja L-päät.
 
 ## Ympäristö
 Tässä istunnossa sallittuihin palvelimiin lisättiin overpass.private.coffee, yle.fi, bluet.fi,
