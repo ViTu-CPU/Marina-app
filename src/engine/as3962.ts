@@ -129,7 +129,7 @@ export function as3962Checks(input: As3962Input): As3962Note[] {
     const link = pierShoreLink(pier, site, params.gangwayLength);
     if (!link || link.kind !== 'gangway') continue;
     const served = layout.berths.filter((b) => b.pierId === pier.id && !b.removed).length;
-    notes.push({ severity: 'info', code: 'AS_GANGWAY_WIDTH', clause: '3.6.1', elementId: pier.id, message: `${pier.id}: its gangway serves ${served} berths → clear width at least ${m(gangwayClearWidth(served))} m (AS 3962 Table 3.3); handrails on both sides for unrestricted access.` });
+    notes.push({ severity: 'info', code: 'AS_GANGWAY_WIDTH', clause: '3.6.1', elementId: pier.id, message: `${pier.id}: its gangway serves ${served} berths → clear width at least ${m(gangwayClearWidth(served))} m (AS 3962 Table 3.3; the bill of materials takes a gangway at least this wide when the price list has one); handrails on both sides for unrestricted access.` });
     if (link.gap > params.gangwayLength - 0.5 + 1e-9) {
       notes.push({ severity: 'warning', code: 'AS_GANGWAY_REACH', clause: '3.6', elementId: pier.id, message: `${pier.id}: ${m(link.gap)} m from the shore with a ${m(params.gangwayLength)} m gangway: too little left to land on the pontoon.` });
     }

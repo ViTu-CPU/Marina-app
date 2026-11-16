@@ -231,7 +231,26 @@ describe('cost estimate, hand-calculated', () => {
       }).lines.find((l) => l.productId === 'g8')!;
     expect(withAccess().orderQuantity).toBe(2);
     expect(withAccess([5, 25]).orderQuantity).toBe(3);
-    expect(withAccess([5, 25]).basis).toBe('1 piers from the shore + 2 on access pontoons');
+    expect(withAccess([5, 25]).basis).toBe('P1: 4 berths → at least 0.9 m clear (AS 3962 Table 3.3); access-1: 0 berths → at least 0.7 m clear (AS 3962 Table 3.3); access-1: 0 berths → at least 0.7 m clear (AS 3962 Table 3.3)');
+  });
+
+  it('gangway widths by AS 3962 Table 3.3 (I109): the selected series if wide enough, else the cheapest wide enough one', () => {
+    const wide = { ...LIST, products: [...LIST.products, product({ id: 'w15', category: 'gangway', series: 'W', price: 2000, lengthM: 8, widthM: 1.5 })].map((p) => (p.category === 'gangway' && p.widthM === null ? { ...p, widthM: 0.8 } : p)) };
+    const run = (served: number) => {
+      const many = Array.from({ length: served }, (_, i) => ({ ...berths[0]!, id: `b${i}` }));
+      return costEstimate({ layout: { piers: [pier], fingers, berths: many }, site, priceList: wide, choices, anchoring });
+    };
+    // 4 berths: 0.9 m → the 0.8 m series is too narrow, the 1.5 m gangway is used.
+    const four = run(4);
+    expect(four.lines.find((l) => l.productId === 'w15')?.orderQuantity).toBe(1);
+    expect(four.lines.find((l) => l.productId === 'g8')).toBeUndefined();
+    expect(four.notes.some((n) => n.startsWith('Gangway widths: the product width is taken as the clear width'))).toBe(true);
+    // 2 berths: 0.7 m → the selected 0.8 m series is enough.
+    expect(run(2).lines.find((l) => l.productId === 'g8')?.orderQuantity).toBe(1);
+    // 130 berths: 1.8 m → none is wide enough: the selected series and a note.
+    const many = run(130);
+    expect(many.lines.find((l) => l.productId === 'g8')?.orderQuantity).toBe(1);
+    expect(many.notes.find((n) => n.startsWith('No gangway in the price list is as wide'))).toContain('P1 (130 berths, 1.8 m)');
   });
 
   it('anchoring: chain 2 × 16.5 m + 5 % = 34.7 m; anchors, shackles, springs, anodes = 1 223 €', () => {

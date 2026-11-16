@@ -18,7 +18,7 @@ mainista uuteen haaraan.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D60, I109, U26**).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D60, I110, U26**).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
   (vahvistettu, D54): aallonkorkeudet 2 desimaalilla.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
@@ -28,7 +28,7 @@ mainista uuteen haaraan.
   NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt`.
 
 ## Tilanne (2026-11-16, viidennen istunnon jälkeen)
-Testit 473/473, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset D53–D59):
+Testit 474/474, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset D53–D59):
 
 1. **Vastaukset** (D53–D56): aisalaituri pysyy oletuksena; aallonkorkeudet 2 desimaalilla
    vahvistettu; ankkurimalli kalibroidaan; Iisalmen mitoitustietoja ei ole.
@@ -68,8 +68,8 @@ Testit 473/473, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset
    asiakirjat, Ylen ja Bluetin Meri-sivut sekä tanskalainen venesatama-aineisto (kyst.dk). Palvelimet
    lisättiin ympäristöön, mutta web-haku ei saanut niitä auki. Avaa ne selaimessa ja liitä PDF:t
    istuntoon, niin ankkurointivertailua voi täydentää.
-4. **Kulkusillan leveys tuotteesta** AS 3962 taulukon 3.3 mukaan ja laiturimuurin korkeus esim.
-   MML:n korkeusmallista.
+4. **Kulkusillan leveys tuotteesta: tehty (I109).** Laiturimuurin korkeus MML:n korkeusmallista on
+   kesken: MML:n korkeusmallien kyselypalvelu (WCS) vaatii henkilökohtaisen API-avaimen.
 5. **Syvyys avovesimatkalla** syvyysaineistosta (esim. Traficomin avoimet aineistot).
 6. **Hinnaston aukot**: Marinetekin tarjous (Premier, aallonmurtajat, sormet, puomit), paalut,
    A-Laiturit G40 -ketjun murtokuorma, asennuksen tuntimenekit ja työveneen hinta (oletuksia), Top
