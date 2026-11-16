@@ -725,17 +725,34 @@ function sizeZonedLayout(ctx: SearchContext, zoned: ZonedContext, options: Zoned
       // Which side of this pier looks forward depends on which way the pier runs.
       const frontSide: PierSide = dot({ x: -along.y, y: along.x }, forward) > 0 ? 'left' : 'right';
       const backSide: PierSide = frontSide === 'left' ? 'right' : 'left';
-      const pier = { id: '', ...segment, width };
+      const filled = segment.end;
+      const fillBoth = (on: PierSegment, order: boolean) => {
+        const pier = { id: '', ...on, width };
+        let rows = fillPierRows(pier, zoned.context(back, gap, order), mix, { sides: [backSide] });
+        const front = nextClass();
+        if (front) rows = [...rows, ...fillPierRows(pier, zoned.context(front, front.fairway, order), mix, { sides: [frontSide] })];
+        return { rows, front };
+      };
 
-      let rows = fillPierRows(pier, zoned.context(back, gap, options.order), mix, { sides: [backSide] });
-      const front = nextClass();
-      if (front) rows = [...rows, ...fillPierRows(pier, zoned.context(front, front.fairway, options.order), mix, { sides: [frontSide] })];
-      if (rows.length === 0) continue;
-      const fitted = fitHead(ctx, segment, rows, mix, params.shoreOffset + back.minFootprint, headWidth);
+      // Unordered first: it decides the pier's final length (head clearance, target counts, modules).
+      const first = fillBoth(segment, false);
+      if (first.rows.length === 0) continue;
+      const fitted = fitHead(ctx, segment, first.rows, mix, params.shoreOffset + back.minFootprint, headWidth);
       if (!fitted) continue;
       segment = ctx.caps ? shrinkToBerths(fitted.segment, fitted.rows) : fitted.segment;
-      const built = snapToModules(ctx, segment, distance(fitted.segment.start, fitted.segment.end), fitted.rows, mix);
+      let built = snapToModules(ctx, segment, distance(fitted.segment.start, fitted.segment.end), fitted.rows, mix);
       if (!built) continue;
+      let front = first.front;
+      // I103: the rows are filled again on the final length, so that the search and the final
+      // build (runs ordered, larger boats towards the head) keep the same boats. Trimming rows
+      // that were ordered first would drop the largest boats at the head.
+      if (options.order || distance(built.segment.end, filled) > 1e-9) {
+        trimRows(built.rows, 0, mix);
+        const again = fillBoth(built.segment, options.order);
+        if (again.rows.length === 0) continue;
+        built = { segment: built.segment, rows: again.rows };
+        front = again.front;
+      }
       piers.push({ segment: built.segment, rows: built.rows, fillOptions: {} });
       placedHere = true;
       if (front && built.rows.some((r) => r.side === frontSide)) frontDesign = front;

@@ -353,6 +353,25 @@ describe('strategy E: piers sized by boat class (DECISIONS D10)', () => {
     expect(byStrategy(single.layouts, 'E')).toEqual([]);
     expect(single.layouts.length).toBeGreaterThan(0);
   });
+
+  it('keeps its last pier with a shore gap and pier modules (I103)', () => {
+    // Before I103 the final build ordered the runs (larger boats towards the head) before the pier
+    // was cut to module lengths, so the cut dropped large boats, the 7 m quota was not met before
+    // the last pier and the single row against the west wall was lost: 364 berths with a gap of
+    // 0 m, 307 with 4 m (DECISIONS I98 d).
+    const demo = DEMO_PROJECTS.find((d) => d.id === 'rectBasin')!.create();
+    const run = (shoreGap: number) =>
+      byStrategy(generateLayouts(inputFor(demo.site, { boatClasses: demo.boatClasses, params: { ...demo.params, shoreGap }, objective: demo.objective })).layouts, 'E')[0]!;
+    const touching = run(0);
+    const gap = run(4);
+    expect(demo.params.pierModuleLengths.length).toBeGreaterThan(0);
+    expect(gap.piers).toHaveLength(touching.piers.length);
+    expect(gap.stats.totalBerths).toBeGreaterThan(0.9 * touching.stats.totalBerths);
+    // A pier near the west wall (x = 0) holds berths: less than one pier spacing (about 22 m) away.
+    const west = gap.piers.reduce((w, p) => (p.start.x < w.start.x ? p : w));
+    expect(west.start.x).toBeLessThan(20);
+    expect(gap.berths.some((b) => b.pierId === west.id && !b.removed)).toBe(true);
+  });
 });
 
 describe('berths that cannot be reached from the entrance', () => {

@@ -79,9 +79,11 @@ next pier     = previous row edge + fairway + row depth + mainPierWidth / 2
 
 With the default mix the modules range from 22 m (5 m boats) to 46 m (12 m boats) instead
 of 46 m everywhere. The total is the largest for which every quota is met (bisection);
-both directions across the site and start offsets 2 m apart are tried. Classes that fit
+both directions across the site and start offsets 1 m apart are tried (I98 c). Classes that fit
 nowhere are left out. Each row is tested for reachability with a circle as wide as its
-own fairway.
+own fairway. Each pier is filled once to find its final length (head clearance, target counts,
+module lengths) and then filled again on that length, in the search and in the final build alike,
+so that ordering the runs cannot change which boats are kept (I103).
 
 The best candidate of each is built in full: unreachable berths are removed and counted (I14),
 fairways are built, the layout is validated and its statistics computed. The alternatives
