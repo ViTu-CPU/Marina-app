@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { attenuation, BREAKWATERS, breakwaterJoints, breakwaterModules, breakwaterProductOf, breakwaterProposal, breakwatersOf, defaultBreakwaterProduct, weightPerMetre } from '../breakwater';
+import { attenuation, BREAKWATERS, breakwaterJoints, breakwaterShelter, breakwaterModules, breakwaterProductOf, breakwaterProposal, breakwatersOf, defaultBreakwaterProduct, weightPerMetre } from '../breakwater';
 import { DEFAULT_BOAT_CLASSES, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../defaults';
 import { RECT_BASIN_SITE } from '../demos';
 import { generateLayouts } from '../generate';
 import { pierPolygon, prepareSite } from '../site';
 import { convexInsideRegion } from '../geometry';
-import type { WaveAssessment, WaveCheck } from '../waves';
+import { DEFAULT_WAVES, emptySectors, waveAssessment, type WaveAssessment, type WaveCheck } from '../waves';
 
 const bw = (id: string) => BREAKWATERS.find((b) => b.id === id)!;
 const check = (hm0: number, wavelength: number, limit: number, ok = hm0 <= limit): WaveCheck => ({
@@ -115,5 +115,40 @@ describe('breakwaters drawn by the user (D58)', () => {
     }
     // Piers under the breakwater exist (without it they run on to about y = 128).
     expect(under).toBeGreaterThan(0);
+  });
+});
+
+describe('shelter behind drawn breakwaters (D58, I107)', () => {
+  // Pier P1 runs north from (0, 0) to (0, 30); waves from the north over 3 km exceed the criteria.
+  const pier = { id: 'P1', start: { x: 0, y: 0 }, end: { x: 0, y: 30 } };
+  const waves = { ...DEFAULT_WAVES, wind1: 15, wind50: 22, sectors: emptySectors().map((x, k) => (k === 0 ? { ...x, fetch: 3000 } : x)) };
+  const assessment = waveAssessment(waves, 4, [{ id: 'P1', bearing: 0 }]);
+  const site = (start: { x: number; y: number }, end: { x: number; y: number }, product = '3300K') => ({ ...RECT_BASIN_SITE, breakwaters: [{ id: 'breakwater-1', start, end, product }] });
+
+  it('a breakwater across the waves in front of the pier shelters all of it', () => {
+    expect(assessment!.bad).toEqual([0]);
+    const [row] = breakwaterShelter(site({ x: -10, y: 50 }, { x: 10, y: 50 }), [pier], assessment);
+    expect(row).toMatchObject({ sector: 0, pierId: 'P1', share: 1, breakwaterId: 'breakwater-1' });
+    for (const c of row!.checks) {
+      const a = attenuation(bw('3300K'), c.check.waves.hm0, c.check.waves.wavelength);
+      expect(c.transmitted).toBe(a === null ? null : c.check.waves.hm0 * (1 - a));
+    }
+  });
+
+  it('one beside it shelters nothing; one covering half the pier half of it', () => {
+    const [none] = breakwaterShelter(site({ x: 5, y: 50 }, { x: 20, y: 50 }), [pier], assessment);
+    expect(none).toMatchObject({ share: 0, breakwaterId: null });
+    expect(none!.checks.every((c) => c.transmitted === null && c.ok === null)).toBe(true);
+    // A breakwater along the pier's line, north of its middle only: the rays from the southern half
+    // meet it, those from the northern half start beyond it.
+    const [half] = breakwaterShelter(site({ x: -10, y: 15.5 }, { x: 10, y: 15.5 }), [pier], assessment);
+    expect(half!.share).toBeCloseTo(16 / 31, 9);
+  });
+
+  it('nothing without breakwaters, without an assessment or without exceeded waves', () => {
+    expect(breakwaterShelter(RECT_BASIN_SITE, [pier], assessment)).toEqual([]);
+    expect(breakwaterShelter(site({ x: -10, y: 50 }, { x: 10, y: 50 }), [pier], null)).toEqual([]);
+    const calm = waveAssessment({ ...waves, sectors: emptySectors().map((x, k) => (k === 0 ? { ...x, fetch: 50 } : x)) }, 4, [{ id: 'P1', bearing: 0 }]);
+    expect(breakwaterShelter(site({ x: -10, y: 50 }, { x: 10, y: 50 }), [pier], calm)).toEqual([]);
   });
 });

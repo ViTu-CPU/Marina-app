@@ -6,7 +6,7 @@
  * Preliminary only.
  */
 import { useState } from 'react';
-import { breakwaterProposal, weightPerMetre, type BreakwaterProposal } from '../../engine/breakwater';
+import { breakwaterProposal, breakwaterShelter, weightPerMetre, type BreakwaterProposal, type ShelterRow } from '../../engine/breakwater';
 import { pierAxis } from '../../engine/rows';
 import {
   bearingOf,
@@ -320,6 +320,56 @@ function BreakwaterSection({ proposal }: { proposal: BreakwaterProposal }) {
   );
 }
 
+/** D58, I107: the piers' shelter behind the drawn breakwaters, for the directions that exceed the criteria. */
+function ShelterSection({ rows }: { rows: ShelterRow[] }) {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const h = (m: number) => formatHeight(m, language);
+  const th = 'px-1 font-medium';
+  return (
+    <div className="space-y-1" data-testid="shelter">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('shelter.title')}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-right text-xs tabular-nums">
+          <thead>
+            <tr className="text-slate-500">
+              <th className={`${th} text-left`}>{t('shelter.direction')}</th>
+              <th className={`${th} text-left`}>{t('shelter.pier')}</th>
+              <th className={th}>{t('shelter.share')}</th>
+              <th className={`${th} text-left`}>{t('shelter.breakwater')}</th>
+              <th className={th}>{t('shelter.waves')}</th>
+              <th className={`${th} text-left`}>{t('shelter.result')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const worst = shelterWorst(r);
+              const result = r.breakwaterId === null ? 'shelter.unsheltered' : worst.transmitted === null ? 'shelter.beyondCurve' : worst.ok && r.share >= 1 - 1e-9 ? 'shelter.ok' : worst.ok ? 'shelter.partly' : 'shelter.notEnough';
+              return (
+                <tr key={`${r.sector}-${r.pierId}`}>
+                  <td className="px-1 text-left">{WAVE_SECTORS[r.sector]}</td>
+                  <td className="px-1 text-left">{r.pierId}</td>
+                  <td className="px-1">{formatPercent(r.share, language)}</td>
+                  <td className="px-1 text-left">{r.breakwaterId ?? '–'}</td>
+                  <td className="px-1">{`${h(worst.check.waves.hm0)} → ${worst.transmitted === null ? '–' : h(worst.transmitted)} / ${h(worst.check.limit!)}`}</td>
+                  <td className={`px-1 text-left ${result === 'shelter.ok' ? 'text-emerald-700' : result === 'shelter.partly' ? 'text-amber-700' : 'text-red-700'}`}>{t(result)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-500">{t('shelter.note')}</p>
+    </div>
+  );
+}
+
+/** The check of a shelter row that is furthest above its limit behind the breakwater (or without one). */
+export function shelterWorst(r: ShelterRow): ShelterRow['checks'][number] {
+  const over = (c: ShelterRow['checks'][number]) => (c.transmitted ?? c.check.waves.hm0) - c.check.limit!;
+  return r.checks.reduce((a, c) => (over(c) > over(a) ? c : a));
+}
+
 /** One row of the sector table: inputs and the waves of that direction. */
 function SectorRow({ k, sector, result, designDepth }: { k: number; sector: WaveSectorInput; result: SectorAssessment | undefined; designDepth: number }) {
   const t = useT();
@@ -383,11 +433,13 @@ export function WaveTool() {
   const designDepth = useAppStore((s) => s.project.anchoring.depth);
   const boatsPerBay = useAppStore((s) => s.project.params.boatsPerBay);
   const piers = useAppStore((s) => s.project.layouts.find((l) => l.id === s.selectedLayoutId)?.piers ?? null);
+  const site = useAppStore((s) => s.project.site);
   if (!open) return null;
 
   const bearings = (piers ?? []).map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) }));
   const result = waveAssessment(waves, designDepth, bearings);
   const proposal = breakwaterProposal(result);
+  const shelter = breakwaterShelter(site, piers ?? [], result);
   const set = (patch: Partial<typeof waves>, key: string) => state().setWaves(patch, { coalesce: `waves:${key}` });
   const len = (m: number) => formatLength(m, language);
   const h = (m: number) => formatHeight(m, language);
@@ -522,6 +574,7 @@ export function WaveTool() {
                 </div>
                 {result.doubleBerthPiles && boatsPerBay === 2 && <p className="text-xs text-amber-800">{t('waves.piles')}</p>}
                 {proposal && <BreakwaterSection proposal={proposal} />}
+                {shelter.length > 0 && <ShelterSection rows={shelter} />}
               </>
             )}
             <p className="text-xs text-slate-500">{t('waves.note')}</p>

@@ -17,8 +17,8 @@
  * A preliminary choice of product type only: the length, layout, mooring and the attenuation at
  * the site need the supplier's design (AS 3962 5.1.1 (c), (d)).
  */
-import { distance, EPS } from './geometry';
-import type { Breakwater, Site } from './model';
+import { add, distance, EPS, scale, segmentIntersectionParam, sub } from './geometry';
+import type { Breakwater, Site, Vec2 } from './model';
 import type { WaveAssessment, WaveCheck } from './waves';
 
 export type BreakwaterId = '3300BR' | '3800BR' | '3300K' | '4300K' | '5300K';
@@ -243,4 +243,72 @@ export function breakwaterJoints(length: number, product: BreakwaterProduct): nu
     if (at < length - 0.05) out.push(at);
   }
   return out;
+}
+
+/** D58, I107: how far a pier lies in the shelter of the breakwaters from one wave direction. */
+export interface ShelterRow {
+  sector: number;
+  pierId: string;
+  /** Share of the pier's length whose straight line towards the waves meets a breakwater (0–1). */
+  share: number;
+  /** The breakwater that shelters most of it, or null when none does. */
+  breakwaterId: string | null;
+  /** The checks of this direction that the pier fails without shelter, with the waves behind that breakwater. */
+  checks: { check: WaveCheck; transmitted: number | null; ok: boolean | null }[];
+}
+
+/** Points along a pier's centreline about every metre (at least both ends). */
+function pierSamples(start: Vec2, end: Vec2): Vec2[] {
+  const length = distance(start, end);
+  const n = Math.max(2, Math.ceil(length) + 1);
+  return Array.from({ length: n }, (_, i) => add(start, scale(sub(end, start), i / (n - 1))));
+}
+
+/**
+ * D58, I107: for every direction whose waves exceed the criteria at a pier, the share of that
+ * pier sheltered by the site's breakwaters (straight lines from points on the pier towards the
+ * waves, as far as the fetch, that meet a breakwater's centreline) and the transmitted height
+ * Hm0 × (1 − Ac) behind the sheltering breakwater's type (I93). Diffraction round the ends,
+ * reflection and overtopping are not included.
+ */
+export function breakwaterShelter(site: Site, piers: readonly { id: string; start: Vec2; end: Vec2 }[], assessment: WaveAssessment | null): ShelterRow[] {
+  const breakwaters = breakwatersOf(site);
+  if (!assessment || breakwaters.length === 0) return [];
+  const rows: ShelterRow[] = [];
+  for (const sector of assessment.sectors) {
+    if (sector.status !== 'exceeds') continue;
+    const rad = (sector.bearing * Math.PI) / 180;
+    const towards = { x: Math.sin(rad), y: Math.cos(rad) };
+    for (const pier of piers) {
+      const heading = assessment.piers.find((p) => p.id === pier.id)?.headings[sector.sector];
+      const failing = sector.checks.filter((c) => c.ok === false && c.limit !== null && c.heading === heading);
+      if (failing.length === 0) continue;
+      const samples = pierSamples(pier.start, pier.end);
+      const hits = new Map<string, number>();
+      let sheltered = 0;
+      for (const point of samples) {
+        const far = add(point, scale(towards, sector.fetch));
+        const hit = breakwaters.find((b) => segmentIntersectionParam(point, far, b.start, b.end) !== null);
+        if (hit) {
+          sheltered++;
+          hits.set(hit.id, (hits.get(hit.id) ?? 0) + 1);
+        }
+      }
+      const best = [...hits.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
+      const product = best ? breakwaterProductOf(breakwaters.find((b) => b.id === best[0])!) : null;
+      rows.push({
+        sector: sector.sector,
+        pierId: pier.id,
+        share: sheltered / samples.length,
+        breakwaterId: best?.[0] ?? null,
+        checks: failing.map((check) => {
+          if (!product) return { check, transmitted: null, ok: null };
+          const a = attenuation(product, check.waves.hm0, check.waves.wavelength);
+          const transmitted = a === null ? null : check.waves.hm0 * (1 - a);
+          return { check, transmitted, ok: transmitted === null ? null : transmitted <= check.limit! + 1e-9 };
+        }),
+      });
+    }
+  }
+  return rows;
 }

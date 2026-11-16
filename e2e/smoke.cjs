@@ -521,7 +521,7 @@ async function waitForServer() {
       assert.ok(pages >= 2, `expected several pages, got ${pages}`);
     });
 
-    await step('wave screening: fetches by direction sector and winds give waves, criteria and the bad directions (D40, D47)', async () => {
+    await step('wave screening: fetches by direction sector and winds give waves, criteria, the bad directions and the shelter behind a breakwater (D40, D47, D58)', async () => {
       await page.getByRole('button', { name: 'Waves', exact: true }).click();
       const tool = page.getByTestId('wave-tool');
       await tool.waitFor();
@@ -541,6 +541,19 @@ async function waitForServer() {
       assert.match(advice, /floating wave attenuator|no wave protection|fixed breakwater/);
       // D48: a direction exceeds the criteria, so Marinetek's floating breakwaters are compared.
       assert.match(await tool.getByTestId('breakwater').textContent(), /Proposed type: Marinetek|None of Marinetek/);
+      // D58, I107: with a breakwater drawn east of the piers the shelter of the piers is listed.
+      await page.evaluate(() => {
+        const s = window.__marina.getState();
+        const layout = s.project.layouts.find((l) => l.id === s.selectedLayoutId);
+        const xs = layout.piers.flatMap((p) => [p.start.x, p.end.x]);
+        const ys = layout.piers.flatMap((p) => [p.start.y, p.end.y]);
+        const x = Math.max(...xs) + 10;
+        s.updateSite((site) => ({ ...site, breakwaters: [{ id: 'breakwater-1', start: { x, y: Math.min(...ys) - 5 }, end: { x, y: Math.max(...ys) + 5 }, product: '3300K' }] }));
+      });
+      await tool.getByTestId('shelter').waitFor();
+      assert.ok((await tool.getByTestId('shelter').locator('tbody tr').count()) > 0);
+      await page.evaluate(() => window.__marina.getState().updateSite((site) => ({ ...site, breakwaters: [] })));
+      await tool.getByTestId('shelter').waitFor({ state: 'detached' });
       // D41: wind climate from Open-Meteo (mocked: the test must not depend on the network or its quota).
       const requests = [];
       await page.route('https://archive-api.open-meteo.com/**', (route) => {

@@ -6,7 +6,7 @@
 import type { AnchoringParams } from '../../engine/anchoring';
 import { BOM_GROUPS, type BomGroup } from '../../engine/bom';
 import { as3962NotesFor } from '../as3962Notes';
-import { breakwaterProposal, weightPerMetre } from '../../engine/breakwater';
+import { breakwaterProposal, breakwaterShelter, weightPerMetre } from '../../engine/breakwater';
 import type { Layout, Params, Project } from '../../engine/model';
 import { pierAxis } from '../../engine/rows';
 import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../../engine/waves';
@@ -14,7 +14,7 @@ import { targetCount } from '../../engine/targets';
 import { translate, type Language, type StringKey } from '../../i18n';
 import { comparisonRows } from '../compare';
 import { otherTypeText, type CostModel } from '../costModel';
-import { formatCount, formatEuro, formatKn, formatLength } from '../format';
+import { formatCount, formatEuro, formatKn, formatLength, formatPercent } from '../format';
 import { groupIssues } from '../issueGroups';
 
 export interface ReportInput {
@@ -281,6 +281,31 @@ export function buildReportHtml(input: ReportInput): string {
         ),
       );
       parts.push(`<p class="small">${esc(t('breakwater.note'))}</p>`);
+    }
+    // D58, I107: shelter behind the drawn breakwaters.
+    const shelter = breakwaterShelter(project.site, layout.piers, waveResult);
+    if (shelter.length > 0) {
+      parts.push(`<h3>${esc(t('shelter.title'))}</h3>`);
+      parts.push(
+        table(
+          [t('shelter.direction'), t('shelter.pier'), t('shelter.share'), t('shelter.breakwater'), t('shelter.waves'), t('shelter.result')],
+          shelter.map((r) => {
+            const over = (c: (typeof r.checks)[number]) => (c.transmitted ?? c.check.waves.hm0) - c.check.limit!;
+            const worst = r.checks.reduce((a, c) => (over(c) > over(a) ? c : a));
+            const result = r.breakwaterId === null ? 'shelter.unsheltered' : worst.transmitted === null ? 'shelter.beyondCurve' : worst.ok && r.share >= 1 - 1e-9 ? 'shelter.ok' : worst.ok ? 'shelter.partly' : 'shelter.notEnough';
+            return [
+              esc(WAVE_SECTORS[r.sector]!),
+              esc(r.pierId),
+              esc(formatPercent(r.share, language)),
+              esc(r.breakwaterId ?? '–'),
+              esc(`${height(worst.check.waves.hm0)} → ${worst.transmitted === null ? '–' : height(worst.transmitted)} / ${height(worst.check.limit!)}`),
+              esc(t(result as StringKey)),
+            ];
+          }),
+          [2, 4],
+        ),
+      );
+      parts.push(`<p class="small">${esc(t('shelter.note'))}</p>`);
     }
     const climate = w.climate;
     if (climate) {
