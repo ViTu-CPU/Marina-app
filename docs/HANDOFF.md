@@ -9,11 +9,10 @@ Jatketaan Marina-app-projektia (repo `vitu-cpu/marina-app`). Lue ensin `CLAUDE.m
 suomeksi, UI pysyy englanniksi.
 
 ## Haara ja julkaisu
-Viidennen istunnon työ on haarassa `claude/adoring-ritchie-aoo2w4`. Siinä ovat myös neljännen
-istunnon commitit (`claude/tender-keller-45kwzk`). Pull request mainiin: **#2**
-(https://github.com/ViTu-CPU/Marina-app/pull/2). Kun se yhdistetään, GitHub Actions testaa ja julkaisee
-mainin osoitteeseen https://vitu-cpu.github.io/Marina-app/ . Jos PR on jo yhdistetty, aloita uusi työ
-mainista uuteen haaraan.
+Kaikki työ on yhdistetty mainiin (PR #2 ja #3, 2026-11-16) ja julkaistu osoitteessa
+https://vitu-cpu.github.io/Marina-app/ (Actions-ajo #7). Aloita uusi työ mainista uuteen haaraan; kun
+haluan julkaista, tee pull request mainiin. CI ajaa testitiedostot peräkkäin (`npx vitest run
+--no-file-parallelism`), koska 2 sekunnin generointitesti vääristyy rinnakkain ajettuna.
 
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
