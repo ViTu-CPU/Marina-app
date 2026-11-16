@@ -237,12 +237,22 @@ export async function lookupFetch(
   lat: number,
   lon: number,
   radius: number,
-  options: { fetchImpl?: typeof fetch; signal?: AbortSignal; servers?: readonly string[]; serverTimeoutMs?: number } = {},
+  options: {
+    fetchImpl?: typeof fetch;
+    signal?: AbortSignal;
+    servers?: readonly string[];
+    serverTimeoutMs?: number;
+    /** Called when a server is asked: its URL, its place in the list (0-based) and the time limit, ms. */
+    onServer?: (server: string, index: number, timeoutMs: number) => void;
+  } = {},
 ): Promise<FetchLookup> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.serverTimeoutMs ?? SERVER_TIMEOUT_MS;
   const failures: string[] = [];
-  for (const server of options.servers ?? OVERPASS_URLS) {
+  const servers = options.servers ?? OVERPASS_URLS;
+  for (const [index, server] of servers.entries()) {
+    if (options.signal?.aborted) throw options.signal.reason ?? new DOMException('aborted', 'AbortError');
+    options.onServer?.(server, index, timeoutMs);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const stop = () => controller.abort();

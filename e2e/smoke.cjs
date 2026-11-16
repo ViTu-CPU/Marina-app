@@ -635,6 +635,16 @@ async function waitForServer() {
       await page.unroute('https://opendata.fmi.fi/wfs?**');
       // D47, I112: fetches from the OpenStreetMap shoreline (Overpass mocked): the first server answers with
       // no data at all (no shore in any direction), the second with a lake 60.14–60.16 N, 24.92–24.99 E around the position.
+      // I112: a server that does not answer: the status names it and counts the seconds; Cancel stops the lookup.
+      const fetchesBefore = await page.evaluate(() => window.__marina.getState().project.waves.sectors.map((x) => x.fetch));
+      await page.route('https://overpass.private.coffee/**', () => {});
+      await tool.getByRole('button', { name: 'Find fetches from the map', exact: true }).click();
+      await tool.getByTestId('auto-fetch-status').filter({ hasText: /overpass\.private\.coffee \(1 \/ 2\), \d+ s · next server after 150 s/ }).waitFor();
+      await tool.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await tool.getByText('Lookup cancelled; the fetches were not changed.').waitFor();
+      assert.deepEqual(await page.evaluate(() => window.__marina.getState().project.waves.sectors.map((x) => x.fetch)), fetchesBefore);
+      assert.equal(await page.evaluate(() => window.__marina.getState().project.waves.autoFetch), null);
+      await page.unroute('https://overpass.private.coffee/**');
       let overpassBody = '';
       await page.route('https://overpass.private.coffee/**', (route) => route.fulfill({ json: { elements: [] } }));
       await page.route('https://overpass-api.de/**', (route) => {

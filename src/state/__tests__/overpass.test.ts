@@ -164,8 +164,13 @@ describe('OpenStreetMap shorelines from Overpass (D47)', () => {
     };
     for (const first of [busy, timeout, empty, offline]) {
       const { f, calls } = answers([first, good]);
-      const r = await lookupFetch(LAT, LON, 5000, { fetchImpl: f });
+      const asked: [string, number, number][] = [];
+      const r = await lookupFetch(LAT, LON, 5000, { fetchImpl: f, onServer: (server, index, limit) => asked.push([server, index, limit]) });
       expect(calls).toEqual([...OVERPASS_URLS]);
+      expect(asked).toEqual([
+        [OVERPASS_URLS[0], 0, 150_000],
+        [OVERPASS_URLS[1], 1, 150_000],
+      ]);
       expect(r.server).toBe(OVERPASS_URLS[1]);
       expect(r.hits).toBe(72);
     }

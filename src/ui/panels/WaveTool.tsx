@@ -5,7 +5,7 @@
  * exceed them and whether the berths look to need a wave attenuator or a breakwater.
  * Preliminary only.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { breakwaterProposal, breakwaterShelter, weightPerMetre, type BreakwaterProposal, type ShelterRow } from '../../engine/breakwater';
 import { pierAxis } from '../../engine/rows';
 import {
@@ -24,7 +24,7 @@ import { sectorBearing, windClimate } from '../../engine/wind';
 import type { StringKey } from '../../i18n';
 import { sectorFetches, RAY_STEP_DEG } from '../../engine/fetchRays';
 import { parseLatLon } from '../../state/geo';
-import { lookupFetch, osmSource, type FetchLookup } from '../../state/overpass';
+import { lookupFetch, osmSource, OVERPASS_URLS, type FetchLookup } from '../../state/overpass';
 import { DEPTH_SOURCES, lookupFetchDepths } from '../../state/depth';
 import { fetchWindHistory } from '../../state/openMeteo';
 import { completeYears, fetchStationWind, findWindStations, FMI_WIND_SOURCE, MIN_YEAR_COVERAGE, type WindStation } from '../../state/fmiWind';
@@ -66,15 +66,36 @@ function AutoFetchSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [found, setFound] = useState<FetchLookup | null>(null);
+  const [cancelled, setCancelled] = useState(false);
+  /** The server being asked and when (I112): shown with the seconds waited, as public servers can be slow. */
+  const [asking, setAsking] = useState<{ host: string; index: number; count: number; since: number; limitS: number } | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const abort = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [busy]);
+  useEffect(() => () => abort.current?.abort(), []);
   const af = waves.autoFetch;
   const run = async () => {
     if (!position) return;
+    const controller = new AbortController();
+    abort.current = controller;
     setBusy(true);
     setError(null);
     setFound(null);
+    setCancelled(false);
     try {
       const radius = radiusKm * 1000;
-      const r = await lookupFetch(position.lat, position.lon, radius);
+      const r = await lookupFetch(position.lat, position.lon, radius, {
+        signal: controller.signal,
+        onServer: (server, index, timeoutMs) => {
+          const at = Date.now();
+          setNow(at);
+          setAsking({ host: new URL(server).host, index, count: OVERPASS_URLS.length, since: at, limitS: Math.round(timeoutMs / 1000) });
+        },
+      });
       const round = (m: number) => Math.round(m * 10) / 10;
       state().setWaves({
         sectors: waves.sectors.map((x, k) => ({ ...x, fetch: round(r.sectors[k]!.fetch) })),
@@ -82,9 +103,12 @@ function AutoFetchSection() {
       });
       setFound(r);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (controller.signal.aborted) setCancelled(true);
+      else setError(e instanceof Error ? e.message : String(e));
     } finally {
+      if (abort.current === controller) abort.current = null;
       setBusy(false);
+      setAsking(null);
     }
   };
   const open = af ? sectorFetches(af.distances, af.radius, af.stepDeg).map((x) => x.open) : [];
@@ -106,12 +130,20 @@ function AutoFetchSection() {
           {t('autoFetch.run')}
         </Button>
         {busy && (
-          <span role="status" className="animate-pulse text-xs text-sky-800">
-            {t('autoFetch.running')}
-          </span>
+          <>
+            <span role="status" className="animate-pulse text-xs text-sky-800" data-testid="auto-fetch-status">
+              {t('autoFetch.running')}
+              {asking &&
+                ` ${asking.host} (${asking.index + 1} / ${asking.count}), ${formatCount(Math.max(0, Math.round((now - asking.since) / 1000)), language)} s · ${
+                  asking.index + 1 < asking.count ? t('autoFetch.nextAfter') : t('autoFetch.givesUpAfter')
+                } ${formatCount(asking.limitS, language)} s`}
+            </span>
+            <Button onClick={() => abort.current?.abort()}>{t('autoFetch.cancel')}</Button>
+          </>
         )}
       </div>
       {!position && <p className="text-xs text-amber-800">{t('autoFetch.noPosition')}</p>}
+      {cancelled && <p className="text-xs text-slate-600">{t('autoFetch.cancelled')}</p>}
       {error && (
         <p role="alert" className="text-xs text-red-700">
           {t('autoFetch.error')} {error}
