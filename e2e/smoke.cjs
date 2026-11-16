@@ -202,7 +202,7 @@ async function waitForServer() {
       assert.equal(layout.stats.totalBerths, berthsBefore - 1);
     });
 
-    await step('export PNG and CSV', async () => {
+    await step('export PNG, CSV and DXF', async () => {
       const png = fs.readFileSync(await download('Export PNG'));
       assert.equal(png.subarray(1, 4).toString(), 'PNG');
       assert.ok(png.length > 20000, `PNG is ${png.length} bytes`);
@@ -210,6 +210,11 @@ async function waitForServer() {
       assert.ok(csv.includes(DISCLAIMER));
       assert.ok(csv.includes('Total berths'));
       assert.ok(csv.includes('Berth,Pier,Side,Boat class,Status'));
+      // D61, I111: DXF (R12) with the product library as blocks.
+      const dxf = fs.readFileSync(await download('Export DXF'), 'utf8');
+      assert.ok(dxf.startsWith('0\r\nSECTION\r\n2\r\nHEADER\r\n9\r\n$ACADVER\r\n1\r\nAC1009'));
+      assert.ok(dxf.includes('\r\nBLOCK\r\n') && dxf.includes('\r\nINSERT\r\n') && dxf.includes('PRODUCT LIBRARY'));
+      assert.ok(dxf.endsWith('0\r\nEOF\r\n'));
     });
 
     await step('editing a point changes the site and shows the Regenerate hint', async () => {

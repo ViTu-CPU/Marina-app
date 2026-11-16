@@ -77,7 +77,7 @@ export interface CostEstimate {
 }
 
 const priced = (p: Product, vat: number) => unitPriceVat0(p, vat);
-const seriesOf = (list: PriceList, category: Product['category'], series: string) =>
+export const seriesOf = (list: PriceList, category: Product['category'], series: string) =>
   list.products.filter((p) => p.category === category && p.series === series);
 
 /** Series names of a category, in price-list order. */
@@ -143,7 +143,7 @@ export function resolveChoices(list: PriceList, cost: CostSettings, params: Para
 }
 
 /** The shortest product at least `length` long (ties: cheaper), else the longest. */
-function pickByLength(products: Product[], length: number, vat: number): { product: Product; longEnough: boolean } | null {
+export function pickByLength(products: Product[], length: number, vat: number): { product: Product; longEnough: boolean } | null {
   const withLength = products.filter((p) => p.lengthM !== null);
   if (withLength.length === 0) return null;
   const enough = withLength.filter((p) => p.lengthM! >= length - 0.05);
@@ -152,6 +152,23 @@ function pickByLength(products: Product[], length: number, vat: number): { produ
     return { product: enough[0]!, longEnough: true };
   }
   return { product: withLength.reduce((a, b) => (b.lengthM! > a.lengthM! ? b : a)), longEnough: false };
+}
+
+/**
+ * I109: the gangway for `served` berths: of the selected series when wide (AS 3962 Table 3.3) and long
+ * enough, else the cheapest wide enough gangway of the price list, else the selected series. A price
+ * list without gangway widths is not judged (`wideEnough` true).
+ */
+export function chooseGangway(list: PriceList, seriesProducts: Product[], served: number, length: number, vat: number): { product: Product; longEnough: boolean; wideEnough: boolean } | null {
+  const all = list.products.filter((p) => p.category === 'gangway');
+  const hasWidths = all.some((p) => p.widthM !== null);
+  const width = gangwayClearWidth(served);
+  const wide = (products: Product[]) => (hasWidths ? products.filter((p) => p.widthM !== null && p.widthM >= width - 0.005) : products);
+  const inSeries = pickByLength(wide(seriesProducts), length, vat);
+  const anywhere = inSeries?.longEnough ? inSeries : (pickByLength(wide(all), length, vat) ?? inSeries);
+  if (anywhere) return { ...anywhere, wideEnough: true };
+  const fallback = pickByLength(seriesProducts, length, vat);
+  return fallback ? { ...fallback, wideEnough: false } : null;
 }
 
 /**
@@ -310,19 +327,15 @@ export function costEstimate(input: CostInput): CostEstimate {
       return Array.from({ length: count }, () => ({ what: a.id, served: Math.ceil(served / count) }));
     }),
   ];
-  const allGangways = list.products.filter((p) => p.category === 'gangway');
-  // Without widths in the price list the width is not judged.
-  const hasWidths = allGangways.some((p) => p.widthM !== null);
-  const wideEnough = (products: Product[], width: number) => (hasWidths ? products.filter((p) => p.widthM !== null && p.widthM >= width - 0.005) : products);
+  const hasWidths = list.products.some((p) => p.category === 'gangway' && p.widthM !== null);
   const narrow: string[] = [];
   let short = false;
   for (const need of needs) {
     const width = gangwayClearWidth(need.served);
-    const inSeries = pickByLength(wideEnough(gangwayProducts, width), wantedGangway, vat);
-    const anywhere = inSeries?.longEnough ? inSeries : (pickByLength(wideEnough(allGangways, width), wantedGangway, vat) ?? inSeries);
-    const chosen = anywhere ?? pickByLength(gangwayProducts, wantedGangway, vat);
-    if (!chosen) continue;
-    if (!anywhere) narrow.push(`${need.what} (${need.served} berths, ${fmt(width)} m)`);
+    const pick = chooseGangway(list, gangwayProducts, need.served, wantedGangway, vat);
+    if (!pick) continue;
+    const chosen = pick;
+    if (!pick.wideEnough) narrow.push(`${need.what} (${need.served} berths, ${fmt(width)} m)`);
     if (!chosen.longEnough) short = true;
     addQty('gangways', chosen.product, 1, `${need.what}: ${need.served} berths → at least ${fmt(width)} m clear (AS 3962 Table 3.3)`);
   }

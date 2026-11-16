@@ -159,6 +159,8 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 - Report of the selected alternative ("Report (PDF)"): map, comparison, inputs, anchoring
   plan, cost estimate and bill of materials, cost parameters and product sources, with the
   disclaimer on every page. It opens the browser's print dialog; choose "Save as PDF".
+- DXF export (R12) of the selected alternative: every product as a block, the layout built of block
+  inserts and the whole product library beside the drawing (DECISIONS I111).
 - PNG export of the canvas and CSV export of the comparison and the berth list. Both
   carry the disclaimer.
 - Undo/redo. English and Finnish UI.

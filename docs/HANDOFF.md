@@ -18,7 +18,7 @@ mainista uuteen haaraan.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D62, I111, U26**).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D62, I112, U26**).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
   (vahvistettu, D54): aallonkorkeudet 2 desimaalilla.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
@@ -28,7 +28,7 @@ mainista uuteen haaraan.
   NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt`.
 
 ## Tilanne (2026-11-16, viidennen istunnon jälkeen)
-Testit 479/479, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset D53–D59):
+Testit 484/484, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset D53–D59):
 
 1. **Vastaukset** (D53–D56): aisalaituri pysyy oletuksena; aallonkorkeudet 2 desimaalilla
    vahvistettu; ankkurimalli kalibroidaan; Iisalmen mitoitustietoja ei ole.
@@ -75,10 +75,8 @@ Testit 479/479, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset
 6. **Hinnaston aukot**: Marinetekin tarjous (Premier, aallonmurtajat, sormet, puomit), paalut,
    A-Laiturit G40 -ketjun murtokuorma, asennuksen tuntimenekit ja työveneen hinta (oletuksia), Top
    Marinen MD-paketin ristiriitainen hinta.
-7. **CAD-vienti tuotekirjastoineen (D61, omistajan pyyntö):** valittu vaihtoehto CAD-tiedostoon niin,
-   että jokainen tuote on lohko (BLOCK), laituri koostuu lohkojen sijoituksista ja koko tuotekirjasto on
-   samassa tiedostossa sivussa (helppo kopioida ponttoneja, aisoja jne.). Ehdotus: DXF (AutoCAD
-   tallentaa DWG:nä); vahvista omistajalta ennen toteutusta.
+7. **CAD-vienti tuotekirjastoineen: tehty (I111).** "Export DXF": jokainen tuote on lohko, laiturit
+   lohkojen sijoituksia ja koko tuotekirjasto piirroksen vieressä. Kokeile AutoCADissa (Tallenna DWG:nä).
 8. Roadmap: kylkipaikka, GeoJSON-tuonti, T- ja L-päät.
 
 ## Ympäristö

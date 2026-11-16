@@ -16,6 +16,8 @@ export const fi: Partial<Record<StringKey, string>> = {
   'toolbar.regenerateHint': 'Lähtötiedot ovat muuttuneet asettelujen generoinnin jälkeen.',
   'toolbar.exportPng': 'Vie PNG',
   'toolbar.exportCsv': 'Vie CSV',
+  'toolbar.exportDxf': 'Vie DXF',
+  'toolbar.exportDxfHint': 'Valittu vaihtoehto CAD-ohjelmaan (DXF R12; AutoCAD tallentaa sen DWG:nä): jokainen tuote on lohko, tuotekirjasto piirroksen vieressä.',
   'toolbar.examples': 'Lataa esimerkki',
   'toolbar.language': 'Kieli',
   'toolbar.fit': 'Sovita näkymään',

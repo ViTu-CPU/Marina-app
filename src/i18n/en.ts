@@ -14,6 +14,8 @@ export const en = {
   'toolbar.regenerateHint': 'Inputs have changed since the layouts were generated.',
   'toolbar.exportPng': 'Export PNG',
   'toolbar.exportCsv': 'Export CSV',
+  'toolbar.exportDxf': 'Export DXF',
+  'toolbar.exportDxfHint': 'The selected alternative for CAD (DXF R12; AutoCAD saves it as DWG): every product is a block, the product library beside the drawing.',
   'toolbar.examples': 'Load example',
   'toolbar.language': 'Language',
   'toolbar.fit': 'Fit to view',
