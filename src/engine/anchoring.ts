@@ -51,7 +51,8 @@
  *     The friction method of step 6 is shown for comparison.
  */
 import { unitPriceVat0, type PriceList, type Product } from './catalog';
-import { add, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
+import { breakwaterJoints, breakwaterProductOf, breakwatersOf } from './breakwater';
+import { add, distance, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
 import type { BoatClass, Finger, Issue, Layout, MainPier, Site, Vec2 } from './model';
 import { jointPositions } from './modules';
 import { pierAxis } from './rows';
@@ -774,6 +775,11 @@ interface Held {
    * anchored on the water side; shore chains and attached piers hold it off the wall (D28).
    */
   wallSide?: 'left' | 'right';
+  /**
+   * D58: a floating breakwater: no shore end (outward chains at both ends, no shore chains) and
+   * joints from its own product's modules.
+   */
+  free?: { joints: readonly number[] };
 }
 
 /** Where an access pontoon is held off the wall: its gangway or a pier attached to it. */
@@ -988,7 +994,32 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       a.id,
     );
   }
-  const held: Held[] = [...piers, ...accessItems];
+  // D58, I106: floating breakwaters: wind on their freeboard and the wave load of I104, chains at
+  // their module joints in the X pattern and outward pairs at both ends.
+  const breakwaterItems: Held[] = breakwatersOf(site).map((b) => {
+    const product = breakwaterProductOf(b);
+    const length = distance(b.start, b.end);
+    const item: Held = {
+      id: b.id,
+      start: b.start,
+      end: b.end,
+      width: product.width,
+      lateral: k * length * product.freeboard,
+      axialFromSea: k * product.width * product.freeboard,
+      axialFromShore: k * product.width * product.freeboard,
+      splayed: true,
+      free: { joints: breakwaterJoints(length, product) },
+    };
+    addWaves(item);
+    return item;
+  });
+  if (breakwaterItems.length > 0) {
+    warn(
+      'BREAKWATER_ANCHORING',
+      `Breakwaters ${breakwaterItems.map((b) => b.id).join(', ')}: anchored like piers from their module joints, for the wind on their freeboard and the wave load above. A breakwater reflects and dissipates waves, so its real wave loads can be well above this; its length, layout and mooring need the supplier's design (AS 3962-2001 5.1.1).`,
+    );
+  }
+  const held: Held[] = [...piers, ...accessItems, ...breakwaterItems];
 
   /** A chain to a concrete anchor `span` from `fix` along `direction` (at least `minSpan`). */
   const seabedLine = (l: {
@@ -1058,7 +1089,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       // shore lies behind it); at the head the tip pair (D30), outwards. Each chain is fixed on one
       // edge and anchored beyond the other (crossed under the pier).
       const angle = theta;
-      const joints = moduleLengths.length > 0 ? jointPositions(length, moduleLengths) : evenJoints(length, p.lineSpacing);
+      const joints = item.free ? [...item.free.joints] : moduleLengths.length > 0 ? jointPositions(length, moduleLengths) : evenJoints(length, p.lineSpacing);
       interface Spec {
         t: number;
         splay: 'head' | 'shore';
@@ -1068,18 +1099,20 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       const specs: Spec[] = [];
       const both = (t: number, splay: Spec['splay'], role: Spec['role']) => specs.push({ t, splay, anchoredOn: 'right', role }, { t, splay, anchoredOn: 'left', role });
       both(Math.min(STATION_INSET, length / 2), 'head', 'side');
+      // D58: a breakwater has no shore behind its first end: an outward pair there too.
+      if (item.free) both(0, 'shore', 'tip');
       // Square chains (θ = 0) would double up at a joint: one per side there.
       for (const j of joints) {
         both(j, 'head', 'side');
         if (angle > 0) both(j, 'shore', 'side');
       }
-      const tip = length >= p.tipAnchorMinLength - 1e-9;
+      const tip = item.free !== undefined || length >= p.tipAnchorMinLength - 1e-9;
       if (tip) both(length, 'head', 'tip');
       const perSide = specs.filter((x) => x.anchoredOn === 'right').length;
       // D49: a pier reached by a gangway from the shore has two shore chains under it, crossed at
       // θ from the pier's axis; they hold the pier against wind from the shore with the shore-ward
       // seabed chains (each line the same share of the force along the pier, I97).
-      const link = pierShoreLink(item, site, reach);
+      const link = item.free ? null : pierShoreLink(item, site, reach);
       const shoreChains = link?.kind === 'gangway' ? 2 : 0;
       const count = { head: specs.filter((x) => x.splay === 'head').length, shore: specs.filter((x) => x.splay === 'shore').length + shoreChains };
       // Across: the lines anchored on the windward side share the load. Along: the lines splayed

@@ -112,6 +112,16 @@ describe('bill of materials workbook (D24)', () => {
   });
 });
 
+describe('breakwaters in the cost model (D58, I106)', () => {
+  it('anchored in the plan and listed (not priced) in the estimate', () => {
+    const withBw = { ...project, site: { ...project.site, breakwaters: [{ id: 'breakwater-1', start: { x: 0, y: 135 }, end: { x: 60, y: 135 }, product: '3800BR' }] } };
+    const m = computeCostModel(withBw, layout, parsed.priceList)!;
+    expect(m.anchoring.lines.some((l) => l.holdsId === 'breakwater-1')).toBe(true);
+    // 60 m of 3800: 3 × M3820BR (19.90 m) = 59.7 m.
+    expect(m.estimate.notes.find((n) => n.startsWith('Breakwater breakwater-1'))).toMatch(/Marinetek Breakwater 3800, drawn 60 m: 3 × M3820BR = 59\.7 m \(.* t\), not priced/);
+  });
+});
+
 describe('wave directions for the anchoring plan (D45)', () => {
   it('the sectors with a fetch, and those whose waves exceed the criteria', () => {
     expect(waveInput(project, layout)).toEqual({ from: [], exceeding: [], hs50: [] });

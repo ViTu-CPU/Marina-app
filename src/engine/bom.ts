@@ -15,6 +15,7 @@ import { distance } from './geometry';
 import type { CostSettings, Layout, Params, Site } from './model';
 import { rowFrame, toLocalRect } from './rows';
 import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierShoreLink } from './site';
+import { breakwaterModules, breakwaterProductOf, breakwatersOf } from './breakwater';
 
 export type BomGroup = 'pontoons' | 'fingers' | 'gangways' | 'anchoring' | 'fittings' | 'labour' | 'plant';
 export const BOM_GROUPS: BomGroup[] = ['pontoons', 'fingers', 'gangways', 'anchoring', 'fittings', 'labour', 'plant'];
@@ -350,6 +351,22 @@ export function costEstimate(input: CostInput): CostEstimate {
       .sort((a, b) => priced(a, vat)! - priced(b, vat)! || (a.id < b.id ? -1 : 1))[0];
     if (fixing) addQty('anchoring', fixing, wallLines, `${wallLines} shore chains`);
     else notes.push('No wall fixing in the price list: the wall fixings of the shore chains are not priced.');
+  }
+  // D58, I106: breakwater modules; Marinetek's breakwater prices are not public and not in the price list.
+  for (const b of breakwatersOf(site)) {
+    const product = breakwaterProductOf(b);
+    const length = distance(b.start, b.end);
+    const modules = breakwaterModules(length, product);
+    const byCode = new Map<string, { count: number; weightT: number }>();
+    for (const module of modules) {
+      const entry = byCode.get(module.code) ?? { count: 0, weightT: module.weightT };
+      entry.count++;
+      byCode.set(module.code, entry);
+    }
+    const list = [...byCode.entries()].map(([code, e]) => `${e.count} × ${code}`).join(' + ');
+    const weight = [...byCode.values()].reduce((t, e) => t + e.count * e.weightT, 0);
+    const built = modules.reduce((t, m) => t + m.length, 0);
+    notes.push(`Breakwater ${b.id}: ${product.name}, drawn ${fmt(length)} m: ${list} = ${fmt(built)} m (${fmt(weight)} t), not priced: no breakwater in the price list.`);
   }
   // End piles of long fingers (D31): no public prices.
   if (anchoring.piles.length > 0) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attenuation, BREAKWATERS, breakwaterProductOf, breakwaterProposal, breakwatersOf, defaultBreakwaterProduct, weightPerMetre } from '../breakwater';
+import { attenuation, BREAKWATERS, breakwaterJoints, breakwaterModules, breakwaterProductOf, breakwaterProposal, breakwatersOf, defaultBreakwaterProduct, weightPerMetre } from '../breakwater';
 import { DEFAULT_BOAT_CLASSES, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../defaults';
 import { RECT_BASIN_SITE } from '../demos';
 import { generateLayouts } from '../generate';
@@ -80,6 +80,16 @@ describe('breakwaters drawn by the user (D58)', () => {
     expect(defaultBreakwaterProduct({ proposed: bw('3800BR'), evaluations: [] })).toBe('3800BR');
     expect(defaultBreakwaterProduct({ proposed: null, evaluations: [] })).toBe('3300BR');
     expect(breakwatersOf({ ...RECT_BASIN_SITE, breakwaters: [{ id: 'b', start: { x: 1, y: 1 }, end: { x: 1, y: 1 }, product: '3300BR' }] })).toEqual([]);
+  });
+
+  it('modules of a drawn breakwater: the combination nearest to the drawn length', () => {
+    const codes = (length: number) => breakwaterModules(length, bw('3300BR')).map((m) => m.code);
+    // 19.90 and 16.05 m modules.
+    expect(codes(60)).toEqual(['M3320BR', 'M3320BR', 'M3320BR']); // 59.7 m
+    expect(codes(36)).toEqual(['M3320BR', 'M3316BR']); // 35.95 m
+    expect(codes(10)).toEqual(['M3316BR']); // shorter than one module: the nearest single one
+    expect(codes(0)).toEqual([]);
+    expect(breakwaterJoints(60, bw('3300BR'))).toEqual([19.9, 39.8]);
   });
 
   it('piers, boats and fairways keep the obstacle clearance from a breakwater', () => {

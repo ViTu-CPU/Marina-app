@@ -199,3 +199,48 @@ export const breakwatersOf = (site: Site): Breakwater[] => (site.breakwaters ?? 
 
 /** D58: the type a new breakwater gets: the one the wave screening proposes, else the lightest. */
 export const defaultBreakwaterProduct = (proposal: BreakwaterProposal | null): BreakwaterId => proposal?.proposed?.id ?? BREAKWATERS[0]!.id;
+
+/**
+ * D58, I106: the modules of a drawn breakwater: the combination of the product's module lengths
+ * whose total is nearest to the drawn length (ties: fewer modules, then more long ones), longest
+ * first. A breakwater is a line of modules, so it may end a little short of or beyond the drawing.
+ */
+export function breakwaterModules(length: number, product: BreakwaterProduct): BreakwaterModule[] {
+  if (!(length > 0)) return [];
+  const mods = [...product.modules].sort((a, b) => b.length - a.length);
+  const longest = mods[0]!;
+  const shortest = mods[mods.length - 1]!;
+  const maxCount = Math.ceil(length / shortest.length) + 1;
+  const found: { best: { counts: number[]; diff: number; n: number } | null } = { best: null };
+  const counts = new Array<number>(mods.length).fill(0);
+  const visit = (i: number, total: number, n: number) => {
+    if (i === mods.length) {
+      if (n === 0) return;
+      const diff = Math.abs(total - length);
+      const b = found.best;
+      const better = !b || diff < b.diff - 1e-6 || (Math.abs(diff - b.diff) <= 1e-6 && (n < b.n || (n === b.n && counts[0]! > b.counts[0]!)));
+      if (better) found.best = { counts: [...counts], diff, n };
+      return;
+    }
+    for (let c = 0; n + c <= maxCount && total + c * mods[i]!.length <= length + longest.length; c++) {
+      counts[i] = c;
+      visit(i + 1, total + c * mods[i]!.length, n + c);
+    }
+    counts[i] = 0;
+  };
+  visit(0, 0, 0);
+  const chosen = found.best;
+  return chosen ? mods.flatMap((m, i) => new Array<BreakwaterModule>(chosen.counts[i]!).fill(m)) : [];
+}
+
+/** D58: joint positions of a breakwater's modules along it from its first end, m. */
+export function breakwaterJoints(length: number, product: BreakwaterProduct): number[] {
+  const out: number[] = [];
+  let at = 0;
+  const modules = breakwaterModules(length, product);
+  for (let i = 0; i + 1 < modules.length; i++) {
+    at += modules[i]!.length;
+    if (at < length - 0.05) out.push(at);
+  }
+  return out;
+}

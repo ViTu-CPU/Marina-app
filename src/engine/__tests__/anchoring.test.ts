@@ -388,6 +388,24 @@ describe('anchoring plan of a pier', () => {
     expect(run([90], ['E']).issues.find((i) => i.code === 'WAVE_LOAD_ABOVE_CRITERIA')!.message).toMatch(/^The waves from E exceed/);
   });
 
+  it('a floating breakwater is anchored from its module joints with outward pairs at both ends (D58, I106)', () => {
+    // 39.8 m of Marinetek 3300 (2 × M3320BR, 19.90 m; 3.3 m wide, freeboard 0.55 m) along y = 50, x 0 → 39.8.
+    const site: Site = { ...pierSite, breakwaters: [{ id: 'breakwater-1', start: { x: 0, y: 50 }, end: { x: 39.8, y: 50 }, product: '3300BR' }] };
+    const run = (waves?: { from: number[]; exceeding: string[] }) =>
+      anchoringPlan({ layout: { piers: [], berths: [] }, site, classes: [], params, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5, ...(waves ? { waves } : {}) });
+    const plan = run();
+    const own = plan.lines.filter((l) => l.holdsId === 'breakwater-1');
+    // Stations: first end (towards the far end) and an outward pair, the joint at 19.9 m (both ways), the far end outward.
+    expect(own.filter((l) => l.role === 'side')).toHaveLength(6);
+    expect(own.filter((l) => l.role === 'tip')).toHaveLength(4);
+    expect(own.every((l) => l.fixing === 'seabed')).toBe(true);
+    // Wind on the freeboard: ½ · 1.25 · 22² · 1.6 = 484 Pa · 39.8 m · 0.55 m = 10 595 N across.
+    expect(plan.loads[0]!.lateralKn).toBeCloseTo((484 * 39.8 * 0.55) / 1000, 6);
+    expect(plan.issues.some((i) => i.code === 'BREAKWATER_ANCHORING')).toBe(true);
+    // Waves from the north travel square to it: + 2 kN/m · 39.8 m across (no height known: the full load).
+    expect(run({ from: [0], exceeding: [] }).loads[0]!.lateralKn).toBeCloseTo((484 * 39.8 * 0.55) / 1000 + 79.6, 6);
+  });
+
   it('wave load in proportion to the 50-year wave height (D57, I104)', () => {
     // None up to 0.3 m, full from 0.6 m, Hm0² between: 0.45 m → (0.2025 − 0.09) / (0.36 − 0.09) = 0.4167.
     expect(waveLoadFactor(null, params)).toBe(1);
