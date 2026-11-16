@@ -40,7 +40,13 @@ export function tangentPlane(lat0: number, lon0: number): { toLocal: (lat: numbe
   };
 }
 
-/** The Overpass QL query for the water areas and coastline that the rays cross. */
+/**
+ * The Overpass QL query for the water areas and coastline that the rays cross (I112): first the
+ * water ways and water relations in the box around the rays (by tag, cheap), then only those ways
+ * near the rays (`around` with the star-shaped polyline, the expensive geometric test), and the
+ * water relations they belong to. An earlier version ran the polyline test on every way in the
+ * area; on a public server it took 120 s for 8 rays of 5 km.
+ */
 export function fetchQuery(lat: number, lon: number, radius: number, stepDeg = RAY_STEP_DEG): string {
   const plane = tangentPlane(lat, lon);
   const coords: string[] = [];
@@ -51,13 +57,19 @@ export function fetchQuery(lat: number, lon: number, radius: number, stepDeg = R
   }
   coords.push(centre);
   const near = `around:2,${coords.join(',')}`;
+  // South, west, north, east of the square around the rays, with a margin of 200 m.
+  const m = radius + 200;
+  const sw = plane.toLatLon({ x: -m, y: -m });
+  const ne = plane.toLatLon({ x: m, y: m });
+  const box = `(${sw.lat.toFixed(6)},${sw.lon.toFixed(6)},${ne.lat.toFixed(6)},${ne.lon.toFixed(6)})`;
   return [
     '[out:json][timeout:120];',
-    `way(${near})->.near;`,
-    '(way.near[natural=coastline];way.near[natural=water];way.near[waterway=riverbank];way.near[landuse=reservoir];)->.tagged;',
-    '(rel(bw.near)[natural=water];rel(bw.near)[waterway=riverbank];rel(bw.near)[landuse=reservoir];)->.rels;',
-    'way.near(r.rels)->.members;',
-    '(.tagged;.members;)->.ways;',
+    `(way[natural=coastline]${box};way[natural=water]${box};way[waterway=riverbank]${box};way[landuse=reservoir]${box};)->.tagged;`,
+    `(rel[natural=water]${box};rel[waterway=riverbank]${box};rel[landuse=reservoir]${box};)->.waterRels;`,
+    `way(r.waterRels)${box}->.members;`,
+    '(.tagged;.members;)->.candidates;',
+    `way.candidates(${near})->.ways;`,
+    'rel.waterRels(bw.ways)->.rels;',
     '.ways out geom;',
     '.rels out skel;',
   ].join('');
@@ -199,7 +211,12 @@ async function queryServer(server: string, lat: number, lon: number, radius: num
     body: new URLSearchParams({ data: fetchQuery(lat, lon, radius) }).toString(),
     ...(signal ? { signal } : {}),
   });
-  if (!response.ok) throw new Error(`answered ${response.status}${response.status === 429 ? ' (too many requests; try again in a minute)' : ''}`);
+  if (!response.ok) {
+    // Overpass explains a refused query on an HTML page ("Error: line 1: parse error: …"); keep that line.
+    const page = (await response.text().catch(() => '')).replace(/<[^>]*>/g, ' ').replace(/&quot;/g, '"').replace(/\s+/g, ' ');
+    const reason = /\berror\b:?.{0,160}/i.exec(page)?.[0].trim();
+    throw new Error(`answered ${response.status}${response.status === 429 ? ' (too many requests; try again in a minute)' : ''}${reason ? `: ${reason}` : ''}`);
+  }
   const body = (await response.json()) as OverpassResponse;
   if (body.remark && /error|timed out|runtime/i.test(body.remark)) throw new Error(body.remark);
   const r = fetchFromResponse(body, lat, lon, radius);

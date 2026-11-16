@@ -644,7 +644,7 @@ async function waitForServer() {
       });
       await tool.getByRole('button', { name: 'Find fetches from the map', exact: true }).click();
       await page.waitForFunction(() => window.__marina.getState().project.waves.autoFetch !== null);
-      assert.match(decodeURIComponent(overpassBody), /way\(around:2,60\.150000,24\.950000/);
+      assert.match(decodeURIComponent(overpassBody), /way\.candidates\(around:2,60\.150000,24\.950000/);
       const af = await page.evaluate(() => window.__marina.getState().project.waves);
       assert.equal(af.autoFetch.distances.length, 72);
       assert.match(af.autoFetch.source, /overpass-api\.de/);

@@ -1039,6 +1039,13 @@ date 14.11.2014), read for the breakwater proposal (DECISIONS D48):
   term); candidate ways come from the tiles of the polyline's bounding tile and their parents
   (`calc_parents`). A zero-length polyline segment (two equal consecutive points) would disable the
   segment tests; the tool's star-shaped polyline has none.
+- Live test (2026-11-16, owner's position 60.15675 N, 24.88781 E): `overpass.private.coffee` answered the
+  tool's query for 8 rays of 5 km once (HTTP 200, 120.4 s, 415 530 B, `"generator": "Overpass API 0.7.62.11
+  87bfad18"`, `"timestamp_osm_base": "2026-07-24T11:04:51Z"`): 25 `natural=coastline` ways and 3
+  `natural=water` ways; shores found on all 8 rays at 44–199 m, the position on the water side of coastline
+  way 1103221519 (a basin in Lauttasaari's east shore). Later requests to the same server (`node(1)`, the
+  72-ray queries) got no byte in 200 s. The OSM standard tile server returned 103-byte blank tiles to the
+  development environment's command-line client, so the basin was drawn from the Overpass geometry only.
 
 ## 14. Water levels: FMI and SYKE open data (read 2026-11-15)
 

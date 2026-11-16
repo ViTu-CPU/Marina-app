@@ -38,13 +38,27 @@ describe('rays and sector fetches (I94)', () => {
 });
 
 describe('OpenStreetMap shorelines from Overpass (D47)', () => {
-  it('query: water areas and coastline near the rays, relation members, one polyline through the site', () => {
+  it('query: water ways and relations in the box by tag first, then only those near the rays (I112); one polyline through the site', () => {
     const q = fetchQuery(LAT, LON, 3000, 45);
     expect(q.startsWith('[out:json]')).toBe(true);
-    expect(q).toContain('way(around:2,63.559000,27.192500,');
-    expect(q).toContain('rel(bw.near)[natural=water]');
-    expect(q).toContain('way.near(r.rels)->.members;');
-    expect(q.endsWith('.rels out skel;')).toBe(true);
+    // The box: 3 000 m + 200 m to each side of the site.
+    const box = q.match(/way\[natural=coastline\]\(([^)]*)\)/)![1]!.split(',').map(Number);
+    expect(plane.toLocal(box[0]!, box[1]!).x).toBeCloseTo(-3200, 0);
+    expect(plane.toLocal(box[0]!, box[1]!).y).toBeCloseTo(-3200, 0);
+    expect(plane.toLocal(box[2]!, box[3]!).x).toBeCloseTo(3200, 0);
+    expect(plane.toLocal(box[2]!, box[3]!).y).toBeCloseTo(3200, 0);
+    expect(q).toContain(`rel[natural=water](${box.map((x) => x.toFixed(6)).join(',')})`);
+    expect(q).toContain(')->.waterRels;way(r.waterRels)(');
+    expect(q).toContain('(.tagged;.members;)->.candidates;way.candidates(around:2,63.559000,27.192500,');
+    expect(q).toContain('rel.waterRels(bw.ways)->.rels;');
+    expect(q.endsWith('.ways out geom;.rels out skel;')).toBe(true);
+    // Every set used is defined first.
+    for (const set of ['tagged', 'waterRels', 'members', 'candidates', 'ways', 'rels']) {
+      const defined = q.indexOf(`->.${set};`);
+      const used = q.search(new RegExp(`(?<!->)\\.${set}\\b`));
+      expect(defined).toBeGreaterThan(0);
+      expect(used).toBeGreaterThan(defined);
+    }
     // 8 rays: centre and end per ray, back to the centre: 17 coordinate pairs.
     expect(q.match(/around:2,([^)]*)\)/)![1]!.split(',').length).toBe(34);
     // The northern ray ends 3 000 m north.
@@ -162,6 +176,10 @@ describe('OpenStreetMap shorelines from Overpass (D47)', () => {
     await expect(lookupFetch(LAT, LON, 20000, { fetchImpl: none.f })).rejects.toThrow(
       /no shore in any direction within 20 km; the answer held 0 ways.*; overpass-api\.de: no shore in any direction within 20 km; the answer held 1 ways, 0 water areas \(relations\), 0 shore segments/,
     );
+    // A refused query: the reason from Overpass's error page.
+    const page = '<html><body><p>The data included in this document is from www.openstreetmap.org.</p><p><strong style="color:#FF0000">Error</strong>: line 1: parse error: Unknown type &quot;wya&quot; </p></body></html>';
+    const refused = answers([() => answer(page, 400), () => answer(page, 400)]);
+    await expect(lookupFetch(LAT, LON, 5000, { fetchImpl: refused.f })).rejects.toThrow('overpass.private.coffee: answered 400: Error : line 1: parse error: Unknown type "wya"');
     // A server that does not answer is given up after the time limit.
     let silent = true;
     const hang = (async (_url: string, init?: RequestInit) => {
