@@ -78,33 +78,35 @@ describe('data/hinnasto.xlsx (D19)', () => {
 
 describe('anchor columns of the price list (D62)', () => {
   const base = list().products.find((p) => p.category === 'anchor')!;
+  // D64: concrete blocks or pile anchors only (no screw anchors).
   const screw: Product = {
     ...base,
-    id: 'screw-test',
-    name: 'Screw anchor (test)',
+    id: 'pile-test',
+    name: 'Pile anchor (test)',
     anchorMassKg: null,
-    anchorKind: 'screw',
+    anchorKind: 'pile',
     capacityHorizontalKn: 50,
     capacityUpliftKn: 60,
     capacityBasis: 'published',
-    seabeds: ['clay', 'sand'],
+    seabeds: ['mediumClay', 'fineMediumSand'],
     installedPrice: 1255,
     priceIncludesVat: true,
   };
 
-  it('a screw anchor with published capacities, seabeds and an installed price survives writing and reading', () => {
+  it('a pile anchor with published capacities, seabeds and an installed price survives writing and reading', () => {
     const withScrew: PriceList = { ...list(), products: [...list().products, screw] };
     const again = parsePriceListFile(priceListToXlsx(withScrew, 25.5), 'x');
     expect(again.ok ? [] : again.errors).toEqual([]);
     expect(again.ok && again.priceList.products.at(-1)).toEqual(screw);
     expect(installedPriceVat0(screw, 25.5)).toBeCloseTo(1000, 9);
-    expect(anchorKindOf(screw)).toBe('screw');
+    expect(anchorKindOf(screw)).toBe('pile');
     // A row without anchor_type is a concrete block.
     expect(anchorKindOf({ ...base, anchorKind: null })).toBe('block');
   });
 
-  it('seabeds are separated by commas, semicolons or spaces', () => {
-    expect(seabedList('Clay, sand;rock')).toEqual(['clay', 'sand', 'rock']);
+  it('seabeds are separated by commas, semicolons or spaces, in any letter case', () => {
+    expect(seabedList('MEDIUMCLAY, fineMediumSand;rock')).toEqual(['mediumClay', 'fineMediumSand', 'rock']);
+    expect(seabedList('mud')).toEqual(['mud']);
     expect(seabedList('')).toEqual([]);
   });
 
@@ -119,12 +121,12 @@ describe('anchor columns of the price list (D62)', () => {
     ]);
     expect(anchorRowErrors({ ...screw, capacityBasis: null }, at)).toEqual([`${at}, capacity_basis: a capacity needs capacity_basis = published (the supplier's figure).`]);
     expect(anchorRowErrors({ ...screw, capacityBasis: 'friction_model' }, at)).toEqual([
-      `${at}, capacity_basis: only concrete blocks use the friction model; a screw needs a published capacity.`,
+      `${at}, capacity_basis: only concrete blocks use the friction model; a pile needs a published capacity.`,
       `${at}, capacity_basis: a capacity needs capacity_basis = published (the supplier's figure).`,
     ]);
     expect(anchorRowErrors({ ...screw, sourceUrl: '' }, at)).toEqual([`${at}: a published capacity needs source_url and source_date (YYYY-MM-DD).`]);
     expect(anchorRowErrors({ ...screw, sourceDate: '2026' }, at)).toEqual([`${at}: a published capacity needs source_url and source_date (YYYY-MM-DD).`]);
-    // A screw anchor without a capacity is allowed (it is then never chosen by itself).
+    // A pile anchor without a capacity is allowed (sized by geotechnical design).
     expect(anchorRowErrors({ ...screw, capacityHorizontalKn: null, capacityUpliftKn: null, capacityBasis: null }, at)).toEqual([]);
   });
 
@@ -135,9 +137,9 @@ describe('anchor columns of the price list (D62)', () => {
       at,
     );
     expect(errors).toEqual([
-      `${at}, anchor_type: "helix" is not one of block, screw, pile, rock_bolt, drag.`,
+      `${at}, anchor_type: "helix" is not one of block, pile.`,
       `${at}, capacity_basis: "guess" is not one of friction_model, published.`,
-      `${at}, seabed: "mud" is not one of clay, sand, rock.`,
+      `${at}, seabed: "mud" is not one of rock, gravelCoarseSand, fineMediumSand, fineSiltySand, silt, stiffClay, mediumClay, softClayMud.`,
       `${at}, capacity_uplift_kn: must not be negative.`,
       `${at}, capacity_basis: a capacity needs capacity_basis = published (the supplier's figure).`,
     ]);

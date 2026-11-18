@@ -1,25 +1,17 @@
 /**
- * The anchor of one line (DECISIONS D62).
+ * The anchor of one line (DECISIONS D62, D64).
  *
- * Every line gets at most `maxAnchorsPerLine` anchors (default 1; 2 only by the user's choice,
- * "tandem"). The cheapest anchor of the price list that suits the seabed and holds the line within
- * that number is chosen:
- *  - concrete blocks (`anchor_type` block or empty) by the friction model (or the wedge tables):
- *    pieces = ⌈required mass / product mass⌉, products no heavier than the largest piece to be
- *    handled (`maxAnchorMass`);
- *  - every other kind (screw, pile, rock_bolt, drag) by its **published** capacity only:
- *    pieces = ⌈SF · H / capacity_horizontal⌉, and for a line that lifts its anchor also
- *    ⌈SF · V / capacity_uplift⌉. A product without a published capacity (or without the uplift
- *    capacity a lifting line needs, or without its seabeds) is never chosen by itself.
- * The cost compared is per line: pieces × (installed price, else supply price + the installation
- * estimated from the labour parameters of the price list).
+ * The owner's rule (D64): a line gets **concrete anchors of at most `maxAnchorMass` (5 t)** — one
+ * per line, two only as the user's tandem choice — or, when no such block holds it, a **pile anchor
+ * at the end of its chain** (length and section by geotechnical design). The required block mass
+ * comes from the sizing of docs/ANKKUROINTI_MITOITUS_SPEC.md (engine/mooring.ts). No other anchor
+ * kinds (screw anchors etc.) are chosen.
  *
- * When nothing fits, the line is INFEASIBLE and the reason names what each kind would need, e.g.
- * "block: needs 33 922 kg, max product 3 000 kg". The required mass is never split over more
- * anchors than allowed, and the line spacing is not changed to make blocks fit: the load per line
- * only falls in proportion to the spacing.
+ * Among the blocks that hold, the cheapest per line wins: pieces × (installed price, else supply
+ * price + the installation estimated from the labour parameters of the price list). A block without
+ * a price is chosen only when no priced block holds (it is then listed as unpriced).
  */
-import { anchorKindOf, installedPriceVat0, parameter, unitPriceVat0, type AnchorKind, type PriceList, type Product, type SeabedType } from './catalog';
+import { anchorKindOf, installedPriceVat0, parameter, unitPriceVat0, type PriceList, type Product } from './catalog';
 
 /**
  * D62: installation of the anchors, from the price list's parameters (Assumptions there). Older
@@ -91,112 +83,73 @@ export function anchorPieceCost(product: Product, list: PriceList, vatPct: numbe
   return supply + diving + boat;
 }
 
-/** What one line asks of its anchor. */
-export interface LineNeed {
-  /** Design horizontal load at the anchor, N. */
-  H: number;
-  /** Uplift at the anchor, N (0 when the chain lies on the bottom). */
-  V: number;
-  /** Mass in air a concrete block needs (friction model, or wedge tables), kg. */
-  blockMassKg: number;
-}
-
-export interface LineAnchorOptions {
-  seabed: SeabedType;
-  /** At most this many anchors on one line (D62). */
-  maxPerLine: number;
-  /** Heaviest concrete block to be handled, kg. */
-  maxBlockMassKg: number;
-  /** Factor of safety on published capacities (1 = they are working loads). */
-  capacitySafetyFactor: number;
-  /** Only concrete blocks (stern-buoy sinkers, sized from a table by mass). */
-  blocksOnly?: boolean;
-  /** How the block mass was found, for the reason ('block' or 'block (wedge sizing)'). */
-  blockLabel?: string;
-}
-
-export interface AnchorPick {
-  product: Product;
-  kind: AnchorKind;
-  count: number;
-  /** Cost of the line's anchors in place, € VAT 0 %. */
-  cost: number;
-}
-
-/** The anchor of a line, or why none of the price list fits (`reason`). */
-export interface LineAnchor {
-  pick: AnchorPick | null;
-  reason: string | null;
-}
-
 /** 33922 → "33 922" (spaces between thousands). */
 export const groupThousands = (x: number): string => Math.round(x).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-const kn = (n: number) => (n / 1000).toFixed(1);
 
-const KIND_ORDER: readonly AnchorKind[] = ['block', 'screw', 'pile', 'rock_bolt', 'drag'];
+export interface BlockPick {
+  product: Product;
+  count: number;
+  /** Cost of the line's blocks in place, € VAT 0 %; null when the block has no price. */
+  cost: number | null;
+}
 
-export function chooseLineAnchor(need: LineNeed, o: LineAnchorOptions, list: PriceList, vatPct: number, install: InstallParams = installParams(list)): LineAnchor {
+/** The concrete blocks a plan may use: no heavier than `maxBlockMassKg`, for the seabed (empty list = any). */
+export function usableBlocks(list: PriceList, maxBlockMassKg: number, seabed: string): Product[] {
+  return list.products.filter(
+    (p) =>
+      p.category === 'anchor' &&
+      anchorKindOf(p) === 'block' &&
+      p.anchorMassKg !== null &&
+      p.anchorMassKg > 0 &&
+      p.anchorMassKg <= maxBlockMassKg + 1e-9 &&
+      (p.seabeds.length === 0 || (p.seabeds as readonly string[]).includes(seabed)),
+  );
+}
+
+/**
+ * The cheapest blocks of at least `massReqKg` in total, at most `maxPerLine` pieces of at most
+ * `maxBlockMassKg`; null with the reason ("block: needs 32 604 kg, max product 5 000 kg") when none.
+ */
+export function chooseBlock(
+  massReqKg: number,
+  o: { maxPerLine: number; maxBlockMassKg: number; seabed: string },
+  list: PriceList,
+  vatPct: number,
+  install: InstallParams = installParams(list),
+): { pick: BlockPick | null; heaviestKg: number; reason: string | null } {
   const maxPerLine = Math.max(1, Math.floor(o.maxPerLine));
-  const anchors = list.products.filter((p) => p.category === 'anchor' && (!o.blocksOnly || anchorKindOf(p) === 'block'));
-  const suits = (p: Product, anyWhenEmpty: boolean) => (p.seabeds.length === 0 ? anyWhenEmpty : p.seabeds.includes(o.seabed));
-  const candidates: AnchorPick[] = [];
-  const reasons: string[] = [];
-  const times = maxPerLine > 1 ? `${maxPerLine} × ` : '';
-
-  // Concrete blocks: the friction model (or the wedge tables) gave the mass.
-  const blocks = anchors.filter((p) => anchorKindOf(p) === 'block');
-  if (blocks.length > 0) {
-    const label = o.blockLabel ?? 'block';
-    const usable = blocks.filter((p) => p.anchorMassKg !== null && p.anchorMassKg > 0 && anchorPieceCost(p, list, vatPct, install) !== null && suits(p, true));
-    const handled = usable.filter((p) => p.anchorMassKg! <= o.maxBlockMassKg + 1e-9);
-    for (const p of handled) {
-      const count = Math.max(1, Math.ceil(need.blockMassKg / p.anchorMassKg! - 1e-9));
-      if (count <= maxPerLine) candidates.push({ product: p, kind: 'block', count, cost: count * anchorPieceCost(p, list, vatPct, install)! });
-    }
-    if (usable.length === 0) reasons.push(`${label}: no concrete anchor with a mass and a price for ${o.seabed}`);
-    else if (handled.length === 0) reasons.push(`${label}: needs ${groupThousands(need.blockMassKg)} kg, no product within the largest piece ${groupThousands(o.maxBlockMassKg)} kg`);
-    else {
-      const heaviest = handled.reduce((m, p) => Math.max(m, p.anchorMassKg!), 0);
-      reasons.push(`${label}: needs ${groupThousands(need.blockMassKg)} kg, max product ${times}${groupThousands(heaviest)} kg`);
-    }
+  const blocks = usableBlocks(list, o.maxBlockMassKg, o.seabed);
+  const heaviestKg = blocks.reduce((m, p) => Math.max(m, p.anchorMassKg!), 0);
+  if (!Number.isFinite(massReqKg)) return { pick: null, heaviestKg, reason: 'block: no friction capacity (the seabed slope leaves none)' };
+  const candidates: BlockPick[] = [];
+  for (const p of blocks) {
+    const count = Math.max(1, Math.ceil(massReqKg / p.anchorMassKg! - 1e-9));
+    if (count > maxPerLine) continue;
+    const piece = anchorPieceCost(p, list, vatPct, install);
+    candidates.push({ product: p, count, cost: piece === null ? null : count * piece });
   }
-
-  // Other kinds: published capacities only.
-  const sfH = o.capacitySafetyFactor * need.H;
-  const sfV = o.capacitySafetyFactor * Math.max(0, need.V);
-  const lifts = need.V > 1e-6;
-  for (const kind of KIND_ORDER.filter((k) => k !== 'block')) {
-    const ofKind = anchors.filter((p) => anchorKindOf(p) === kind);
-    if (ofKind.length === 0) continue;
-    const published = ofKind.filter((p) => p.capacityBasis === 'published' && p.capacityHorizontalKn !== null && p.capacityHorizontalKn > 0);
-    const priced = published.filter((p) => anchorPieceCost(p, list, vatPct, install) !== null);
-    const forSeabed = priced.filter((p) => suits(p, false));
-    const withUplift = lifts ? forSeabed.filter((p) => p.capacityUpliftKn !== null && p.capacityUpliftKn > 0) : forSeabed;
-    for (const p of withUplift) {
-      const count = Math.max(1, Math.ceil(sfH / (p.capacityHorizontalKn! * 1000) - 1e-9), lifts ? Math.ceil(sfV / (p.capacityUpliftKn! * 1000) - 1e-9) : 0);
-      if (count <= maxPerLine) candidates.push({ product: p, kind, count, cost: count * anchorPieceCost(p, list, vatPct, install)! });
-    }
-    if (published.length === 0) reasons.push(`${kind}: no published capacity in the price list`);
-    else if (priced.length === 0) reasons.push(`${kind}: no price in the price list`);
-    else if (forSeabed.length === 0) reasons.push(`${kind}: none for ${o.seabed}`);
-    else if (withUplift.length === 0) reasons.push(`${kind}: needs ${kn(sfV)} kN uplift, no uplift capacity published`);
-    else {
-      const maxH = withUplift.reduce((m, p) => Math.max(m, p.capacityHorizontalKn!), 0);
-      const maxV = lifts ? withUplift.reduce((m, p) => Math.max(m, p.capacityUpliftKn!), 0) : 0;
-      const parts = [`${kn(sfH)} kN horizontal, max product ${times}${maxH.toFixed(1)} kN`];
-      if (lifts) parts.push(`${kn(sfV)} kN uplift, max product ${times}${maxV.toFixed(1)} kN`);
-      reasons.push(`${kind}: needs ${parts.join('; ')}`);
-    }
+  if (candidates.length === 0) {
+    const times = maxPerLine > 1 ? `${maxPerLine} × ` : '';
+    return {
+      pick: null,
+      heaviestKg,
+      reason: blocks.length === 0 ? `block: no concrete anchor of at most ${groupThousands(o.maxBlockMassKg)} kg in the price list` : `block: needs ${groupThousands(massReqKg)} kg, max product ${times}${groupThousands(heaviestKg)} kg`,
+    };
   }
-
-  if (candidates.length === 0) return { pick: null, reason: reasons.length > 0 ? reasons.join('; ') : 'no anchor in the price list' };
   candidates.sort(
     (a, b) =>
-      (Math.abs(a.cost - b.cost) > 1e-9 ? a.cost - b.cost : 0) ||
+      (a.cost === null ? 1 : 0) - (b.cost === null ? 1 : 0) ||
+      (a.cost !== null && b.cost !== null && Math.abs(a.cost - b.cost) > 1e-9 ? a.cost - b.cost : 0) ||
       a.count - b.count ||
-      KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) ||
-      anchorPieceMassKg(a.product) - anchorPieceMassKg(b.product) ||
+      a.product.anchorMassKg! - b.product.anchorMassKg! ||
       (a.product.id < b.product.id ? -1 : a.product.id > b.product.id ? 1 : 0),
   );
-  return { pick: candidates[0]!, reason: null };
+  return { pick: candidates[0]!, heaviestKg, reason: null };
+}
+
+/** D64: the pile anchor of the price list (`anchor_type` pile with a price; installed price first), or null. */
+export function pileProduct(list: PriceList, vatPct: number): Product | null {
+  const piles = list.products.filter((p) => p.category === 'anchor' && anchorKindOf(p) === 'pile' && (installedPriceVat0(p, vatPct) ?? unitPriceVat0(p, vatPct)) !== null);
+  piles.sort((a, b) => (installedPriceVat0(a, vatPct) ?? unitPriceVat0(a, vatPct)!) - (installedPriceVat0(b, vatPct) ?? unitPriceVat0(b, vatPct)!) || (a.id < b.id ? -1 : 1));
+  return piles[0] ?? null;
 }

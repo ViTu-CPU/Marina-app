@@ -7,6 +7,8 @@
  * Prices used in calculations are VAT 0 % (D18).
  */
 
+import { SEABED_KEYS, type SeabedKey } from './mooring';
+
 export const PRODUCT_CATEGORIES = [
   'pontoon',
   'finger',
@@ -31,15 +33,16 @@ export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
 export const PRODUCT_UNITS = ['pcs', 'm', 'kg', 'h', 'day', 'lump'] as const;
 export type ProductUnit = (typeof PRODUCT_UNITS)[number];
 
-/** Seabed types of the anchoring calculation (D23). */
-export const SEABED_TYPES = ['clay', 'sand', 'rock'] as const;
-export type SeabedType = (typeof SEABED_TYPES)[number];
+/** Seabed types of the anchoring calculation (D64: NAVFAC DM-7.02 keys of engine/mooring.ts). */
+export const SEABED_TYPES = SEABED_KEYS;
+export type SeabedType = SeabedKey;
 
 /**
- * D62: kinds of anchor in the price list (`anchor_type`). 'block' = concrete weight holding by
- * friction (sized by the friction model); the others hold by their published capacity only.
+ * D62, D64: kinds of anchor in the price list (`anchor_type`). 'block' = concrete weight, sized by
+ * the mooring calculation; 'pile' = pile anchor at the end of a chain (length and section by
+ * geotechnical design). Owner (D64): no other kinds.
  */
-export const ANCHOR_KINDS = ['block', 'screw', 'pile', 'rock_bolt', 'drag'] as const;
+export const ANCHOR_KINDS = ['block', 'pile'] as const;
 export type AnchorKind = (typeof ANCHOR_KINDS)[number];
 
 /**

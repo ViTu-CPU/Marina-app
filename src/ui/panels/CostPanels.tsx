@@ -2,12 +2,14 @@
  * Panels of the anchoring plan and the cost estimate (D23, D24).
  */
 import { useRef, useState } from 'react';
-import { MAX_SPLAY_ANGLE, resetAnchoringFactors, type AnchoringParams, type AnchorType, type BuoySinkerMethod, type BuoyTableId, type Seabed } from '../../engine/anchoring';
+import { SEABED_FRICTION, SEABED_KEYS } from '../../engine/mooring';
+import { MAX_SPLAY_ANGLE, MOORING_NOTES, resetAnchoringFactors, type AnchoringParams, type BuoySinkerMethod, type BuoyTableId, type Seabed } from '../../engine/anchoring';
 import { BOM_GROUPS, seriesNames, type BomGroup } from '../../engine/bom';
 import type { Layout } from '../../engine/model';
 import { parsePriceListFile, priceListToXlsx } from '../../catalog/priceList';
 import { appStore, useAppStore } from '../../state/store';
-import { anchoringStatusLabel, excludesLabel, otherTypeText, useCostModel, type CostModel } from '../costModel';
+import { anchoringStatusLabel, excludesLabel, useCostModel, type CostModel } from '../costModel';
+import { mooringPackage } from '../export/mooringPackage';
 import { bomWorkbook } from '../export/bomXlsx';
 import { downloadBytes, readFileAsBytes, safeFileName, XLSX_MIME } from '../export/download';
 import { formatCount, formatEuro, formatKn, formatLength } from '../format';
@@ -18,12 +20,11 @@ import { Button, NumberField, OptionalNumberField, Section } from './fields';
 import { IssueList } from './IssueList';
 
 const state = () => appStore.getState();
-const SEABEDS: Seabed[] = ['clay', 'sand', 'rock'];
-const ANCHOR_TYPES: AnchorType[] = ['block', 'wedge'];
+const SEABEDS: readonly Seabed[] = SEABED_KEYS;
 const SINKER_METHODS: BuoySinkerMethod[] = ['table', 'factor'];
 const BUOY_TABLES: BuoyTableId[] = ['batunionen', 'topMarine'];
 
-type NumericAnchoring = Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed' | 'normalHighWater' | 'normalLowWater' | 'quayLevel'>;
+type NumericAnchoring = { [K in keyof AnchoringParams]: AnchoringParams[K] extends number ? K : never }[keyof AnchoringParams];
 
 /** D36: sizing of the stern-buoy sinkers and chains; shown when the project has stern buoys. */
 function BuoyFields() {
@@ -181,13 +182,55 @@ function WaterLevelLookup() {
   );
 }
 
-/** Left sidebar: parameters of the anchoring plan. */
+/** D64: the cohesive model of the spec (5.3), off by default. */
+function CohesiveFields() {
+  const t = useT();
+  const cohesive = useAppStore((s) => s.project.anchoring.cohesive);
+  const seabed = useAppStore((s) => s.project.anchoring.seabed);
+  const keys = ['Su_z', 'Su_a', 'A', 'B', 'z', 'gammaB', 'massDryKg'] as const;
+  return (
+    <>
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        <span>
+          {t('anchoring.cohesiveOn')}
+          {seabed === 'softClayMud' && !cohesive ? ' (!)' : ''}
+        </span>
+        <input
+          type="checkbox"
+          data-testid="cohesive-on"
+          checked={cohesive !== null}
+          onChange={(e) =>
+            // The fields start empty-ish: every value has to be entered from soil data (no defaults in the spec).
+            state().setAnchoring({ cohesive: e.target.checked ? { Su_z: 0, Su_a: 0, A: 0, B: 0, z: 0, gammaB: 0, massDryKg: 0 } : null })
+          }
+        />
+      </label>
+      {cohesive &&
+        keys.map((k) => (
+          <NumberField
+            key={k}
+            label={t(`cohesive.${k}`)}
+            value={cohesive[k]}
+            min={0}
+            max={k === 'massDryKg' ? 50000 : 1000}
+            step={k === 'massDryKg' ? 100 : 0.1}
+            onChange={(v) => state().setAnchoring({ cohesive: { ...cohesive, [k]: v } }, { coalesce: `anchoring:cohesive:${k}` })}
+          />
+        ))}
+    </>
+  );
+}
+
+/** Left sidebar: parameters of the anchoring plan (D64: docs/ANKKUROINTI_MITOITUS_SPEC.md §2). */
 export function AnchoringSection() {
   const t = useT();
   const seabed = useAppStore((s) => s.project.anchoring.seabed);
   const friction = useAppStore((s) => s.project.anchoring.friction);
-  const anchorType = useAppStore((s) => s.project.anchoring.anchorType);
   const anchorsPerLine = useAppStore((s) => s.project.anchoring.maxAnchorsPerLine);
+  const winter = useAppStore((s) => s.project.anchoring.winterInWater);
+  const capacityFactor = useAppStore((s) => s.project.anchoring.capacityFactor);
+  const capacitySource = useAppStore((s) => s.project.anchoring.capacityFactorSource);
+  const range = SEABED_FRICTION[seabed].range;
   return (
     <Section title={t('section.anchoring')} defaultOpen={false}>
       <AnchoringField name="depth" min={0.5} max={100} />
@@ -200,7 +243,8 @@ export function AnchoringSection() {
       <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
         {t('anchoring.seabed')}
         <select
-          className="rounded border border-slate-300 px-1 py-0.5 text-sm"
+          className="max-w-[11rem] rounded border border-slate-300 px-1 py-0.5 text-sm"
+          data-testid="seabed"
           value={seabed}
           onChange={(e) => state().setAnchoring({ seabed: e.target.value as Seabed })}
         >
@@ -211,36 +255,45 @@ export function AnchoringSection() {
           ))}
         </select>
       </label>
-      <NumberField
-        label={t('anchoring.friction')}
-        value={friction[seabed]}
-        min={0.05}
-        max={1.5}
-        step={0.05}
-        onChange={(v) => state().setAnchoring({ friction: { ...friction, [seabed]: v } }, { coalesce: `anchoring:friction:${seabed}` })}
-      />
-      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
-        {t('anchoring.anchorType')}
-        <select
-          className="rounded border border-slate-300 px-1 py-0.5 text-sm"
-          value={anchorType}
-          onChange={(e) => state().setAnchoring({ anchorType: e.target.value as AnchorType })}
-        >
-          {ANCHOR_TYPES.map((a) => (
-            <option key={a} value={a}>
-              {t(`anchorType.${a}`)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <AnchoringField name="windSpeed" min={0} max={60} step={1} />
-      <AnchoringField name="dragCoefficient" min={0.1} max={3} step={0.05} />
-      <AnchoringField name="profileHeightRatio" min={0.01} max={1} step={0.01} />
+      {seabed !== 'softClayMud' && range && (
+        <NumberField
+          label={`${t('anchoring.friction')} (${range[0]}–${range[1]})`}
+          value={friction[seabed]}
+          min={0.05}
+          max={1.5}
+          step={0.05}
+          onChange={(v) => state().setAnchoring({ friction: { ...friction, [seabed]: v } }, { coalesce: `anchoring:friction:${seabed}` })}
+        />
+      )}
+      <AnchoringField name="slopeDeg" min={0} max={30} step={1} />
+      <CohesiveFields />
+      <AnchoringField name="capacityFactor" min={0.1} max={5} step={0.1} />
+      {capacityFactor !== 1 && (
+        <label className="flex flex-col gap-0.5 text-sm text-slate-700">
+          {t('anchoring.capacityFactorSource')}
+          <input
+            className="rounded border border-slate-300 px-1 py-0.5 text-sm"
+            data-testid="capacity-source"
+            value={capacitySource}
+            onChange={(e) => state().setAnchoring({ capacityFactorSource: e.target.value }, { coalesce: 'anchoring:capacityFactorSource' })}
+          />
+        </label>
+      )}
+      <AnchoringField name="windSpeed" min={0} max={80} step={1} />
+      <p className="text-xs text-amber-800">{t('anchoring.windNote')}</p>
       <AnchoringField name="leewardFactor" min={0} max={1} step={0.05} />
+      <AnchoringField name="waveLineLoad" min={0} max={100} step={0.5} />
+      <AnchoringField name="waveMin" min={0} max={20} step={0.5} />
+      <AnchoringField name="currentSpeed" min={0} max={5} step={0.1} />
+      <AnchoringField name="pontoonDraft" min={0} max={5} step={0.05} />
+      <AnchoringField name="extraStatic" min={0} max={2000} step={1} />
+      <AnchoringField name="iceLineLoad" min={0} max={200} step={1} />
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('anchoring.winterInWater')}
+        <input type="checkbox" checked={winter} onChange={(e) => state().setAnchoring({ winterInWater: e.target.checked })} />
+      </label>
+      <AnchoringField name="unevenFactor" min={1} max={3} step={0.05} />
       <AnchoringField name="lineSpacing" min={1} max={100} step={1} />
-      <AnchoringField name="waveLoad" min={0} max={50} step={0.5} />
-      <AnchoringField name="waveLoadFullHs" min={0} max={5} step={0.05} />
-      <AnchoringField name="waveLoadMinHs" min={0} max={5} step={0.05} />
       <AnchoringField name="splayAngle" min={0} max={MAX_SPLAY_ANGLE} step={5} />
       <AnchoringField name="tipAnchorMinLength" min={0} max={1000} step={0.5} />
       <AnchoringField name="fingerPileMinLength" min={0} max={100} step={0.5} />
@@ -264,8 +317,8 @@ export function AnchoringSection() {
           ))}
         </select>
       </label>
-      <AnchoringField name="capacitySafetyFactor" min={1} max={5} step={0.1} />
       <AnchoringField name="pontoonFreeboard" min={0.1} max={3} step={0.05} />
+      <AnchoringField name="waterDensity" min={990} max={1040} step={1} />
       <BuoyFields />
       <Button onClick={() => state().setAnchoring(resetAnchoringFactors(state().project.anchoring))}>{t('anchoring.resetFactors')}</Button>
       <p className="text-xs text-slate-500">{t('anchoring.note')}</p>
@@ -285,10 +338,19 @@ function PriceListMissing() {
   return <p className="text-sm text-slate-500">{error ? `${t('cost.priceListError')} ${error}` : t('cost.loading')}</p>;
 }
 
-/** Right sidebar: summary of the anchoring plan of the selected alternative. */
+/** D64: a factor of safety with the colour of the spec (§8): green ≥ target, yellow ≥ 1, red < 1. */
+function Fos({ value, target }: { value: number | null | undefined; target: number }) {
+  const language = useAppStore((s) => s.language);
+  if (value === null || value === undefined || !Number.isFinite(value)) return <span>–</span>;
+  const cls = value >= target - 1e-9 ? 'bg-green-100 text-green-900' : value >= 1 ? 'bg-yellow-100 text-yellow-900' : 'bg-red-100 text-red-900';
+  return <span className={`rounded px-1 ${cls}`}>{value.toFixed(2).replace('.', language === 'fi' ? ',' : '.')}</span>;
+}
+
+/** Right sidebar: summary of the anchoring plan of the selected alternative (D64: spec §8). */
 export function AnchoringSummary({ model }: { model: CostModel | null }) {
   const t = useT();
   const language = useAppStore((s) => s.language);
+  const project = useAppStore((s) => s.project);
   if (!model) {
     return (
       <Section title={t('section.anchoringPlan')}>
@@ -297,32 +359,52 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
     );
   }
   const { anchoring, priceList } = model;
+  const a = project.anchoring;
   const name = (id: string | null) => (id ? (priceList.products.find((p) => p.id === id)?.name ?? id) : t('anchoring.none'));
   const chains = sumBy(anchoring.lines, (l) => name(l.chainId), (l) => l.chainLength);
-  // D62: INFEASIBLE lines as one row of anchor points by design.
+  // D64: pile anchors without a product of the price list as one row.
   const anchors = sumBy(
     anchoring.lines.filter((l) => l.fixing === 'seabed'),
-    (l) => (l.status === 'INFEASIBLE' ? t('anchoring.byDesign') : name(l.anchorId)),
-    (l) => (l.status === 'INFEASIBLE' ? 1 : l.anchorCount),
+    (l) => (l.status === 'PILE' && !l.anchorId ? t('anchoring.pileAnchor') : name(l.anchorId)),
+    (l) => l.anchorCount,
   );
   const wallFixings = anchoring.lines.filter((l) => l.fixing === 'wall').length;
   const piles = anchoring.piles.length;
   const maxLine = anchoring.lines.reduce((m, l) => Math.max(m, l.horizontalKn), 0);
-  // Stern-buoy sinkers (D36) are listed on their own.
   const buoys = anchoring.lines.filter((l) => l.role === 'buoy');
-  const maxMass = anchoring.lines.filter((l) => l.role !== 'buoy').reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
+  const masses = anchoring.lines.filter((l) => l.role !== 'buoy' && l.fixing === 'seabed' && Number.isFinite(l.requiredAnchorKg)).map((l) => l.requiredAnchorKg);
   const maxSinker = buoys.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
+  const seabedLines = anchoring.lines.filter((l) => l.fixing === 'seabed' && l.role !== 'buoy');
+  const worstAnchor = seabedLines.reduce((m, l) => Math.min(m, l.governing?.anchorFoS ?? Infinity), Infinity);
+  const worstChain = anchoring.lines.reduce((m, l) => Math.min(m, l.chainFoS ?? Infinity), Infinity);
+  const exportPackage = () => {
+    const layout = project.layouts.find((l) => l.id === state().selectedLayoutId);
+    if (!layout) return;
+    const json = mooringPackage(project, layout, anchoring, new Date().toISOString().slice(0, 10), model.choices.pontoonFreeboard);
+    downloadBytes(`${safeFileName(`${project.name}-${layout.id}-mooring-data`).normalize('NFKD').replace(/[^\w.-]+/g, '-')}.json`, new TextEncoder().encode(json), 'application/json');
+  };
   return (
     <Section title={t('section.anchoringPlan')}>
       <div className="space-y-1 text-sm">
+        {/* D64: the text the spec requires in the result view. */}
+        <p className="rounded border border-amber-300 bg-amber-50 p-1 text-xs font-medium text-amber-900" data-testid="mooring-disclaimer">
+          {t('mooring.disclaimer')}
+        </p>
         <div className="flex justify-between">
           <span className="text-slate-600">{t('anchoring.lines')}</span>
           <span>{formatCount(anchoring.lines.length, language)}</span>
         </div>
-        {/* D62: lines that no anchor of the price list holds. */}
         <div className="flex justify-between gap-2" data-testid="anchoring-status">
           <span className="text-slate-600">{t('anchoring.status')}</span>
-          <span className={`text-right ${anchoring.lines.some((l) => l.status === 'INFEASIBLE') ? 'font-medium text-amber-800' : ''}`}>{anchoringStatusLabel(t, anchoring.lines, language)}</span>
+          <span className={`text-right ${anchoring.lines.some((l) => l.status === 'PILE') ? 'font-medium text-amber-800' : ''}`}>{anchoringStatusLabel(t, anchoring.lines, language)}</span>
+        </div>
+        <div className="flex justify-between" data-testid="worst-anchor-fos">
+          <span className="text-slate-600">{t('mooring.worstAnchor')}</span>
+          <Fos value={Number.isFinite(worstAnchor) ? worstAnchor : null} target={a.slidingSafetyFactor} />
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-600">{t('mooring.worstChain')}</span>
+          <Fos value={Number.isFinite(worstChain) ? worstChain : null} target={a.chainSafetyFactor} />
         </div>
         <div className="flex justify-between">
           <span className="text-slate-600">{t('anchoring.maxLine')}</span>
@@ -330,21 +412,8 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
         </div>
         <div className="flex justify-between">
           <span className="text-slate-600">{t('anchoring.maxMass')}</span>
-          <span>{formatCount(maxMass, language)} kg</span>
+          <span>{masses.length > 0 ? `${formatCount(Math.max(...masses), language)} kg` : '–'}</span>
         </div>
-        {anchoring.comparison && (
-          <>
-            <div className="flex justify-between">
-              <span className="text-slate-600">{t('anchoring.totalMass')}</span>
-              <span>{formatCount(anchoring.comparison.current.totalKg, language)} kg</span>
-            </div>
-            {/* I102: the same plan with the other anchor type. */}
-            <div className="flex justify-between gap-2" data-testid="anchoring-other-type">
-              <span className="text-slate-600">{t(`anchoring.ifOther.${anchoring.comparison.other.anchorType}`)}</span>
-              <span className="text-right">{otherTypeText(anchoring.comparison.other, t, language)}</span>
-            </div>
-          </>
-        )}
         {buoys.length > 0 && (
           <>
             <div className="flex justify-between">
@@ -383,7 +452,83 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
             <span className="shrink-0">{formatCount(wallFixings, language)}</span>
           </div>
         )}
+        {/* D64: the load table (spec §8). */}
+        <details>
+          <summary className="cursor-pointer text-xs text-slate-700">{t('mooring.loadTable')}</summary>
+          <table className="mt-1 w-full text-xs" data-testid="mooring-loads">
+            <thead>
+              <tr className="text-left text-slate-500">
+                <th className="font-medium">{t('mooring.pontoon')}</th>
+                <th className="font-medium">{t('mooring.case')}</th>
+                <th className="text-right font-medium">{t('mooring.wind')}</th>
+                <th className="text-right font-medium">{t('mooring.current')}</th>
+                <th className="text-right font-medium">{t('mooring.wave')}</th>
+                <th className="text-right font-medium">{t('mooring.uls')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {anchoring.loads.flatMap((pl) =>
+                pl.cases.map((c) => (
+                  <tr key={`${pl.id}-${c.id}`}>
+                    <td>{pl.id}</td>
+                    <td>{c.id}</td>
+                    <td className="text-right">{formatKn(c.wind, language)}</td>
+                    <td className="text-right">{formatKn(c.current, language)}</td>
+                    <td className="text-right">{formatKn(c.wave, language)}</td>
+                    <td className="text-right font-medium">{formatKn(c.F_uls, language)}</td>
+                  </tr>
+                )),
+              )}
+            </tbody>
+          </table>
+        </details>
+        {/* D64: per line the governing case (spec §8). */}
+        <details>
+          <summary className="cursor-pointer text-xs text-slate-700">
+            {t('mooring.lineTable')} ({formatCount(seabedLines.length, language)})
+          </summary>
+          <table className="mt-1 w-full text-xs" data-testid="mooring-lines">
+            <thead>
+              <tr className="text-left text-slate-500">
+                <th className="font-medium">{t('mooring.line')}</th>
+                <th className="font-medium">{t('mooring.case')}</th>
+                <th className="text-right font-medium">Th</th>
+                <th className="text-right font-medium">Fv</th>
+                <th className="text-right font-medium">{t('mooring.chainFoS')}</th>
+                <th className="text-right font-medium">{t('mooring.anchorFoS')}</th>
+                <th className="text-right font-medium">kg</th>
+              </tr>
+            </thead>
+            <tbody>
+              {seabedLines.map((l) => (
+                <tr key={l.id} title={l.pileReason ?? ''}>
+                  <td>{l.id}</td>
+                  <td>{l.governing ? `${l.governing.case} ${l.governing.waterLevel}` : '–'}</td>
+                  <td className="text-right">{l.governing ? formatKn(l.governing.Th, language) : '–'}</td>
+                  <td className="text-right">{l.governing ? formatKn(l.governing.Fv, language) : '–'}</td>
+                  <td className="text-right">
+                    <Fos value={l.governing?.chainFoS} target={a.chainSafetyFactor} />
+                  </td>
+                  <td className="text-right">
+                    <Fos value={l.governing?.anchorFoS} target={a.slidingSafetyFactor} />
+                  </td>
+                  <td className="text-right">{Number.isFinite(l.requiredAnchorKg) ? formatCount(l.requiredAnchorKg, language) : '–'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-xs text-slate-500">{t('mooring.legend')}</p>
+        </details>
         <IssueList issues={anchoring.issues} testId="anchoring-issues" />
+        <details>
+          <summary className="cursor-pointer text-xs text-slate-700">{t('mooring.notes')}</summary>
+          <ul className="list-disc space-y-0.5 pl-4 text-xs text-slate-600" data-testid="mooring-notes">
+            {MOORING_NOTES.map((n) => (
+              <li key={n.code}>{n.text}</li>
+            ))}
+          </ul>
+        </details>
+        <Button onClick={exportPackage}>{t('mooring.export')}</Button>
         <p className="text-xs text-slate-500">{t('anchoring.compare')}</p>
       </div>
     </Section>

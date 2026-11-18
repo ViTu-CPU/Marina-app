@@ -4,7 +4,11 @@ import { DEMO_PROJECTS } from '../demos';
 import { movePier, setBerthClass, type EditContext } from '../edit';
 import { generateLayouts } from '../generate';
 import { convexInsideRegion, convexPolygonsOverlap, pointInRing } from '../geometry';
+import { catenary, chainWeight, requiredAnchorMassFriction } from '../mooring';
 import { anchoringPlan, buoyChainLength, buoyTable, buoyTableRow, DEFAULT_ANCHORING, estimateBoatWeight, type AnchoringParams } from '../anchoring';
+
+/** The hand calculations below are in fresh water (1 000 kg/m³); the default since D64 is 1 025. */
+const FRESH: AnchoringParams = { ...DEFAULT_ANCHORING, waterDensity: 1000 };
 import { costEstimate } from '../bom';
 import type { PriceList, Product } from '../catalog';
 import type { Berth, BoatClass, MainPier, Params, Site } from '../model';
@@ -134,11 +138,11 @@ describe('stern-buoy sizing (D36, D37), hand-calculated', () => {
   const k9 = (weight?: number): BoatClass => ({ id: 'k9', name: '9 m', length: 9, beam: 3, color: '#000', share: 1, count: 0, ...(weight === undefined ? {} : { weight }) });
   const site: Site = { water: [], shoreline: [], entrance: { a: { x: 0, y: 0 }, b: { x: 1, y: 0 } }, obstacles: [], zones: [] };
   const plan = (classes: BoatClass[], p: Partial<AnchoringParams> = {}, buoyDepthFactor = 1) =>
-    anchoringPlan({ layout: { piers: [pier], berths: [berth] }, site, classes, params: { ...DEFAULT_ANCHORING, ...p }, priceList: LIST, vatPct: 0, buoyDepthFactor });
+    anchoringPlan({ layout: { piers: [pier], berths: [berth] }, site, classes, params: { ...FRESH, ...p }, priceList: LIST, vatPct: 0, buoyDepthFactor });
   const buoyLine = (r: ReturnType<typeof plan>) => r.lines.find((l) => l.role === 'buoy')!;
   const codes = (r: ReturnType<typeof plan>) => r.issues.map((i) => i.code);
-  const BU = buoyTable('batunionen', DEFAULT_ANCHORING);
-  const TM = buoyTable('topMarine', DEFAULT_ANCHORING);
+  const BU = buoyTable('batunionen', FRESH);
+  const TM = buoyTable('topMarine', FRESH);
 
   it('weight estimate (Top Marine) and table rows', () => {
     // Between 7.6 m (3.3 t) and 9.1 m (4.8 t): 9 m → 3.3 + 1.5 · 1.4 / 1.5 = 4.7 t.
@@ -164,20 +168,23 @@ describe('stern-buoy sizing (D36, D37), hand-calculated', () => {
   it("9 m boat of 4 t, Båtunionen's table (default): 1 200 kg sinker, 13 mm chain 6.3 m, float ≥ 70 kg", () => {
     const r = plan([k9(4)]);
     const l = buoyLine(r);
-    // H = ½ · 1.25 · 22² · 1.6 · (3 · 0.15 · 9) = 484 · 4.05 = 1 960.2 N (stern-on).
-    expect(l.horizontalKn).toBeCloseTo(1.9602, 4);
+    // D64, AS 3962: H = 0.0006 · 22² kPa · 1.1 (stern) · 6 m² (Table 4.4, 9 m motor boat) = 1.917 kN (stern-on).
+    expect(l.horizontalKn).toBeCloseTo(0.2904 * 1.1 * 6, 9);
     expect(l).toMatchObject({ id: 'B1-B', holdsId: 'B1', fixing: 'seabed', fix: berth.buoy, anchor: berth.buoy, chainId: 'c13', anchorId: 'a2000', anchorCount: 1 });
     expect(l.chainLength).toBeCloseTo(6.3, 9);
     // Row 5 t: 700 kg in water = 1 200 kg of concrete in air → the cheapest anchor of at least that, 2 000 kg.
     expect(l.requiredAnchorKg).toBeCloseTo(1200, 6);
     // Float: the table's 70 kg vs. the chain in water 3.1 · 6.3 · (1 − 1000/7850) = 17.0 kg.
     expect(l.buoy).toMatchObject({ boatWeightT: 4, weightEstimated: false, floatCapacityKg: 70, tableChainMm: 13 });
-    // Friction method: a = H / w = 1 960.2 / 26.54 = 73.9 m; the short chain hangs between both
-    // ends (6.3 m < touching length 29.0 m): uplift 3 426 N, mass 1.5 · (1 960.2 / 0.3 + 3 426) /
-    // (9.81 · (1 − 1000/2400)) = 2 611 kg > 1 200 kg → warning.
-    expect(l.upliftKn).toBeCloseTo(3.4261, 3);
-    expect(l.buoy!.windAnchorKg).toBeCloseTo(2610.8, 0);
-    expect(r.issues.find((i) => i.code === 'BUOY_SINKER_BELOW_WIND_METHOD')!.message).toContain('1200 kg, the method gives 2611 kg');
+    // The spec's catenary at high water (the short chain hangs between both ends) and its friction
+    // sizing on medium clay (μ 0.30): more than the table's sinker → warning.
+    const cat = catenary(l.horizontalKn, chainWeight({ d_mm: 13, kgPerM: 3.1 }, 1000).w_kNperM, 5.5, 6.3);
+    if (!cat.ok) throw new Error(cat.error);
+    expect(cat.touchdown).toBe(false);
+    expect(l.upliftKn).toBeCloseTo(cat.Vanchor, 9);
+    const sizing = requiredAnchorMassFriction(l.horizontalKn, cat.Vanchor, 0.3, 1.5, 2400, 1000);
+    expect(l.buoy!.windAnchorKg).toBeCloseTo(sizing, 6);
+    expect(r.issues.find((i) => i.code === 'BUOY_SINKER_BELOW_WIND_METHOD')!.message).toContain(`1200 kg, the sizing gives ${Math.round(sizing)} kg`);
     expect(codes(r)).toContain('STERN_BUOYS');
     // High + low water 1.5 + 0.9 = 2.4 m > 1.3 m: the 1:1 slope needs checking.
     expect(codes(r)).toContain('BUOY_WATER_LEVEL_RANGE');
@@ -190,16 +197,17 @@ describe('stern-buoy sizing (D36, D37), hand-calculated', () => {
     expect(buoyLine(plan([k9(4)], { buoyExposed: true }))).toMatchObject({ chainId: 'c16', anchorId: 'a2000', buoy: { floatCapacityKg: 100, tableChainMm: 16 } });
     expect(buoyLine(plan([k9(4)], { buoyExposed: true })).requiredAnchorKg).toBeCloseTo(1714.29, 1);
     expect(buoyLine(plan([k9(4)], { buoyTable: 'topMarine' }))).toMatchObject({ requiredAnchorKg: 1000, anchorId: 'a1000', chainId: 'c16', buoy: { floatCapacityKg: 48 } });
-    // 3 × 4 t = 12 000 kg: no single sinker of the list (heaviest piece 3 000 kg), so INFEASIBLE (D62).
+    // 3 × 4 t = 12 000 kg: no single sinker of the list (heaviest 3 000 kg): a pile anchor (D64).
     expect(buoyLine(plan([k9(4)], { buoySinkerMethod: 'factor' }))).toMatchObject({
       requiredAnchorKg: 12000,
       anchorId: null,
-      anchorCount: 0,
-      status: 'INFEASIBLE',
-      infeasibleReason: 'block: needs 12 000 kg, max product 3 000 kg',
+      anchorKind: 'pile',
+      anchorCount: 1,
+      status: 'PILE',
+      pileReason: 'block: needs 12 000 kg, max product 3 000 kg',
     });
-    const infeasible = plan([k9(4)], { buoySinkerMethod: 'factor' }).issues.filter((i) => i.code === 'ANCHOR_INFEASIBLE');
-    expect(infeasible.some((i) => i.message.startsWith('stern buoys: 1 of 1 anchor lines INFEASIBLE'))).toBe(true);
+    const piled = plan([k9(4)], { buoySinkerMethod: 'factor' }).issues.filter((i) => i.code === 'PILE_ANCHORS');
+    expect(piled.some((i) => i.message.startsWith('stern buoys: 1 of 1 sinkers take a pile anchor'))).toBe(true);
   });
 
   it('no weight: estimated from the length and flagged', () => {

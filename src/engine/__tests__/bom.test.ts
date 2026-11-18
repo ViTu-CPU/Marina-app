@@ -175,15 +175,19 @@ describe('cost estimate, hand-calculated', () => {
     topTensionKn: 5.2,
     upliftKn: 1,
     upliftAngleDeg: 0,
-    anchorType: 'block',
+    dirDeg: 0,
     chainLength: 16.5,
     chainId: 'c13',
+    chainFoS: 5,
+    chainWeightEstimated: false,
     requiredAnchorKg: 900,
     anchorId: 'a1000',
     anchorKind: 'block',
     anchorCount: 1,
     status: 'OK',
-    infeasibleReason: null,
+    pileReason: null,
+    governing: null,
+    loadCases: [],
   });
   const anchoring: AnchoringResult = { lines: [line('A1'), line('A2')], piles: [], loads: [], issues: [] };
   const choices = resolveChoices(LIST, DEFAULT_COST, DEFAULT_PARAMS);
@@ -305,7 +309,7 @@ describe('cost estimate, hand-calculated', () => {
   });
 
   it('shore chains (D28): one wall fixing each, no anchor, no work-boat time', () => {
-    const wall = (id: string): AnchorLine => ({ ...line(id), fixing: 'wall', role: 'shore', anchorType: null, anchorId: null, anchorCount: 0, requiredAnchorKg: 0, chainLength: 3 });
+    const wall = (id: string): AnchorLine => ({ ...line(id), fixing: 'wall', role: 'shore', anchorKind: null, anchorId: null, anchorCount: 0, requiredAnchorKg: 0, chainLength: 3 });
     const withWall: AnchoringResult = { lines: [line('A1'), wall('S1'), wall('S2')], piles: [], loads: [], issues: [] };
     const list: PriceList = { ...LIST, products: [...LIST.products, product({ id: 'wf', category: 'wall_fixing', price: 18 })] };
     const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: list, choices, anchoring: withWall });
@@ -330,8 +334,8 @@ describe('cost estimate, hand-calculated', () => {
     expect(of('rate-diving-team').quantity).toBeCloseTo(34.5, 9);
     expect(of('rate-diving-team').basis).toBe('23 anchors × 1 h + 23 t × 0.5 h/t');
     expect(of('rate-work-boat').quantity).toBe(3);
-    // INFEASIBLE lines have no anchor: no diving or boat time for them (their anchor points are not priced).
-    const bad: AnchorLine = { ...line('X1'), anchorId: null, anchorKind: null, anchorCount: 0, status: 'INFEASIBLE', infeasibleReason: 'block: needs 4 000 kg, max product 1 000 kg', requiredAnchorKg: 4000 };
+    // D64: pile lines (no pile anchor in the list) take no diving or boat time; their piles are not priced.
+    const bad: AnchorLine = { ...line('X1'), anchorId: null, anchorKind: 'pile', anchorCount: 1, status: 'PILE', pileReason: 'block: needs 4 000 kg, max product 1 000 kg', requiredAnchorKg: 4000 };
     const mixed = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: LIST, choices, anchoring: { ...anchoring, lines: [line('A1'), bad, { ...bad, id: 'X2' }] } });
     const m = (id: string) => mixed.lines.find((l) => l.productId === id)!;
     expect(m('rate-diving-team').quantity).toBe(1);
@@ -339,8 +343,14 @@ describe('cost estimate, hand-calculated', () => {
     expect(m('a1000').orderQuantity).toBe(1);
     // Their chains are priced: 3 × 16.5 m + 5 %.
     expect(m('c13').quantity).toBeCloseTo(49.5, 9);
-    expect(m('anchor-point-by-design')).toMatchObject({ name: 'Anchor point – type and size by geotechnical/mooring design', quantity: 2, unitPrice: null, total: null, basis: '2 INFEASIBLE lines (P1)' });
-    expect(m('anchor-point-by-design').note).toContain('block: needs 4 000 kg, max product 1 000 kg');
+    expect(m('pile-anchor-by-design')).toMatchObject({ name: 'Pile anchor – length and section by geotechnical design', quantity: 2, unitPrice: null, total: null, basis: '2 lines with pile anchors (P1)' });
+    expect(m('pile-anchor-by-design').note).toContain('block: needs 4 000 kg, max product 1 000 kg');
+    // A pile anchor of the price list (supply price only): priced, its driving listed as unpriced.
+    const withPile: PriceList = { ...LIST, products: [...LIST.products, product({ id: 'pile1', category: 'anchor', anchorKind: 'pile', price: 2500 })] };
+    const piled = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: withPile, choices, anchoring: { ...anchoring, lines: [line('A1'), { ...bad, anchorId: 'pile1' }] } });
+    expect(piled.lines.find((l) => l.productId === 'pile1')).toMatchObject({ orderQuantity: 1, unitPrice: 2500 });
+    expect(piled.unpriced).toContainEqual({ name: 'Pile driving', quantity: 1, unit: 'pcs', reason: 'The pile anchors of the price list have a supply price only; driving them needs a contractor’s price.' });
+    expect(piled.lines.find((l) => l.productId === 'rate-diving-team')!.quantity).toBe(1);
   });
 
   it('anchors heavier than the work boat lifts are flagged; installed anchors take no diving or boat time (D62)', () => {
@@ -374,9 +384,9 @@ describe('cost estimate, hand-calculated', () => {
   it('every unpriced item is listed by name and left out of the totals (D62)', () => {
     expect(estimate.unpriced).toEqual([]);
     expect(excludesNote(estimate)).toBe('');
-    // A breakwater (no price), an INFEASIBLE line, a product without a price and products missing from the list.
+    // A breakwater (no price), a pile line, a product without a price and products missing from the list.
     const withBreakwater: Site = { ...site, breakwaters: [{ id: 'breakwater-1', start: { x: -40, y: 55 }, end: { x: 40, y: 55 }, product: '4300K' }] };
-    const bad: AnchorLine = { ...line('X1'), anchorId: null, anchorKind: null, anchorCount: 0, status: 'INFEASIBLE', infeasibleReason: 'block: needs 4 000 kg, max product 1 000 kg', requiredAnchorKg: 4000 };
+    const bad: AnchorLine = { ...line('X1'), anchorId: null, anchorKind: 'pile', anchorCount: 1, status: 'PILE', pileReason: 'block: needs 4 000 kg, max product 1 000 kg', requiredAnchorKg: 4000 };
     const thin: PriceList = {
       ...LIST,
       products: LIST.products.filter((p) => !['spring14', 'ladder'].includes(p.id)).map((p) => (p.id === 'anode16' ? { ...p, price: null } : p)),
@@ -385,7 +395,7 @@ describe('cost estimate, hand-calculated', () => {
     const names = e.unpriced.map((u) => u.name);
     expect(names).toEqual([
       expect.stringMatching(/^Breakwater breakwater-1: Marinetek K-series Breakwater 4300K, \d+ × \S+/),
-      'Anchor point – type and size by geotechnical/mooring design',
+      'Pile anchor – length and section by geotechnical design',
       'Spring links of the anchor lines',
       'Chain anodes of the anchor lines',
       'Safety ladders',

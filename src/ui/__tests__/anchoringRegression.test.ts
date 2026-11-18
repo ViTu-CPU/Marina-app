@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parsePriceListFile } from '../../catalog/priceList';
 import { readXlsx } from '../../catalog/xlsx';
-import { ANCHOR_BY_DESIGN_NAME } from '../../engine/bom';
+import { PILE_BY_DESIGN_NAME } from '../../engine/bom';
 import type { PriceList, Product } from '../../engine/catalog';
 import { parseProject } from '../../state/projectFile';
 import { computeCostModel } from '../costModel';
@@ -38,14 +38,13 @@ describe('anchoring regression (D62): never several weights per line', () => {
   const { anchoring, estimate } = model;
   const seabed = anchoring.lines.filter((l) => l.fixing === 'seabed');
 
-  it('the stand-in carries the owner’s loads: P1–P3 lines need about 30–34 t of concrete each', () => {
+  it('the stand-in: P1–P3 lines need many times a 3 t weight (D64: the spec’s loads and friction)', () => {
     expect(layout.name).toBe('C – Best orientation (10°)');
     expect(project.site.accessPontoons!.map((a) => a.id)).toEqual(['access-1']);
     expect(project.site.breakwaters!.map((b) => b.id)).toEqual(['breakwater-1']);
     const p13 = seabed.filter((l) => mainPiers.includes(l.holdsId));
     expect(p13.length).toBeGreaterThan(50);
-    expect(Math.max(...p13.map((l) => l.horizontalKn))).toBeGreaterThan(33);
-    expect(Math.max(...p13.map((l) => l.requiredAnchorKg))).toBeGreaterThan(30000);
+    expect(Math.min(...p13.map((l) => l.requiredAnchorKg))).toBeGreaterThan(3 * 3000);
   });
 
   it('no line has more anchors than maxAnchorsPerLine (1)', () => {
@@ -59,14 +58,14 @@ describe('anchoring regression (D62): never several weights per line', () => {
     expect(pieces).toBeLessThanOrEqual(seabed.length);
   });
 
-  it('P1–P3 lines are INFEASIBLE with only the 3 000 kg weight, and are not priced as weights', () => {
+  it('P1–P3 lines take a pile anchor (one per line) with only the 3 000 kg weight, and are not priced as weights', () => {
     for (const l of seabed.filter((x) => mainPiers.includes(x.holdsId))) {
-      expect(l, l.id).toMatchObject({ status: 'INFEASIBLE', anchorId: null, anchorCount: 0 });
-      expect(l.infeasibleReason, l.id).toMatch(/^block: needs \d{1,3}( \d{3})* kg, max product 3 000 kg$/);
+      expect(l, l.id).toMatchObject({ status: 'PILE', anchorKind: 'pile', anchorId: null, anchorCount: 1 });
+      expect(l.pileReason, l.id).toMatch(/^block: needs \d{1,3}( \d{3})* kg, max product 3 000 kg$/);
     }
-    const byDesign = estimate.lines.find((l) => l.name === ANCHOR_BY_DESIGN_NAME)!;
+    const byDesign = estimate.lines.find((l) => l.name === PILE_BY_DESIGN_NAME)!;
     expect(byDesign).toMatchObject({ unitPrice: null, total: null });
-    expect(byDesign.quantity).toBe(seabed.filter((l) => l.status === 'INFEASIBLE').length);
+    expect(byDesign.quantity).toBe(seabed.filter((l) => l.status === 'PILE').length);
     expect(estimate.lines.find((l) => l.productId === 'anchor-laatulaituri-3000')?.orderQuantity ?? 0).toBe(seabed.filter((l) => l.anchorId !== null).length);
   });
 
@@ -74,7 +73,7 @@ describe('anchoring regression (D62): never several weights per line', () => {
     expect(estimate.missingPrices).toBe(estimate.unpriced.length);
     expect(estimate.unpriced.length).toBeGreaterThan(0);
     expect(estimate.unpriced.some((u) => u.name.includes('breakwater-1'))).toBe(true);
-    expect(estimate.unpriced.some((u) => u.name === ANCHOR_BY_DESIGN_NAME)).toBe(true);
+    expect(estimate.unpriced.some((u) => u.name === PILE_BY_DESIGN_NAME)).toBe(true);
     const sheets = readXlsx(bomWorkbook(project, layout, model, '2026-11-18'));
     const summary = sheets.find((s) => s.name === 'Summary')!.rows;
     const row = (label: string | RegExp) => summary.find((r) => (typeof label === 'string' ? r[0] === label : label.test(String(r[0] ?? ''))));
@@ -83,9 +82,9 @@ describe('anchoring regression (D62): never several weights per line', () => {
     expect(row(`Total incl. VAT (excludes ${n} unpriced items, see list)`)).toBeTruthy();
     expect(row('Total VAT 0 %')).toBeUndefined();
     expect(row('Lines without a price (not in the totals)')![1]).toBe(n);
-    expect(row('Anchoring status')![1]).toMatch(/^\d+ lines OK, \d+ lines INFEASIBLE$/);
+    expect(row('Anchoring status')![1]).toMatch(/^\d+ lines with concrete anchors, \d+ lines with pile anchors$/);
     expect(row(/^Breakwater breakwater-1: /)).toBeTruthy();
-    expect(row(ANCHOR_BY_DESIGN_NAME)).toBeTruthy();
+    expect(row(PILE_BY_DESIGN_NAME)).toBeTruthy();
     // The friction sensitivity table and its note.
     const head = summary.findIndex((r) => String(r[0] ?? '').startsWith('Friction sensitivity: plain concrete blocks'));
     expect(head).toBeGreaterThan(0);
@@ -95,44 +94,37 @@ describe('anchoring regression (D62): never several weights per line', () => {
     const lines = sheets.find((s) => s.name === 'Anchor lines')!.rows;
     const col = (key: string) => lines[0]!.indexOf(key);
     expect(lines.slice(1).every((r) => Number(r[col('anchor_count')]) <= 1)).toBe(true);
-    expect(lines.slice(1).filter((r) => r[col('status')] === 'INFEASIBLE').length).toBe(seabed.filter((l) => l.status === 'INFEASIBLE').length);
-    expect(String(lines.find((r) => r[col('status')] === 'INFEASIBLE')![col('status_note')])).toMatch(/^block: needs .* kg, max product 3 000 kg; anchor point by geotechnical\/mooring design$/);
+    expect(lines.slice(1).filter((r) => r[col('status')] === 'PILE').length).toBe(seabed.filter((l) => l.status === 'PILE').length);
+    expect(String(lines.find((r) => r[col('status')] === 'PILE')![col('status_note')])).toMatch(/^pile anchor: block: needs .* kg, max product 3 000 kg$/);
+    // D64: the governing case of the spec per line, with its colour.
+    expect(lines[0]).toEqual(expect.arrayContaining(['governing_case', 'water_level', 'th_kn', 't_fair_kn', 'fv_kn', 'uplift_deg', 'chain_fos', 'anchor_capacity_kn', 'anchor_fos', 'anchor_colour', 'anchor_fos_ge_1_8', 'required_dry_mass_kg']));
+    expect(sheets.find((s) => s.name === 'Loads')!.rows[0]).toEqual(['pontoon', 'kind', 'case', 'q_kpa', 'wind_kn', 'current_kn', 'wave_kn', 'uls_kn', 'ice_kn (reported only)']);
   });
 });
 
-describe('anchoring regression (D62): another anchor type from the price list', () => {
-  // TEST DATA, not a product: a screw anchor of 50 kN horizontal for clay. The lines also lift
-  // their anchors (V up to 8.7 kN), so it needs an uplift capacity too.
-  const screw: Product = {
+describe('anchoring regression (D64): a pile anchor of the price list', () => {
+  // TEST DATA, not a product: a pile anchor with an installed price.
+  const pile: Product = {
     ...builtIn.products.find((p) => p.id === 'anchor-laatulaituri-3000')!,
-    id: 'test-screw-50kn',
+    id: 'test-pile',
     supplier: '(test data)',
-    name: 'Screw anchor 50 kN (test data)',
-    price: 2000,
+    name: 'Pile anchor (test data)',
+    price: null,
+    installedPrice: 4000,
     priceIncludesVat: false,
     anchorMassKg: null,
-    anchorKind: 'screw',
-    capacityHorizontalKn: 50,
-    capacityUpliftKn: 50,
-    capacityBasis: 'published',
-    seabeds: ['clay'],
-    installedPrice: null,
+    anchorKind: 'pile',
+    capacityBasis: null,
     sourceUrl: 'https://example.com/test-data',
     sourceDate: '2026-11-18',
     note: 'TEST DATA – not a real product.',
   };
-  const withScrew: PriceList = { ...only3000, products: [...only3000.products, screw] };
-  const model = computeCostModel(project, layout, withScrew)!;
+  const model = computeCostModel(project, layout, { ...only3000, products: [...only3000.products, pile] })!;
 
-  it('P1–P3 lines choose it, one per line, status OK', () => {
+  it('P1–P3 lines use it, one per line, priced installed', () => {
     const p13 = model.anchoring.lines.filter((l) => l.fixing === 'seabed' && mainPiers.includes(l.holdsId));
-    expect(p13.length).toBeGreaterThan(50);
-    for (const l of p13) expect(l, l.id).toMatchObject({ status: 'OK', anchorId: 'test-screw-50kn', anchorKind: 'screw', anchorCount: 1, infeasibleReason: null });
-    expect(model.estimate.lines.find((l) => l.productId === 'test-screw-50kn')!.orderQuantity).toBeGreaterThanOrEqual(p13.length);
-  });
-
-  it('on a seabed the product does not list, it is not chosen', () => {
-    const sand = computeCostModel({ ...project, anchoring: { ...project.anchoring, seabed: 'sand' } }, layout, withScrew)!;
-    expect(sand.anchoring.lines.some((l) => l.anchorId === 'test-screw-50kn')).toBe(false);
+    for (const l of p13) expect(l, l.id).toMatchObject({ status: 'PILE', anchorId: 'test-pile', anchorKind: 'pile', anchorCount: 1 });
+    expect(model.estimate.lines.find((l) => l.productId === 'test-pile')).toMatchObject({ unitPrice: 4000 });
+    expect(model.estimate.unpriced.some((u) => u.name === PILE_BY_DESIGN_NAME)).toBe(false);
   });
 });

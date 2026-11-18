@@ -4,7 +4,7 @@
  * disclaimer (SPEC §1).
  */
 import { writeXlsx, type CellValue } from '../../catalog/xlsx';
-import { anchoringStatus, anchoringStatusText, frictionSensitivity, SOFT_CLAY_NOTE } from '../../engine/anchoring';
+import { anchoringStatus, anchoringStatusText, frictionSensitivity, MOORING_DISCLAIMER, MOORING_NOTES, SOFT_CLAY_NOTE, type AnchorLine } from '../../engine/anchoring';
 import { excludesNote } from '../../engine/bom';
 import type { Layout, Project } from '../../engine/model';
 import { DISCLAIMER } from '../../state/projectFile';
@@ -73,6 +73,11 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
         ]
       : []),
     [],
+    // D64: the spec's required text and notes with their sources.
+    ['Mooring sizing (docs/ANKKUROINTI_MITOITUS_SPEC.md)'],
+    [MOORING_DISCLAIMER],
+    ...MOORING_NOTES.map((n) => [n.text]),
+    [],
     ['Notes'],
     ...estimate.notes.map((n) => [n]),
     ...anchoring.issues.map((i) => [i.message]),
@@ -95,36 +100,58 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
       l.note,
     ]),
   ];
+  // D64: per line the governing case of the spec (§8): direction, water level, Th, T_fair, Fv, uplift
+  // angle, chain factor of safety, anchor capacity and factor of safety, required dry mass; the colour
+  // (green / yellow / red) as text.
+  const target = project.anchoring.slidingSafetyFactor;
+  const colour = (fos: number | null, goal: number) => (fos === null || !Number.isFinite(fos) ? '' : fos >= goal - 1e-9 ? 'green' : fos >= 1 ? 'yellow' : 'red');
+  const note = (l: AnchorLine) =>
+    l.status === 'PILE' ? `pile anchor: ${l.pileReason}` : l.anchorCount > 1 ? 'TANDEM: 2 anchors on one line (user choice); several anchors on one chain do not necessarily equal one of the same total mass' : '';
   const lines: CellValue[][] = [
-    ['line', 'holds', 'role', 'fixing', 'splay', 'governs', 'horizontal_kn', 'top_tension_kn', 'uplift_kn', 'chain_length_m', 'chain', 'required_anchor_kg', 'anchor', 'anchor_type', 'anchor_count', 'status', 'status_note', 'fix_x', 'fix_y', 'anchor_x', 'anchor_y'],
-    ...anchoring.lines.map((l) => [
-      l.id,
-      l.holdsId,
-      l.role,
-      l.fixing,
-      l.splay,
-      l.governs,
-      r2(l.horizontalKn),
-      r2(l.topTensionKn),
-      r2(l.upliftKn),
-      r1(l.chainLength),
-      l.chainId ?? '',
-      Math.round(l.requiredAnchorKg),
-      l.anchorId ?? '',
-      l.anchorKind ?? '',
-      l.anchorCount,
-      // D62: why the line is INFEASIBLE, or the tandem warning.
-      l.fixing === 'seabed' ? l.status : '',
-      l.status === 'INFEASIBLE'
-        ? `${l.infeasibleReason}; anchor point by geotechnical/mooring design`
-        : l.anchorCount > 1
-          ? 'TANDEM: 2 anchors on one line (user choice); they do not necessarily hold as much as one anchor of the same total mass'
-          : '',
-      r2(l.fix.x),
-      r2(l.fix.y),
-      r2(l.anchor.x),
-      r2(l.anchor.y),
-    ]),
+    ['line', 'holds', 'role', 'fixing', 'splay', 'dir_deg', 'governing_case', 'water_level', 'th_kn', 't_fair_kn', 't_anchor_kn', 'fv_kn', 'uplift_deg', 'chain', 'chain_length_m', 'chain_fos', 'chain_colour', 'anchor_kind', 'anchor', 'anchor_count', 'anchor_capacity_kn', 'anchor_fos', 'anchor_colour', 'anchor_fos_ge_1_8', 'required_dry_mass_kg', 'status', 'status_note', 'fix_x', 'fix_y', 'anchor_x', 'anchor_y'],
+    ...anchoring.lines.map((l) => {
+      const g = l.governing;
+      return [
+        l.id,
+        l.holdsId,
+        l.role,
+        l.fixing,
+        l.splay,
+        r1(l.dirDeg),
+        g?.case ?? '',
+        g?.waterLevel ?? '',
+        g ? r2(g.Th) : null,
+        g ? r2(g.Tfair) : null,
+        g ? r2(g.Tanchor) : null,
+        g ? r2(g.Fv) : null,
+        g ? r1(g.upliftDeg) : null,
+        l.chainId ?? '',
+        r1(l.chainLength),
+        g ? r2(g.chainFoS) : null,
+        colour(g?.chainFoS ?? null, project.anchoring.chainSafetyFactor),
+        l.anchorKind ?? '',
+        l.anchorId ?? '',
+        l.anchorCount,
+        g?.anchorCapacity === null || g?.anchorCapacity === undefined ? null : r2(g.anchorCapacity),
+        g?.anchorFoS === null || g?.anchorFoS === undefined || !Number.isFinite(g.anchorFoS) ? null : r2(g.anchorFoS),
+        colour(g?.anchorFoS ?? null, target),
+        g?.anchorFoS === null || g?.anchorFoS === undefined ? '' : g.anchorFoS >= 1.8 - 1e-9 ? 'yes' : 'no',
+        Number.isFinite(l.requiredAnchorKg) ? Math.round(l.requiredAnchorKg) : null,
+        l.fixing === 'seabed' ? l.status : '',
+        note(l),
+        r2(l.fix.x),
+        r2(l.fix.y),
+        r2(l.anchor.x),
+        r2(l.anchor.y),
+      ];
+    }),
+  ];
+  // D64: the load table of the spec (§8): wind, current, wave and the ULS sum per direction.
+  const loadRows: CellValue[][] = [
+    ['pontoon', 'kind', 'case', 'q_kpa', 'wind_kn', 'current_kn', 'wave_kn', 'uls_kn', 'ice_kn (reported only)'],
+    ...anchoring.loads.flatMap((p) =>
+      p.cases.map((c): CellValue[] => [p.id, p.kind, c.id, r2(p.q * 1000) / 1000, r2(c.wind), r2(c.current), r2(c.wave), r2(c.F_uls), p.ice ? r2(c.id.startsWith('perp') ? p.ice.F_perp : p.ice.F_par) : null]),
+    ),
   ];
   const a = project.anchoring;
   const params: CellValue[][] = [
@@ -140,6 +167,7 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
   return writeXlsx([
     { name: 'Summary', rows: summary, columnWidths: [48, 16] },
     { name: 'Bill of materials', rows: bom, header: true, columnWidths: [10, 30, 40, 22, 6, 10, 10, 12, 12, 40, 40, 11, 50] },
+    { name: 'Loads', rows: loadRows, header: true, columnWidths: [14, 10, 8, 8, 10, 10, 10, 10, 14] },
     { name: 'Anchor lines', rows: lines, header: true, columnWidths: [12, 10, 9, 8, 8, 8, 10, 10, 9, 10, 24, 12, 24, 9, 8, 11, 50, 9, 9, 9, 9] },
     { name: 'Parameters', rows: params, header: true, columnWidths: [32, 12, 10, 60] },
   ]);

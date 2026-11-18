@@ -1,7 +1,8 @@
 /**
  * JSON project file: export and import with structural validation (SPEC §2, persistence).
  */
-import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type Seabed } from '../engine/anchoring';
+import { DEFAULT_ANCHORING, MAX_SPLAY_ANGLE, type AnchoringParams, type CohesiveBlock, type FrictionSeabed, type Seabed } from '../engine/anchoring';
+import { SEABED_KEYS } from '../engine/mooring';
 import { BREAKWATERS } from '../engine/breakwater';
 import type { CharacteristicLevels, WaterLevelInfo } from '../engine/waterLevels';
 import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type AutoDepth, type AutoFetch, type WaveSettings } from '../engine/waves';
@@ -156,6 +157,8 @@ function boatClasses(v: unknown): BoatClass[] {
       count: e.count === undefined ? 0 : num(e.count, `${p}.count`),
       // D36: optional boat weight, t.
       ...(e.weight === undefined || e.weight === null ? {} : { weight: num(e.weight, `${p}.weight`) }),
+      // D64: missing in older files (motor boats).
+      ...(e.vesselType === undefined || e.vesselType === null ? {} : { vesselType: oneOf(e.vesselType, ['motor', 'yacht'] as const, `${p}.vesselType`) }),
     };
     if (c.weight !== undefined && !(c.weight > 0)) fail(`${p}.weight must be positive`);
     if (c.length <= 0 || c.beam <= 0) fail(`${p}: length and beam must be positive`);
@@ -479,15 +482,30 @@ function windClimateOf(v: unknown, at = 'waves.climate'): WindClimate {
   };
 }
 
-/** Extension (D23). Missing values take their defaults, so older files stay readable. */
+/**
+ * Extension (D23, D64). Missing values take their defaults, so older files stay readable. Before
+ * D64 the seabed was 'clay', 'sand' or 'rock': they read as medium–stiff clay, fine–medium sand and
+ * rock (NAVFAC), with the spec's friction (the old friction values and the UFC wind factors, the
+ * AS 3962 wave factors of I104 and the wedge anchor type are dropped).
+ */
 function anchoring(v: unknown): AnchoringParams {
   if (v === undefined) return structuredClone(DEFAULT_ANCHORING);
   const o = obj(v, 'anchoring');
   const d = DEFAULT_ANCHORING;
-  const pick = (key: Exclude<keyof AnchoringParams, 'seabed' | 'friction' | 'anchorType' | 'buoySinkerMethod' | 'buoyTable' | 'buoyExposed' | 'normalHighWater' | 'normalLowWater' | 'quayLevel'>): number =>
-    o[key] === undefined ? d[key] : num(o[key], `anchoring.${key}`);
+  type Numeric = { [K in keyof AnchoringParams]: AnchoringParams[K] extends number ? K : never }[keyof AnchoringParams];
+  const pick = (key: Numeric): number => (o[key] === undefined ? d[key] : num(o[key], `anchoring.${key}`));
+  const OLD_SEABED: Record<string, Seabed> = { clay: 'mediumClay', sand: 'fineMediumSand' };
+  const seabedOf = (x: unknown): Seabed => (typeof x === 'string' && OLD_SEABED[x] ? OLD_SEABED[x]! : oneOf(x, SEABED_KEYS, 'anchoring.seabed'));
   const f = o.friction === undefined ? {} : obj(o.friction, 'anchoring.friction');
-  const mu = (k: Seabed) => (f[k] === undefined ? d.friction[k] : num(f[k], `anchoring.friction.${k}`));
+  const friction = Object.fromEntries(
+    (Object.keys(d.friction) as FrictionSeabed[]).map((k) => [k, f[k] === undefined ? d.friction[k] : num(f[k], `anchoring.friction.${k}`)]),
+  ) as Record<FrictionSeabed, number>;
+  const cohesive = (x: unknown): CohesiveBlock | null => {
+    if (x === undefined || x === null) return null;
+    const c = obj(x, 'anchoring.cohesive');
+    const n = (k: keyof CohesiveBlock) => num(c[k], `anchoring.cohesive.${k}`);
+    return { Su_z: n('Su_z'), Su_a: n('Su_a'), A: n('A'), B: n('B'), z: n('z'), gammaB: n('gammaB'), massDryKg: n('massDryKg') };
+  };
   const result: AnchoringParams = {
     depth: pick('depth'),
     highWater: pick('highWater'),
@@ -496,31 +514,33 @@ function anchoring(v: unknown): AnchoringParams {
     normalHighWater: o.normalHighWater === undefined || o.normalHighWater === null ? null : num(o.normalHighWater, 'anchoring.normalHighWater'),
     normalLowWater: o.normalLowWater === undefined || o.normalLowWater === null ? null : num(o.normalLowWater, 'anchoring.normalLowWater'),
     quayLevel: o.quayLevel === undefined || o.quayLevel === null ? null : num(o.quayLevel, 'anchoring.quayLevel'),
-    seabed: o.seabed === undefined ? d.seabed : oneOf(o.seabed, ['clay', 'sand', 'rock'] as const, 'anchoring.seabed'),
+    seabed: o.seabed === undefined ? d.seabed : seabedOf(o.seabed),
+    friction,
+    slopeDeg: pick('slopeDeg'),
+    cohesive: cohesive(o.cohesive),
+    capacityFactor: pick('capacityFactor'),
+    capacityFactorSource: o.capacityFactorSource === undefined ? '' : str(o.capacityFactorSource, 'anchoring.capacityFactorSource'),
     windSpeed: pick('windSpeed'),
-    airDensity: pick('airDensity'),
-    dragCoefficient: pick('dragCoefficient'),
     leewardFactor: pick('leewardFactor'),
-    profileHeightRatio: pick('profileHeightRatio'),
+    waveLineLoad: pick('waveLineLoad'),
+    waveMin: pick('waveMin'),
+    currentSpeed: pick('currentSpeed'),
+    extraStatic: pick('extraStatic'),
+    iceLineLoad: pick('iceLineLoad'),
+    winterInWater: o.winterInWater === undefined ? d.winterInWater : bool(o.winterInWater, 'anchoring.winterInWater'),
+    unevenFactor: pick('unevenFactor'),
     pontoonFreeboard: pick('pontoonFreeboard'),
+    pontoonDraft: pick('pontoonDraft'),
     lineSpacing: pick('lineSpacing'),
-    waveLoad: pick('waveLoad'),
-    // I104: missing in older files; they take the defaults (the load follows the wave height).
-    waveLoadMinHs: pick('waveLoadMinHs'),
-    waveLoadFullHs: pick('waveLoadFullHs'),
     splayAngle: pick('splayAngle'),
     chainSafetyFactor: pick('chainSafetyFactor'),
     corrosionAllowance: pick('corrosionAllowance'),
     slidingSafetyFactor: pick('slidingSafetyFactor'),
-    friction: { clay: mu('clay'), sand: mu('sand'), rock: mu('rock') },
     chainLengthFactor: pick('chainLengthFactor'),
     maxAnchorMass: pick('maxAnchorMass'),
-    // D62: missing in older files: one anchor per line, published capacities as working loads.
     maxAnchorsPerLine: pick('maxAnchorsPerLine'),
-    capacitySafetyFactor: pick('capacitySafetyFactor'),
     tipAnchorMinLength: pick('tipAnchorMinLength'),
     fingerPileMinLength: pick('fingerPileMinLength'),
-    anchorType: o.anchorType === undefined ? d.anchorType : oneOf(o.anchorType, ['block', 'wedge'] as const, 'anchoring.anchorType'),
     buoySinkerMethod:
       o.buoySinkerMethod === undefined ? d.buoySinkerMethod : oneOf(o.buoySinkerMethod, ['factor', 'table'] as const, 'anchoring.buoySinkerMethod'),
     buoyTable: o.buoyTable === undefined ? d.buoyTable : oneOf(o.buoyTable, ['batunionen', 'topMarine'] as const, 'anchoring.buoyTable'),
@@ -537,7 +557,11 @@ function anchoring(v: unknown): AnchoringParams {
   if (result.splayAngle < 0 || result.splayAngle > MAX_SPLAY_ANGLE) fail(`anchoring.splayAngle must be between 0 and ${MAX_SPLAY_ANGLE}`);
   if (result.maxAnchorMass <= 0) fail('anchoring.maxAnchorMass must be positive');
   if (result.maxAnchorsPerLine !== 1 && result.maxAnchorsPerLine !== 2) fail('anchoring.maxAnchorsPerLine must be 1 or 2');
-  if (!(result.capacitySafetyFactor >= 1)) fail('anchoring.capacitySafetyFactor must be at least 1');
+  if (!(result.capacityFactor > 0)) fail('anchoring.capacityFactor must be positive');
+  if (!(result.windSpeed >= 0)) fail('anchoring.windSpeed must not be negative');
+  if (!(result.waveMin >= 0) || !(result.waveLineLoad >= 0)) fail('anchoring wave loads must not be negative');
+  if (!(result.unevenFactor >= 1)) fail('anchoring.unevenFactor must be at least 1');
+  if (!(result.chainSafetyFactor >= 1) || !(result.slidingSafetyFactor >= 1)) fail('anchoring factors of safety must be at least 1');
   if (result.tipAnchorMinLength < 0) fail('anchoring.tipAnchorMinLength must not be negative');
   if (result.fingerPileMinLength < 0) fail('anchoring.fingerPileMinLength must not be negative');
   if (Object.values(result.friction).some((x) => x <= 0)) fail('anchoring.friction values must be positive');

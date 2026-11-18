@@ -8,7 +8,7 @@
  * y north); 1 drawing unit = 1 m. Text outside ASCII is written as \U+XXXX.
  */
 import { anchoringPlan } from '../../engine/anchoring';
-import { anchoringWaves } from '../../engine/anchorWaves';
+import { waveInput } from '../costModel';
 import { BREAKWATERS, breakwaterModules, breakwaterProductOf, breakwatersOf } from '../../engine/breakwater';
 import { chooseGangway, moduleCombination, pickByLength, seriesOf, type ResolvedChoices } from '../../engine/bom';
 import type { PriceList, Product } from '../../engine/catalog';
@@ -296,9 +296,7 @@ export function buildDxf(input: DxfInput): string {
       buoyDepthFactor: project.params.buoyDepthFactor,
       moduleLengths: project.params.pierModuleLengths,
       gangwayReach: reach,
-      // D63: the same wave load as the cost estimate (shelter, estimated heights).
-      waves: anchoringWaves(project, layout),
-      compareAnchorTypes: false,
+      waves: waveInput(project, layout),
     });
     const byId = new Map(list.products.map((p) => [p.id, p]));
     for (const l of plan.lines) {
@@ -309,9 +307,9 @@ export function buildDxf(input: DxfInput): string {
         const side = blocks.find((b) => b.name === name)!.length;
         // The symbol centred on the anchor point.
         e.insert('ANCHORS', name, add(l.anchor, { x: -side / 2, y: 0 }), 0);
-      } else if (l.status === 'INFEASIBLE') {
-        // D62: no anchor of the price list holds the line.
-        e.text('ANCHORS', l.anchor, 0.8, 'ANCHOR BY DESIGN');
+      } else if (l.status === 'PILE') {
+        // D64: a pile anchor at the end of the chain.
+        e.text('ANCHORS', l.anchor, 0.8, 'PILE ANCHOR');
       }
     }
   }

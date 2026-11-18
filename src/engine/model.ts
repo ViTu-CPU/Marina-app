@@ -120,6 +120,11 @@ export interface BoatClass {
    * from the length (Top Marine's table for sailing boats, I79) and flagged.
    */
   weight?: number;
+  /**
+   * Extension (D64): boat type for the windage areas of AS 3962 Table 4.4; missing = 'motor'
+   * (the larger areas).
+   */
+  vesselType?: 'motor' | 'yacht';
 }
 
 /**

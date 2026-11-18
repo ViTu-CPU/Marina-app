@@ -21,9 +21,12 @@ import { breakwaterModules, breakwaterProductOf, breakwatersOf } from './breakwa
 
 export type BomGroup = 'pontoons' | 'fingers' | 'gangways' | 'anchoring' | 'fittings' | 'labour' | 'plant';
 
-/** D62: the BOM row of the anchor points that no anchor of the price list holds (INFEASIBLE lines). */
-export const ANCHOR_BY_DESIGN_ID = 'anchor-point-by-design';
-export const ANCHOR_BY_DESIGN_NAME = 'Anchor point – type and size by geotechnical/mooring design';
+/**
+ * D64: the BOM row of the pile anchors of the lines that no concrete anchor of at most 5 t holds,
+ * when the price list has no pile anchor with a price.
+ */
+export const PILE_BY_DESIGN_ID = 'pile-anchor-by-design';
+export const PILE_BY_DESIGN_NAME = 'Pile anchor – length and section by geotechnical design';
 export const BOM_GROUPS: BomGroup[] = ['pontoons', 'fingers', 'gangways', 'anchoring', 'fittings', 'labour', 'plant'];
 
 export interface BomLine {
@@ -413,6 +416,8 @@ export function costEstimate(input: CostInput): CostEstimate {
   let missingChain = 0;
   /** D62: lines that no anchor of the price list holds (not priced: by design). */
   const byDesign: AnchorLine[] = [];
+  /** D64: pile anchors of the price list priced at their supply price only (installation not priced). */
+  let pilesWithoutInstallation = 0;
   /**
    * D62: anchors installed by the divers and the work boat: every piece whose price is a supply
    * price (an installed price includes the installation), with their mass.
@@ -432,7 +437,12 @@ export function costEstimate(input: CostInput): CostEstimate {
       missing.chainM += line.chainLength;
     }
     const anchor = line.anchorId ? byId.get(line.anchorId) : undefined;
-    if (anchor) {
+    if (anchor && line.anchorKind === 'pile') {
+      // D64: a pile anchor of the price list; its driving is not in the diving or boat time.
+      const installed = installedPriceVat0(anchor, vat) !== null;
+      addQty('anchoring', anchor, line.anchorCount, line.id, installed);
+      if (!installed) pilesWithoutInstallation += line.anchorCount;
+    } else if (anchor) {
       const installed = installedPriceVat0(anchor, vat) !== null;
       addQty('anchoring', anchor, line.anchorCount, line.id, installed);
       const mass = anchorPieceMassKg(anchor);
@@ -445,7 +455,7 @@ export function costEstimate(input: CostInput): CostEstimate {
         placed.heavy += line.anchorCount;
         placed.heaviestKg = Math.max(placed.heaviestKg, mass);
       }
-    } else if (line.status === 'INFEASIBLE') byDesign.push(line);
+    } else if (line.status === 'PILE') byDesign.push(line);
     const d = chain?.chainDiameterMm ?? 0;
     if (line.buoy) {
       // A stern buoy: float, sinker and chain with its shackles, as in Top Marine's buoy
@@ -480,26 +490,27 @@ export function costEstimate(input: CostInput): CostEstimate {
   leaveOut('Chain anodes of the anchor lines', missing.anode, 'pcs', 'No anode with a size and a price in the price list.');
   if (byDesign.length > 0) {
     const where = [...new Set(byDesign.map((l) => (l.role === 'buoy' ? 'stern buoys' : l.holdsId)))];
-    const worst = byDesign.reduce((a, l) => (l.requiredAnchorKg > a.requiredAnchorKg ? l : a));
+    const worst = byDesign.reduce((a, l) => ((l.requiredAnchorKg || 0) > (a.requiredAnchorKg || 0) ? l : a));
     extra.push({
       group: 'anchoring',
-      productId: ANCHOR_BY_DESIGN_ID,
-      name: ANCHOR_BY_DESIGN_NAME,
+      productId: PILE_BY_DESIGN_ID,
+      name: PILE_BY_DESIGN_NAME,
       supplier: '',
       unit: 'pcs',
       quantity: byDesign.length,
       orderQuantity: byDesign.length,
       unitPrice: null,
       total: null,
-      basis: `${byDesign.length} INFEASIBLE lines (${where.join(', ')})`,
+      basis: `${byDesign.length} lines with pile anchors (${where.join(', ')})`,
       sourceUrl: '',
       sourceDate: '',
-      note: `No anchor of the price list holds these lines within the anchors allowed per line (worst ${worst.id}: ${worst.infeasibleReason}). Supply and installation are not priced.`,
+      note: `No concrete anchor of the price list within the allowed mass holds these lines (worst ${worst.id}: ${worst.pileReason}). No pile anchor with a price in the price list: supply and driving are not priced.`,
     });
     notes.push(
-      `${byDesign.length} anchor lines are INFEASIBLE (${where.join(', ')}): no anchor of the price list holds them; their anchor points are not priced and need a geotechnical and mooring design. Their chains are priced.`,
+      `${byDesign.length} anchor lines take pile anchors (${where.join(', ')}): no concrete anchor of the allowed mass holds them; the piles are not priced (no pile anchor in the price list) and need a geotechnical design. Their chains are priced.`,
     );
   }
+  leaveOut('Pile driving', pilesWithoutInstallation, 'pcs', 'The pile anchors of the price list have a supply price only; driving them needs a contractor’s price.');
   if (buoyLines > 0 && !list.products.some((p) => p.category === 'buoy' && p.capacityKg !== null && priced(p, vat) !== null)) {
     notes.push('No buoy floats with a buoyancy in the price list: the stern buoys are not priced.');
   }

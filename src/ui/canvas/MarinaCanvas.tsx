@@ -182,7 +182,7 @@ function AnchorShapes() {
           y={l.anchor.y - 0.6}
           width={1.2}
           height={1.2}
-          fill={l.status === 'INFEASIBLE' || l.anchorCount > 1 ? COLORS.issue : COLORS.anchor}
+          fill={l.status === 'PILE' || l.anchorCount > 1 ? COLORS.issue : COLORS.anchor}
           listening={false}
         />
       ))}

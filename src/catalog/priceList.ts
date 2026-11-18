@@ -133,12 +133,16 @@ export const SHEET_INSTRUCTIONS = 'Instructions';
 
 export type ParseResult = { ok: true; priceList: PriceList } | { ok: false; errors: string[] };
 
-/** "clay, sand" → ['clay', 'sand']; commas, semicolons or spaces between. Unknown words are kept for the check. */
+/**
+ * "mediumClay, fineMediumSand" → ['mediumClay', 'fineMediumSand']; commas, semicolons or spaces
+ * between, any letter case. Unknown words are kept as typed for the check.
+ */
 export const seabedList = (text: string): SeabedType[] =>
   text
     .split(/[,;\s]+/)
-    .map((x) => x.trim().toLowerCase())
-    .filter((x) => x !== '') as SeabedType[];
+    .map((x) => x.trim())
+    .filter((x) => x !== '')
+    .map((x) => SEABED_TYPES.find((k) => k.toLowerCase() === x.toLowerCase()) ?? x) as SeabedType[];
 
 const toProduct = (row: Record<string, CellValue>): Product => {
   const text = (k: string) => (row[k] === null || row[k] === undefined ? '' : String(row[k]).trim());

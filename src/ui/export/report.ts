@@ -3,7 +3,7 @@
  * with A4 print styles. The browser prints it; "Save as PDF" gives the PDF report
  * (SPEC Phase 3). Every page carries the disclaimer (SPEC §1).
  */
-import { frictionSensitivity, type AnchoringParams } from '../../engine/anchoring';
+import { frictionSensitivity, MOORING_NOTES, type AnchoringParams } from '../../engine/anchoring';
 import { BOM_GROUPS, type BomGroup } from '../../engine/bom';
 import { as3962NotesFor } from '../as3962Notes';
 import { breakwaterProposal, breakwaterShelter, weightPerMetre } from '../../engine/breakwater';
@@ -13,7 +13,7 @@ import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../.
 import { targetCount } from '../../engine/targets';
 import { translate, type Language, type StringKey } from '../../i18n';
 import { comparisonRows } from '../compare';
-import { anchoringStatusLabel, excludesLabel, otherTypeText, type CostModel } from '../costModel';
+import { anchoringStatusLabel, excludesLabel, type CostModel } from '../costModel';
 import { formatCount, formatEuro, formatKn, formatLength, formatPercent } from '../format';
 import { groupIssues } from '../issueGroups';
 
@@ -62,9 +62,16 @@ const ANCHORING: (keyof AnchoringParams)[] = [
   'highWater',
   'lowWater',
   'windSpeed',
-  'dragCoefficient',
-  'profileHeightRatio',
   'leewardFactor',
+  'waveLineLoad',
+  'waveMin',
+  'currentSpeed',
+  'pontoonDraft',
+  'extraStatic',
+  'iceLineLoad',
+  'unevenFactor',
+  'slopeDeg',
+  'capacityFactor',
   'lineSpacing',
   'splayAngle',
   'chainLengthFactor',
@@ -73,7 +80,6 @@ const ANCHORING: (keyof AnchoringParams)[] = [
   'slidingSafetyFactor',
   'maxAnchorMass',
   'maxAnchorsPerLine',
-  'capacitySafetyFactor',
   'tipAnchorMinLength',
   'fingerPileMinLength',
 ];
@@ -181,11 +187,15 @@ export function buildReportHtml(input: ReportInput): string {
   parts.push(
     kv([
       [t('anchoring.seabed'), t(`seabed.${a.seabed}` as StringKey)],
-      [t('anchoring.anchorType'), t(`anchorType.${a.anchorType}`)],
       ...ANCHORING.map((k): [string, string] => [t(`anchoring.${k}` as StringKey), String(a[k])]),
       ...(a.normalHighWater === null ? [] : [[t('anchoring.normalHighWater'), String(a.normalHighWater)] as [string, string]]),
       ...(a.normalLowWater === null ? [] : [[t('anchoring.normalLowWater'), String(a.normalLowWater)] as [string, string]]),
-      [t('anchoring.friction'), String(a.friction[a.seabed])],
+      [t('anchoring.friction'), a.seabed === 'softClayMud' ? '–' : String(a.friction[a.seabed])],
+      [t('anchoring.winterInWater'), t(a.winterInWater ? 'common.yes' : 'common.no')],
+      ...(a.capacityFactorSource ? [[t('anchoring.capacityFactorSource'), a.capacityFactorSource] as [string, string]] : []),
+      ...(a.cohesive
+        ? (Object.entries(a.cohesive) as [keyof NonNullable<typeof a.cohesive>, number][]).map(([k, v]): [string, string] => [`${t('anchoring.cohesive')}: ${t(`cohesive.${k}` as StringKey)}`, String(v)])
+        : []),
     ]),
   );
   // D50: where the water levels came from.
@@ -352,13 +362,7 @@ export function buildReportHtml(input: ReportInput): string {
         [t('anchoring.lines'), formatCount(anchoring.lines.length, language)],
         [t('anchoring.status'), anchoringStatusLabel(t, anchoring.lines, language)],
         [t('anchoring.maxLine'), `${formatKn(anchoring.lines.reduce((m, l) => Math.max(m, l.horizontalKn), 0), language)} kN`],
-        [t('anchoring.maxMass'), `${formatCount(anchoring.lines.filter((l) => l.role !== 'buoy').reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0), language)} kg`],
-        ...(anchoring.comparison
-          ? ([
-              [t('anchoring.totalMass'), `${formatCount(anchoring.comparison.current.totalKg, language)} kg`],
-              [t(`anchoring.ifOther.${anchoring.comparison.other.anchorType}`), otherTypeText(anchoring.comparison.other, t, language)],
-            ] as [string, string][])
-          : []),
+        [t('anchoring.maxMass'), `${formatCount(anchoring.lines.filter((l) => l.role !== 'buoy' && Number.isFinite(l.requiredAnchorKg)).reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0), language)} kg`],
         ...(anchoring.lines.some((l) => l.role === 'buoy')
           ? ([
               [t('anchoring.buoys'), formatCount(anchoring.lines.filter((l) => l.role === 'buoy').length, language)],
@@ -367,15 +371,56 @@ export function buildReportHtml(input: ReportInput): string {
           : []),
         ...sum((l) => name(l.chainId), (l) => l.chainLength).map(([n, m]): [string, string] => [`${t('anchoring.chains')}: ${n}`, `${formatLength(m, language)} m`]),
         ...sum(
-          (l) => (l.status === 'INFEASIBLE' ? t('anchoring.byDesign') : name(l.anchorId)),
-          (l) => (l.status === 'INFEASIBLE' ? 1 : l.anchorCount),
+          (l) => (l.status === 'PILE' && !l.anchorId ? t('anchoring.pileAnchor') : name(l.anchorId)),
+          (l) => l.anchorCount,
           anchoring.lines.filter((l) => l.fixing === 'seabed'),
         ).map(([n, c]): [string, string] => [`${t('anchoring.anchors')}: ${n}`, formatCount(c, language)]),
         ...(anchoring.lines.some((l) => l.fixing === 'wall') ? [[t('anchoring.wallFixings'), formatCount(anchoring.lines.filter((l) => l.fixing === 'wall').length, language)] as [string, string]] : []),
         ...(anchoring.piles.length > 0 ? [[t('anchoring.endPiles'), formatCount(anchoring.piles.length, language)] as [string, string]] : []),
       ]),
     );
+    // D64: the spec's required text, the load table and the governing cases.
+    parts.push(`<p class="disclaimer">${esc(t('mooring.disclaimer'))}</p>`);
+    const n2 = (x: number) => formatKn(x, language);
+    parts.push(`<h3>${esc(t('mooring.loads'))}</h3>`);
+    parts.push(
+      table(
+        [t('mooring.pontoon'), t('mooring.case'), t('mooring.wind'), t('mooring.current'), t('mooring.wave'), t('mooring.uls')],
+        anchoring.loads.flatMap((pl) => pl.cases.map((c) => [esc(pl.id), esc(c.id), esc(n2(c.wind)), esc(n2(c.current)), esc(n2(c.wave)), esc(n2(c.F_uls))])),
+        [2, 3, 4, 5],
+      ),
+    );
+    parts.push(`<h3>${esc(t('mooring.governing'))}</h3>`);
+    // Factor of safety with its colour of the spec (§8): ● target met, ◐ at least 1, ○ below 1.
+    const fosText = (x: number | null | undefined, goal: number) =>
+      x === null || x === undefined || !Number.isFinite(x) ? '–' : `${x.toFixed(2).replace('.', language === 'fi' ? ',' : '.')} ${x >= goal - 1e-9 ? '●' : x >= 1 ? '◐' : '○'}`;
+    parts.push(
+      table(
+        [t('mooring.pontoon'), t('anchoring.lines'), t('mooring.case'), 'Th (kN)', 'Fv (kN)', t('mooring.chainFoS'), t('mooring.anchorFoS'), t('mooring.massReq'), t('mooring.anchors')],
+        anchoring.loads.map((pl) => {
+          const own = anchoring.lines.filter((l) => l.holdsId === pl.id && l.fixing === 'seabed');
+          const worst = own.reduce<(typeof own)[number] | null>((w, l) => (!w || (l.governing?.anchorFoS ?? Infinity) < (w.governing?.anchorFoS ?? Infinity) ? l : w), null);
+          const g = worst?.governing ?? null;
+          const masses = own.map((l) => l.requiredAnchorKg).filter((x) => Number.isFinite(x));
+          const piles = own.filter((l) => l.status === 'PILE').length;
+          return [
+            esc(pl.id),
+            esc(formatCount(own.length, language)),
+            esc(g ? `${g.case} ${g.waterLevel}` : '–'),
+            esc(g ? n2(g.Th) : '–'),
+            esc(g ? n2(g.Fv) : '–'),
+            esc(fosText(own.reduce((m, l) => Math.min(m, l.chainFoS ?? Infinity), Infinity), project.anchoring.chainSafetyFactor)),
+            esc(fosText(g?.anchorFoS, project.anchoring.slidingSafetyFactor)),
+            esc(masses.length > 0 ? `${formatCount(Math.max(...masses), language)} kg` : '–'),
+            esc(`${formatCount(own.length - piles, language)} / ${formatCount(piles, language)}`),
+          ];
+        }),
+        [1, 3, 4, 5, 6, 7],
+      ),
+    );
+    parts.push(`<p class="small">${esc(t('mooring.legend'))}</p>`);
     parts.push(issues(anchoring.issues));
+    parts.push(`<h3>${esc(t('mooring.notes'))}</h3><ul class="small">${MOORING_NOTES.map((n) => `<li>${esc(n.text)}</li>`).join('')}</ul>`);
     // D62: block masses for other friction coefficients.
     const sens = frictionSensitivity(anchoring.lines, project.anchoring, priceList);
     if (sens.lines > 0) {

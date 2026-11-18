@@ -165,8 +165,10 @@ describe('app shell (SPEC §8)', () => {
     // D62: the demo's lines on clay need more than the heaviest block: the totals say what they leave out.
     expect(screen.getByText(/^Total VAT 0 % \(excludes \d+ unpriced items?, see list\)$/)).toBeTruthy();
     expect(screen.getByText('Anchor lines')).toBeTruthy();
-    expect(screen.getByTestId('anchoring-status').textContent).toMatch(/^Anchoring status\d+ lines OK, \d+ lines INFEASIBLE$/);
-    expect(screen.getByTestId('unpriced-items').textContent).toContain('Anchor point – type and size by geotechnical/mooring design');
+    expect(screen.getByTestId('anchoring-status').textContent).toMatch(/^Anchoring status\d+ lines with concrete anchors, \d+ with pile anchors$/);
+    expect(screen.getByTestId('unpriced-items').textContent).toContain('Pile anchor – length and section by geotechnical design');
+    // D64: the spec's required text in the result view.
+    expect(screen.getByTestId('mooring-disclaimer').textContent).toBe("Preliminary sizing. Does not replace the designer's calculation, a geotechnical survey or the manufacturer's (e.g. Seaflex/JFlex) design. Ice loads are not designed.");
     // Choosing another pontoon series changes the project's choice (one undo step).
     fireEvent.change(screen.getByLabelText('Pontoons'), { target: { value: 'A-Laiturit MX 3 m' } });
     expect(appStore.getState().project.cost.pontoonSeries).toBe('A-Laiturit MX 3 m');

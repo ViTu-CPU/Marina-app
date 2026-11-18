@@ -3,15 +3,16 @@
  * the project and the price list. Like fairways and issues, nothing here is stored.
  */
 import { useMemo } from 'react';
-import { anchoringPlan, anchoringStatus, type AnchoringResult, type AnchorTotals } from '../engine/anchoring';
-import { anchoringWaves, type AnchoringWaves } from '../engine/anchorWaves';
+import { anchoringPlan, anchoringStatus, type AnchoringResult } from '../engine/anchoring';
 import { costEstimate, resolveChoices, type CostEstimate, type ResolvedChoices } from '../engine/bom';
 import { DEFAULT_VAT_PCT, parameter, type PriceList } from '../engine/catalog';
 import type { Layout, Project } from '../engine/model';
+import { pierAxis } from '../engine/rows';
+import { bearingOf, WAVE_SECTORS, waveAssessment } from '../engine/waves';
 import type { Language } from '../i18n';
 import type { StringKey } from '../i18n';
 import { useAppStore } from '../state/store';
-import { formatCount, formatLength } from './format';
+import { formatCount } from './format';
 
 export interface CostModel {
   priceList: PriceList;
@@ -24,15 +25,13 @@ export interface CostModel {
 }
 
 /**
- * D45, I104, D63: the wave input of the anchoring plan: per direction with open water the 50-year
- * Hm0 (from the screening, else estimated with the design wind) and per pontoon the shelter of the
- * drawn breakwaters (engine/anchorWaves.ts).
+ * D45, D64: the sectors of the wave screening whose waves exceed its criteria. Since D64 the wave
+ * load of the anchoring is max(wave line load, 2 kN/m) on every pontoon (spec §3.4); the screening
+ * only tells where the minimum is not enough.
  */
-export const waveInput = (project: Project, layout: Layout): AnchoringWaves => anchoringWaves(project, layout);
-
-/** I102: "12 345 kg (largest 3 260 kg, chains up to 47.0 m)" for the other anchor type. */
-export function otherTypeText(o: AnchorTotals, t: (key: StringKey) => string, language: Language): string {
-  return `${formatCount(o.totalKg, language)} kg (${t('anchoring.largest')} ${formatCount(o.maxKg, language)} kg, ${t('anchoring.chainsUpTo')} ${formatLength(o.longestChainM, language)} m)`;
+export function waveInput(project: Project, layout: Layout): { exceeding: string[] } {
+  const assessment = waveAssessment(project.waves, project.anchoring.depth, layout.piers.map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) })));
+  return { exceeding: (assessment?.bad ?? []).map((k) => WAVE_SECTORS[k]!) };
 }
 
 /** D62: " (excludes 3 unpriced items, see list)" after a total's label, or "". */
@@ -41,10 +40,10 @@ export function excludesLabel(t: (key: StringKey) => string, unpriced: number): 
   return ` ${unpriced === 1 ? t('cost.excludesOne') : t('cost.excludes').replace('{n}', String(unpriced))}`;
 }
 
-/** D62: "12 lines OK, 140 lines INFEASIBLE" in the language of `t`. */
+/** D64: "12 lines with concrete anchors, 140 with pile anchors" in the language of `t`. */
 export function anchoringStatusLabel(t: (key: StringKey) => string, lines: AnchoringResult['lines'], language: Language): string {
   const s = anchoringStatus(lines);
-  return t('anchoring.statusValue').replace('{ok}', formatCount(s.ok, language)).replace('{bad}', formatCount(s.infeasible, language));
+  return t('anchoring.statusValue').replace('{ok}', formatCount(s.ok, language)).replace('{bad}', formatCount(s.piles, language));
 }
 
 /** The price list in use: the project's imported one, else the built-in one. */
@@ -66,7 +65,7 @@ export function computeCostModel(project: Project, layout: Layout, builtIn: Pric
     buoyDepthFactor: project.params.buoyDepthFactor,
     moduleLengths: project.params.pierModuleLengths,
     gangwayReach: project.params.gangwayLength,
-    // D45: the directions with open water, and those whose waves exceed the criteria.
+    // D45: the directions whose waves exceed the criteria (a warning).
     waves: waveInput(project, layout),
   });
   const estimate = costEstimate({ layout, site: project.site, priceList, choices, anchoring });

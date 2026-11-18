@@ -298,7 +298,11 @@ export function catenary(Th: number, w: number, h: number, L: number): CatenaryR
   }
   // Fully suspended: L² − h² = (2a sinh(X/2a))²
   const X = bisect((x) => (2 * a * Math.sinh(x / (2 * a))) ** 2 - (L * L - h * h), 1e-9, L);
-  const x1 = bisect((x) => a * (Math.cosh((x + X) / a) - Math.cosh(x / a)) - h, -50 * L, 50 * L);
+  // The reference code brackets x1 in ±50 L. A very taut chain (a ≫ L) has its vertex further away
+  // (x1 ≈ a·asinh(h/X)), so the bracket also grows with a, capped where cosh would overflow. The
+  // equation and its single root are unchanged.
+  const lim = Math.min(50 * L + 50 * a, 700 * a);
+  const x1 = bisect((x) => a * (Math.cosh((x + X) / a) - Math.cosh(x / a)) - h, -lim, lim);
   const Vanchor = Math.max(0, Th * Math.sinh(x1 / a));
   return {
     ok: true,
