@@ -9,6 +9,7 @@
  *   subtotal     = materials + labour + plant
  *   total VAT 0  = subtotal × (1 + overheads) × (1 + contingency)
  */
+import { anchorPieceMassKg, groupThousands, installParams } from './anchorChoice';
 import type { AnchoringResult, AnchorLine } from './anchoring';
 import { DEFAULT_VAT_PCT, installedPriceVat0, parameter, unitPriceVat0, type PriceList, type Product, type ProductUnit } from './catalog';
 import { distance, distancePointToPolyline } from './geometry';
@@ -81,6 +82,7 @@ export interface CostEstimate {
 }
 
 const priced = (p: Product, vat: number) => unitPriceVat0(p, vat);
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 export const seriesOf = (list: PriceList, category: Product['category'], series: string) =>
   list.products.filter((p) => p.category === category && p.series === series);
 
@@ -364,6 +366,12 @@ export function costEstimate(input: CostInput): CostEstimate {
   let missingChain = 0;
   /** D62: lines that no anchor of the price list holds (not priced: by design). */
   const byDesign: AnchorLine[] = [];
+  /**
+   * D62: anchors installed by the divers and the work boat: every piece whose price is a supply
+   * price (an installed price includes the installation), with their mass.
+   */
+  const placed = { pieces: 0, tonnes: 0, installed: 0, heavy: 0, heaviestKg: 0 };
+  const install = installParams(list);
   /** Stern buoys (D36) without a float of the needed buoyancy in the list. */
   let smallFloats = 0;
   let buoyLines = 0;
@@ -372,8 +380,20 @@ export function costEstimate(input: CostInput): CostEstimate {
     if (chain) addQty('anchoring', chain, line.chainLength, line.id);
     else missingChain++;
     const anchor = line.anchorId ? byId.get(line.anchorId) : undefined;
-    if (anchor) addQty('anchoring', anchor, line.anchorCount, line.id, installedPriceVat0(anchor, vat) !== null);
-    else if (line.status === 'INFEASIBLE') byDesign.push(line);
+    if (anchor) {
+      const installed = installedPriceVat0(anchor, vat) !== null;
+      addQty('anchoring', anchor, line.anchorCount, line.id, installed);
+      const mass = anchorPieceMassKg(anchor);
+      if (installed) placed.installed += line.anchorCount;
+      else {
+        placed.pieces += line.anchorCount;
+        placed.tonnes += (line.anchorCount * mass) / 1000;
+      }
+      if (mass > install.workBoatMaxLiftKg + 1e-9) {
+        placed.heavy += line.anchorCount;
+        placed.heaviestKg = Math.max(placed.heaviestKg, mass);
+      }
+    } else if (line.status === 'INFEASIBLE') byDesign.push(line);
     const d = chain?.chainDiameterMm ?? 0;
     if (line.buoy) {
       // A stern buoy: float, sinker and chain with its shackles, as in Top Marine's buoy
@@ -501,15 +521,35 @@ export function costEstimate(input: CostInput): CostEstimate {
       `${moduleCount} pontoons × ${par('crew_h_per_pontoon', 4)} h + ${fingerCount} fingers × ${par('crew_h_per_finger', 1.5)} h + ${gangways} gangways × ${par('crew_h_per_gangway', 3)} h + ${smallItems} small items × ${par('crew_h_per_small_item', 0.25)} h`,
     );
   }
-  if (diving) addQty('labour', diving, lineCount * par('diver_h_per_anchor_line', 1), `${lineCount} anchor lines × ${par('diver_h_per_anchor_line', 1)} h`);
+  // D62: diving hours per anchor piece (and per wall fixing of a shore chain) and per tonne of anchor.
+  const divingHours = (placed.pieces + wallLines) * install.diverHoursPerAnchor + placed.tonnes * install.diverHoursPerTonne;
+  if (diving && divingHours > 0) {
+    addQty(
+      'labour',
+      diving,
+      divingHours,
+      `${plural(placed.pieces, 'anchor')}${wallLines > 0 ? ` + ${plural(wallLines, 'wall fixing')}` : ''} × ${fmt(install.diverHoursPerAnchor)} h${
+        install.diverHoursPerTonne > 0 ? ` + ${fmt(placed.tonnes)} t × ${fmt(install.diverHoursPerTonne)} h/t` : ''
+      }`,
+    );
+  }
   if (crane) {
     addQty('plant', crane, moduleCount * par('crane_h_per_pontoon', 1), `lifting: ${moduleCount} pontoons × ${par('crane_h_per_pontoon', 1)} h`);
     addQty('plant', crane, moduleCount * par('transport_h_per_pontoon', 2), `transport: ${moduleCount} pontoons × ${par('transport_h_per_pontoon', 2)} h`);
   }
-  // The work boat carries and lowers the anchors: lines to the seabed only.
-  if (boat && seabedLines > 0) {
-    const days = Math.ceil((seabedLines / 10) * par('boat_days_per_10_anchor_lines', 1));
-    addQty('plant', boat, days, `${seabedLines} anchor lines to the seabed`);
+  // D62: the work boat carries and lowers the anchors: days by the number of anchor pieces.
+  if (boat && placed.pieces > 0) {
+    const days = Math.ceil(placed.pieces / install.anchorsPerBoatDay - 1e-9);
+    addQty('plant', boat, days, `${plural(placed.pieces, 'anchor')} ÷ ${fmt(install.anchorsPerBoatDay)} per day`);
+  }
+  if (placed.heavy > 0) {
+    notes.push(
+      `${placed.heavy} anchors (up to ${groupThousands(placed.heaviestKg)} kg) are heavier than the work boat lifts (work_boat_max_lift_kg ${groupThousands(install.workBoatMaxLiftKg)} kg): a heavier crane barge is needed; its cost is not in the estimate.`,
+    );
+  }
+  if (placed.installed > 0) notes.push(`${placed.installed} anchors are priced installed (supply and installation); no diving or work-boat time is added for them.`);
+  if (install.legacyKeys.length > 0) {
+    notes.push(`The price list has the older installation keys ${install.legacyKeys.join(', ')} (per anchor line); they are used per anchor. Replace them with diver_h_per_anchor and anchors_per_boat_day.`);
   }
 
   // --- Lines and totals ----------------------------------------------------------------------

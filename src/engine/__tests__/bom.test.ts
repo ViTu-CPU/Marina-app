@@ -85,8 +85,10 @@ const LIST: PriceList = {
     param('crew_h_per_finger', 1.5),
     param('crew_h_per_gangway', 3),
     param('crew_h_per_small_item', 0.25),
-    param('diver_h_per_anchor_line', 1),
-    param('boat_days_per_10_anchor_lines', 1),
+    param('diver_h_per_anchor', 1),
+    param('diver_h_per_tonne', 0),
+    param('anchors_per_boat_day', 10),
+    param('work_boat_max_lift_kg', 3000),
   ],
 };
 const byId = (id: string) => LIST.products.find((p) => p.id === id)!;
@@ -286,7 +288,8 @@ describe('cost estimate, hand-calculated', () => {
     expect(lineFor('rate-installer').orderQuantity).toBe(21.8);
     expect(lineFor('rate-diving-team').quantity).toBe(2);
     expect(estimate.labour).toBeCloseTo(2180 + 400, 9);
-    // Crane: 3 h lifting + 6 h transport = 9 h; work boat ⌈2/10 · 1⌉ = 1 day.
+    expect(lineFor('rate-diving-team').basis).toBe('2 anchors × 1 h');
+    // Crane: 3 h lifting + 6 h transport = 9 h; work boat ⌈2 anchors / 10 per day⌉ = 1 day.
     expect(lineFor('rate-crane').quantity).toBe(9);
     expect(lineFor('rate-work-boat').orderQuantity).toBe(1);
     expect(estimate.plant).toBeCloseTo(900 + 800, 9);
@@ -300,12 +303,63 @@ describe('cost estimate, hand-calculated', () => {
     const of = (id: string) => e.lines.find((l) => l.productId === id)!;
     expect(of('wf').orderQuantity).toBe(2);
     expect(of('a1000').orderQuantity).toBe(1);
-    // Chain 16.5 + 2 × 3 = 22.5 m; divers on all 3 lines; the boat for the 1 seabed line.
+    // Chain 16.5 + 2 × 3 = 22.5 m; divers for the anchor and the 2 wall fixings; the boat for the 1 anchor.
     expect(of('c13').quantity).toBeCloseTo(22.5, 9);
     expect(of('rate-diving-team').quantity).toBe(3);
-    expect(of('rate-work-boat').basis).toBe('1 anchor lines to the seabed');
+    expect(of('rate-diving-team').basis).toBe('1 anchor + 2 wall fixings × 1 h');
+    expect(of('rate-work-boat').basis).toBe('1 anchor ÷ 10 per day');
     const noFixing = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: LIST, choices, anchoring: withWall });
     expect(noFixing.notes).toContain('No wall fixing in the price list: the wall fixings of the shore chains are not priced.');
+  });
+
+  it('installation scales with the anchors, not the lines (D62)', () => {
+    const many: AnchoringResult = { lines: Array.from({ length: 23 }, (_, i) => line(`A${i + 1}`)), piles: [], loads: [], issues: [] };
+    const tonnes: PriceList = { ...LIST, parameters: LIST.parameters.map((p) => (p.key === 'diver_h_per_tonne' ? param('diver_h_per_tonne', 0.5) : p)) };
+    const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: tonnes, choices, anchoring: many });
+    const of = (id: string) => e.lines.find((l) => l.productId === id)!;
+    // 23 anchors of 1 t: 23 × 1 h + 23 t × 0.5 h/t = 34.5 h; ⌈23 / 10⌉ = 3 boat days.
+    expect(of('rate-diving-team').quantity).toBeCloseTo(34.5, 9);
+    expect(of('rate-diving-team').basis).toBe('23 anchors × 1 h + 23 t × 0.5 h/t');
+    expect(of('rate-work-boat').quantity).toBe(3);
+    // INFEASIBLE lines have no anchor: no diving or boat time for them (their anchor points are not priced).
+    const bad: AnchorLine = { ...line('X1'), anchorId: null, anchorKind: null, anchorCount: 0, status: 'INFEASIBLE', infeasibleReason: 'block: needs 4 000 kg, max product 1 000 kg', requiredAnchorKg: 4000 };
+    const mixed = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: LIST, choices, anchoring: { ...anchoring, lines: [line('A1'), bad, { ...bad, id: 'X2' }] } });
+    const m = (id: string) => mixed.lines.find((l) => l.productId === id)!;
+    expect(m('rate-diving-team').quantity).toBe(1);
+    expect(m('rate-work-boat').basis).toBe('1 anchor ÷ 10 per day');
+    expect(m('a1000').orderQuantity).toBe(1);
+    // Their chains are priced: 3 × 16.5 m + 5 %.
+    expect(m('c13').quantity).toBeCloseTo(49.5, 9);
+    expect(m('anchor-point-by-design')).toMatchObject({ name: 'Anchor point – type and size by geotechnical/mooring design', quantity: 2, unitPrice: null, total: null, basis: '2 INFEASIBLE lines (P1)' });
+    expect(m('anchor-point-by-design').note).toContain('block: needs 4 000 kg, max product 1 000 kg');
+  });
+
+  it('anchors heavier than the work boat lifts are flagged; installed anchors take no diving or boat time (D62)', () => {
+    const heavy: PriceList = { ...LIST, parameters: LIST.parameters.map((p) => (p.key === 'work_boat_max_lift_kg' ? param('work_boat_max_lift_kg', 800) : p)) };
+    const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: heavy, choices, anchoring });
+    expect(e.notes).toContain('2 anchors (up to 1 000 kg) are heavier than the work boat lifts (work_boat_max_lift_kg 800 kg): a heavier crane barge is needed; its cost is not in the estimate.');
+    expect(estimate.notes.some((n) => n.includes('heavier than the work boat'))).toBe(false);
+    const installed: PriceList = { ...LIST, products: LIST.products.map((p) => (p.id === 'a1000' ? { ...p, installedPrice: 900 } : p)) };
+    const i = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: installed, choices, anchoring });
+    const a = i.lines.find((l) => l.productId === 'a1000')!;
+    expect(a).toMatchObject({ name: 'a1000 (installed)', unitPrice: 900, total: 1800 });
+    expect(a.note).toMatch(/^Installed price: supply and installation\./);
+    expect(i.lines.some((l) => l.productId === 'rate-diving-team' || l.productId === 'rate-work-boat')).toBe(false);
+    expect(i.notes).toContain('2 anchors are priced installed (supply and installation); no diving or work-boat time is added for them.');
+  });
+
+  it('older price lists: the per-line installation keys are read per anchor, with a note (D62)', () => {
+    const old: PriceList = {
+      ...LIST,
+      parameters: [
+        ...LIST.parameters.filter((p) => !['diver_h_per_anchor', 'anchors_per_boat_day'].includes(p.key)),
+        param('diver_h_per_anchor_line', 2),
+        param('boat_days_per_10_anchor_lines', 1),
+      ],
+    };
+    const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: old, choices, anchoring });
+    expect(e.lines.find((l) => l.productId === 'rate-diving-team')!.quantity).toBe(4);
+    expect(e.notes.some((n) => n.startsWith('The price list has the older installation keys diver_h_per_anchor_line, boat_days_per_10_anchor_lines'))).toBe(true);
   });
 
   it('totals: overheads 10 %, contingency 15 %, VAT 25.5 %, range −30 … +50 %', () => {
