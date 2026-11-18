@@ -18,7 +18,7 @@ mainista uuteen haaraan.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D62, I114, U26**).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D63, I121, U27**).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
   (vahvistettu, D54): aallonkorkeudet 2 desimaalilla.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
@@ -53,6 +53,16 @@ Testit 484/484, e2e 22 vaihetta. Viidennessä istunnossa (omistajan päätökset
    moduulien liitoksista, ja kummassakin päässä on ulospäin suuntautuvat ketjut. Moduulit ja paino
    näkyvät tuoteluettelossa (ei hintaa). Aaltotyökalu ja raportti näyttävät laiturien suojan
    (suora varjo, diffraktio ei mukana) ja läpäisevän aallon Hm0 × (1 − Ac).
+
+## Ankkuroinnin korjaus (2026-11-18, D62, I114–I120, U26)
+Haara `claude/new-session-olvxtp`. Ankkurimitoitus ei enää monista painoja: linjalla on enintään
+yksi ankkuri (2 vain käyttäjän tandem-valinnalla). Jos hinnaston mikään ankkuri ei riitä, linja on
+INFEASIBLE, ankkuripistettä ei hinnoitella ja BOM:iin tulee rivi "Anchor point – type and size by
+geotechnical/mooring design". Hinnastossa on uudet ankkurisarakkeet (docs/PRICE_LIST.md), asennus
+skaalautuu ankkurikappaleiden mukaan, yhteenveto luettelee kaikki hinnoittelemattomat erät ja Total
+kertoo, mitä se ei sisällä. **Oletusarvoilla (savi μ 0,3) demojen kaikki linjat ovat INFEASIBLE**
+(tarve 3,4–9,1 t, raskain sallittu paino 3 t). Regressiotestin fixture on sijaistiedosto, koska
+omistajan "Untitled project" -tiedostoa ei ollut (I120). Testit 527/527, e2e 22 vaihetta.
 
 ## Jatkotoimet, ehdotettu järjestys
 1. **Yhdistä PR #2 ja kokeile oikeat haut selaimessa**: avovesimatkat (Overpass), vedenkorkeudet

@@ -125,9 +125,13 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 - Anchoring plan for one design depth, shown as a map layer: chains from every pontoon joint
   in an X pattern (towards the head and the shore on both sides), two crossed shore chains
   under each pier's gangway, the AS 3962 minimum wave load (2 kN/m) from the directions with
-  open water, and concrete anchors per pier and access pontoon, chain and anchor chosen from the price list
+  open water, and anchors per pier and access pontoon, chain and anchor chosen from the price list
   by breaking load and required mass; anchor type concrete block (friction) or concrete wedge
-  (Pearl Harbor type, published capacities). Main piers of 10 m or more get two crossed chains
+  (Pearl Harbor type, published capacities). **At most one anchor per line** (two only as a
+  tandem choice); other anchor kinds (screw, pile, rock bolt, drag) are chosen only by their
+  published capacity in the price list. A line that no anchor of the price list holds is shown
+  as INFEASIBLE and its anchor point is left unpriced ("type and size by geotechnical/mooring
+  design"). Main piers of 10 m or more get two crossed chains
   at their head; fingers longer than 12 m get an end pile (Marinetek; not priced). An access pontoon in front of the shore has
   chains on the water side only and is held off the wall by two shore chains at each of its
   gangways (placed by the user, or one at its middle) and by the piers attached to it. Each
@@ -136,10 +140,13 @@ fairway in front of every berth, connection to the entrance, pier connected to t
   mooring design.
 - Bill of materials and cost estimate: pontoon modules, fingers, gangways, anchoring
   hardware, fittings, labour and plant, with site overheads, contingency, VAT 25.5 % on the
-  total and a range. Every line shows its basis and source. Export as Excel.
+  total and a range. Every line shows its basis and source. Everything the estimate needs but
+  cannot price is listed by name, and the totals then read "excludes N unpriced items". The
+  export adds a friction sensitivity table for the block masses. Export as Excel.
 - Price list `data/hinnasto.xlsx` (A-Laiturit, Top Marine incl. buoys, Suomen Laatulaituri,
   Savorak, Marinetek estimate, labour and plant rates), editable in Excel; import an edited copy in the app or
-  replace the file and rebuild. See [docs/RESEARCH.md](docs/RESEARCH.md).
+  replace the file and rebuild. Columns and parameters: [docs/PRICE_LIST.md](docs/PRICE_LIST.md);
+  sources: [docs/RESEARCH.md](docs/RESEARCH.md).
 
 **Site conditions (preliminary, "Waves" window and anchoring parameters)**
 - Wave screening by eight direction sectors (N … NW), each with its own fetch (0 = no open
@@ -211,7 +218,10 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
 - One design water depth per project (no soundings). The anchoring plan covers wind and the
   AS 3962 minimum wave load: no wave dynamics, currents, ice or berthing loads, no structural
   check of pontoons and fixings. With waves the friction-only concrete blocks come out several
-  times heavier than in practice (docs/DECISIONS.md I99).
+  times heavier than in practice (docs/DECISIONS.md I99). With the default clay friction 0.3
+  the demos' lines need more than the heaviest 3 t block of the built-in price list, so their
+  anchor points are INFEASIBLE and unpriced (D62): the anchor type needs geotechnical data and
+  a mooring design, or price-list products with published capacities.
   Wind loads follow UFC 4-152-07 and the defaults have public sources where one was found
   (docs/RESEARCH.md §5, §9). Plain concrete blocks hold by friction and come out heavier
   than suppliers' standard packages; the wedge (Pearl Harbor type) option uses published

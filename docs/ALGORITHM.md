@@ -104,7 +104,8 @@ navigable region, minus piers and row blocks.
 
 ## Anchoring plan and cost estimate (`anchoring.ts`, `bom.ts`)
 
-Derived from a layout, the site and the price list (DECISIONS D23–D32, I47–I73):
+Derived from a layout, the site and the price list (DECISIONS D23–D32, D62, I47–I73,
+I114–I119; price-list schema in [PRICE_LIST.md](PRICE_LIST.md)):
 
 1. Wind load per pier after UFC 4-152-07 (I54): across the pier the boats are hit bow-on
    (beam × profile height), windward row in full, leeward row 20 %, plus the pier face not
@@ -127,13 +128,30 @@ Derived from a layout, the site and the price list (DECISIONS D23–D32, I47–I
    crossed at θ, to fixings in the wall) and the piers attached to its water-side edge, which add their share to the
    load their shore-ward lines hold. The wind along the wall goes to the shore chains.
 3. Each line: chain length `k × depth at high water`, catenary with uplift at the anchor;
-   cheapest chain with breaking load × ((d − c)/d)² ≥ SF × tension; cheapest anchor with
-   submerged weight ≥ SF × (H/μ + uplift), no heavier than the largest piece to be handled
-   (several pieces otherwise). With wedge anchors (I59): mass from the published working
-   capacities, chain lengthened until the angle at the anchor is within the tables' limit.
+   cheapest chain with breaking load × ((d − c)/d)² ≥ SF × tension. A block anchor needs the
+   mass m = SF × (H/μ + uplift) / (g (1 − ρw/ρc)); with wedge anchors (I59) the mass comes
+   from the published working capacities, chain lengthened until the angle at the anchor is
+   within the tables' limit.
+3a. Anchor of the line (D62, I114–I115, `anchorChoice.ts`): **at most `maxAnchorsPerLine`
+   pieces (default 1; 2 only as the user's tandem choice, with a warning)**. Candidates:
+   blocks no heavier than `maxAnchorMass` with ⌈m / mass⌉ pieces, and other kinds (screw,
+   pile, rock bolt, drag) only by their **published** capacity, ⌈SF_p × H / capacity⌉ and, for
+   a lifting line, ⌈SF_p × V / uplift capacity⌉ pieces, where they suit the seabed. The
+   cheapest per line wins (installed price, else supply price + installation estimate). If
+   none holds, the line is **INFEASIBLE**: the reason names what each kind would need
+   ("block: needs 33 922 kg, max product 3 000 kg"), the anchor point is not priced, and the
+   mass is never split over more anchors. The line spacing stays the user's: the load per
+   line only falls in proportion to it.
 4. Bill of materials: cheapest module combination per pier, fingers by length, gangways per
-   shore connection, chain, anchors, shackles, springs, anodes per line, fittings per berth
-   and pier; labour and plant from output rates; overheads, contingency, VAT, range.
+   shore connection (not priced when none is as wide as AS 3962 Table 3.3 asks for, I118),
+   chain, anchors, shackles, springs, anodes per line, one row "Anchor point – type and size
+   by geotechnical/mooring design" without a price for the INFEASIBLE lines, breakwaters
+   without a price, fittings per berth and pier; labour and plant from output rates, diving
+   and work-boat time **per anchor piece** (I116); overheads, contingency, VAT, range.
+5. Unpriced items (I117): everything needed but not priced is listed by name and left out of
+   the totals, whose labels then say "(excludes N unpriced items, see list)"; the summary
+   adds "Anchoring status: X lines OK, Y lines INFEASIBLE" and the export a friction
+   sensitivity table for μ 0.2 / 0.3 / 0.5 (I119).
 
 ## 5. Validation (`validate.ts`)
 

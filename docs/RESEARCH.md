@@ -355,9 +355,12 @@ parameter is shown with its source or marked **assumption**.
    SF_slide = 1.5 (**assumption**; Sound & Sea Technology's anchor tables use FS = 1.5).
    The cheapest catalogue block with mass ≥ M and not heavier than the largest piece to be
    handled (default **3 000 kg**: "SF Marina commonly prefers anchors with a mass of
-   approximately three tonnes or less", Chalmers 2026 §3.8) is chosen, otherwise several of
-   that size. Chalmers notes that several anchors on one line do not necessarily hold as much
-   as one anchor of the same mass.
+   approximately three tonnes or less", Chalmers 2026 §3.8) is chosen. Chalmers notes that
+   several anchors on one line do not necessarily hold as much as one anchor of the same
+   mass; since D62 (2026-11-18) a line gets **at most one anchor** (two only as the user's
+   tandem choice), and a line that no anchor of the price list holds is INFEASIBLE and left
+   unpriced rather than given several blocks. Anchors other than blocks count only with a
+   published capacity (DECISIONS I114–I115).
    **Wedge anchors** (anchor type "wedge", DECISIONS I59): mass from the working capacities
    of the Enhanced Pearl Harbor anchor (Sound & Sea Technology 2009 Tables 35–36, §9.5),
    `SF_slide · H ≤ 1.5 · capacity(mass, seabed, angle)`; the chain is lengthened until the
