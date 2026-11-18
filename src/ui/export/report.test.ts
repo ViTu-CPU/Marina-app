@@ -139,7 +139,7 @@ describe('breakwaters in the cost model (D58, I106)', () => {
 
 describe('wave directions for the anchoring plan (D45)', () => {
   it('the sectors with a fetch, and those whose waves exceed the criteria', () => {
-    expect(waveInput(project, layout)).toEqual({ from: [], exceeding: [], hs50: [] });
+    expect(waveInput(project, layout)).toEqual({ from: [], exceeding: [], hs50: [], estimated: [], shelter: {} });
     const withFetch = { ...project, waves: { ...project.waves, wind1: 15, wind50: 22, sectors: project.waves.sectors.map((x, k) => ({ ...x, fetch: k === 2 ? 3000 : k === 4 ? 200 : 0 })) } };
     const w = waveInput(withFetch, layout);
     expect(w.from).toEqual([90, 180]);
@@ -154,5 +154,42 @@ describe('wave directions for the anchoring plan (D45)', () => {
     expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD')).toBe(true);
     expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD_ABOVE_CRITERIA')).toBe(true);
     expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD_SMALL_WAVES')).toBe(true);
+    expect(w.estimated).toEqual([false, false]);
+  });
+
+  it('directions without wind data: Hm0 estimated from the fetch with the design wind, not the full load (D63, I121)', () => {
+    const noWind = { ...project, waves: { ...project.waves, sectors: project.waves.sectors.map((x, k) => ({ ...x, fetch: k === 2 ? 3000 : k === 4 ? 200 : 0 })) } };
+    const w = waveInput(noWind, layout);
+    expect(w.estimated).toEqual([true, true]);
+    // The same as the screening would give with a 50-year wind equal to the design wind (22 m/s, 10 min).
+    const withWind = waveInput({ ...noWind, waves: { ...noWind.waves, wind50: project.anchoring.windSpeed, windAveragingS: 600 } }, layout);
+    expect(w.hs50[0]).toBeCloseTo(withWind.hs50[0]!, 9);
+    expect(w.hs50[1]).toBeLessThan(0.3);
+    const m = computeCostModel(noWind, layout, parsed.priceList)!;
+    expect(m.anchoring.issues.find((i) => i.code === 'WAVE_HEIGHT_ESTIMATED')!.message).toMatch(/^No wind in the wave screening for E, S: the 50-year Hm0 of these directions \([\d.]+ m, [\d.]+ m\) is estimated from its fetch with the design wind 22 m\/s/);
+  });
+
+  it('piers behind a breakwater take the wave load of the transmitted wave (D63, I122)', () => {
+    // Open water to the north; a 4300K breakwater across the basin's north side shelters the piers.
+    const open = { ...project, waves: { ...project.waves, wind1: 15, wind50: 22, sectors: project.waves.sectors.map((x, k) => ({ ...x, fetch: k === 0 ? 3000 : 0 })) } };
+    const xs = layout.piers.flatMap((p) => [p.start.x, p.end.x]);
+    const ys = layout.piers.flatMap((p) => [p.start.y, p.end.y]);
+    const north = Math.max(...ys) + 5;
+    const sheltered = { ...open, site: { ...open.site, breakwaters: [{ id: 'bw-1', start: { x: Math.min(...xs) - 30, y: north }, end: { x: Math.max(...xs) + 30, y: north }, product: '4300K' }] } };
+    const w = waveInput(sheltered, layout);
+    for (const pier of layout.piers) {
+      const s = w.shelter[pier.id]![0]!;
+      expect(s.share, pier.id).toBeCloseTo(1, 9);
+      expect(s.breakwaterId).toBe('bw-1');
+      expect(s.hs!).toBeLessThan(w.hs50[0]!);
+    }
+    const loadOf = (pr: typeof open) => {
+      const m = computeCostModel(pr, layout, parsed.priceList)!;
+      return { m, lateral: m.anchoring.loads.filter((l) => layout.piers.some((p) => p.id === l.id)).reduce((t, l) => t + l.lateralKn + l.axialFromSeaKn, 0) };
+    };
+    const without = loadOf(open);
+    const behind = loadOf(sheltered);
+    expect(behind.lateral).toBeLessThan(without.lateral);
+    expect(behind.m.anchoring.issues.find((i) => i.code === 'WAVE_LOAD_SHELTERED')!.message).toMatch(/behind bw-1 \(Hm0 [\d.]+ → [\d.]+ m\)/);
   });
 });

@@ -4,11 +4,10 @@
  */
 import { useMemo } from 'react';
 import { anchoringPlan, anchoringStatus, type AnchoringResult, type AnchorTotals } from '../engine/anchoring';
+import { anchoringWaves, type AnchoringWaves } from '../engine/anchorWaves';
 import { costEstimate, resolveChoices, type CostEstimate, type ResolvedChoices } from '../engine/bom';
 import { DEFAULT_VAT_PCT, parameter, type PriceList } from '../engine/catalog';
 import type { Layout, Project } from '../engine/model';
-import { pierAxis } from '../engine/rows';
-import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../engine/waves';
 import type { Language } from '../i18n';
 import type { StringKey } from '../i18n';
 import { useAppStore } from '../state/store';
@@ -25,15 +24,11 @@ export interface CostModel {
 }
 
 /**
- * D45: wave directions for the anchoring plan from the wave screening (sectors with a fetch), and
- * (I104) the 50-year Hm0 of each, null where the screening has no wind for it.
+ * D45, I104, D63: the wave input of the anchoring plan: per direction with open water the 50-year
+ * Hm0 (from the screening, else estimated with the design wind) and per pontoon the shelter of the
+ * drawn breakwaters (engine/anchorWaves.ts).
  */
-export function waveInput(project: Project, layout: Layout): { from: number[]; exceeding: string[]; hs50: (number | null)[] } {
-  const assessment = waveAssessment(project.waves, project.anchoring.depth, layout.piers.map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) })));
-  const sectors = project.waves.sectors.flatMap((x, k) => (x.fetch > 0 ? [k] : []));
-  const hs = (k: number) => assessment?.sectors.find((x) => x.sector === k)?.events.find((e) => e.event === 'fiftyYear')?.waves.hm0 ?? null;
-  return { from: sectors.map(waveSectorBearing), exceeding: (assessment?.bad ?? []).map((k) => WAVE_SECTORS[k]!), hs50: sectors.map(hs) };
-}
+export const waveInput = (project: Project, layout: Layout): AnchoringWaves => anchoringWaves(project, layout);
 
 /** I102: "12 345 kg (largest 3 260 kg, chains up to 47.0 m)" for the other anchor type. */
 export function otherTypeText(o: AnchorTotals, t: (key: StringKey) => string, language: Language): string {

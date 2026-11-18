@@ -265,6 +265,29 @@ function pierSamples(start: Vec2, end: Vec2): Vec2[] {
 }
 
 /**
+ * D63: share of a pontoon's length whose straight line towards waves from `bearing` (as far as
+ * `fetch`) meets a breakwater, and the breakwater that shelters most of it (null when none does).
+ */
+export function shelterOf(breakwaters: readonly Breakwater[], start: Vec2, end: Vec2, bearing: number, fetch: number): { share: number; breakwater: Breakwater | null } {
+  if (breakwaters.length === 0) return { share: 0, breakwater: null };
+  const rad = (bearing * Math.PI) / 180;
+  const towards = { x: Math.sin(rad), y: Math.cos(rad) };
+  const samples = pierSamples(start, end);
+  const hits = new Map<string, number>();
+  let sheltered = 0;
+  for (const point of samples) {
+    const far = add(point, scale(towards, fetch));
+    const hit = breakwaters.find((b) => segmentIntersectionParam(point, far, b.start, b.end) !== null);
+    if (hit) {
+      sheltered++;
+      hits.set(hit.id, (hits.get(hit.id) ?? 0) + 1);
+    }
+  }
+  const best = [...hits.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
+  return { share: sheltered / samples.length, breakwater: best ? breakwaters.find((b) => b.id === best[0])! : null };
+}
+
+/**
  * D58, I107: for every direction whose waves exceed the criteria at a pier, the share of that
  * pier sheltered by the site's breakwaters (straight lines from points on the pier towards the
  * waves, as far as the fetch, that meet a breakwater's centreline) and the transmitted height
@@ -277,30 +300,17 @@ export function breakwaterShelter(site: Site, piers: readonly { id: string; star
   const rows: ShelterRow[] = [];
   for (const sector of assessment.sectors) {
     if (sector.status !== 'exceeds') continue;
-    const rad = (sector.bearing * Math.PI) / 180;
-    const towards = { x: Math.sin(rad), y: Math.cos(rad) };
     for (const pier of piers) {
       const heading = assessment.piers.find((p) => p.id === pier.id)?.headings[sector.sector];
       const failing = sector.checks.filter((c) => c.ok === false && c.limit !== null && c.heading === heading);
       if (failing.length === 0) continue;
-      const samples = pierSamples(pier.start, pier.end);
-      const hits = new Map<string, number>();
-      let sheltered = 0;
-      for (const point of samples) {
-        const far = add(point, scale(towards, sector.fetch));
-        const hit = breakwaters.find((b) => segmentIntersectionParam(point, far, b.start, b.end) !== null);
-        if (hit) {
-          sheltered++;
-          hits.set(hit.id, (hits.get(hit.id) ?? 0) + 1);
-        }
-      }
-      const best = [...hits.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
-      const product = best ? breakwaterProductOf(breakwaters.find((b) => b.id === best[0])!) : null;
+      const { share, breakwater } = shelterOf(breakwaters, pier.start, pier.end, sector.bearing, sector.fetch);
+      const product = breakwater ? breakwaterProductOf(breakwater) : null;
       rows.push({
         sector: sector.sector,
         pierId: pier.id,
-        share: sheltered / samples.length,
-        breakwaterId: best?.[0] ?? null,
+        share,
+        breakwaterId: breakwater?.id ?? null,
         checks: failing.map((check) => {
           if (!product) return { check, transmitted: null, ok: null };
           const a = attenuation(product, check.waves.hm0, check.waves.wavelength);

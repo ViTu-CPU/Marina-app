@@ -8,6 +8,7 @@
  * y north); 1 drawing unit = 1 m. Text outside ASCII is written as \U+XXXX.
  */
 import { anchoringPlan } from '../../engine/anchoring';
+import { anchoringWaves } from '../../engine/anchorWaves';
 import { BREAKWATERS, breakwaterModules, breakwaterProductOf, breakwatersOf } from '../../engine/breakwater';
 import { chooseGangway, moduleCombination, pickByLength, seriesOf, type ResolvedChoices } from '../../engine/bom';
 import type { PriceList, Product } from '../../engine/catalog';
@@ -295,6 +296,8 @@ export function buildDxf(input: DxfInput): string {
       buoyDepthFactor: project.params.buoyDepthFactor,
       moduleLengths: project.params.pierModuleLengths,
       gangwayReach: reach,
+      // D63: the same wave load as the cost estimate (shelter, estimated heights).
+      waves: anchoringWaves(project, layout),
       compareAnchorTypes: false,
     });
     const byId = new Map(list.products.map((p) => [p.id, p]));

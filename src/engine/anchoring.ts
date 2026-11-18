@@ -608,6 +608,10 @@ export interface AnchoringInput {
     exceeding: readonly string[];
     /** I104: 50-year Hm0 of each direction of `from` (same order), m; null or missing = not known. */
     hs50?: readonly (number | null)[];
+    /** D63, I121: whether that height was estimated with the design wind (engine/anchorWaves.ts). */
+    estimated?: readonly boolean[];
+    /** D63, I122: per pontoon and direction, the share behind a breakwater and the Hm0 there. */
+    shelter?: Readonly<Record<string, readonly { share: number; breakwaterId: string | null; hs: number | null }[]>>;
   };
   /** I102: also size the anchors with the other anchor type for comparison (default true). */
   compareAnchorTypes?: boolean;
@@ -1016,8 +1020,23 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   });
   const smallWaves = waveFrom.filter((w) => w.q <= 0 && w.hs !== null);
   const waveNotes: string[] = [];
+  /** D63, I122: the part of a pontoon behind a breakwater takes the load of the transmitted wave. */
+  const shelterNotes: string[] = [];
+  const sectorName = (bearing: number) => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(bearing / 45) % 8]!;
   const addWaves = (item: Held) => {
-    const loading = waveFrom.filter((w) => w.q > 0);
+    const dirs = waveFrom.map((w, i) => {
+      const s = item.free ? undefined : input.waves?.shelter?.[item.id]?.[i];
+      if (!s || !(s.share > 0) || w.q <= 0) return w;
+      const pct = `${Math.round(s.share * 100)} %`;
+      if (s.hs === null) {
+        shelterNotes.push(`${item.id} from ${sectorName(w.bearing)}: ${pct} behind ${s.breakwaterId} but the wave is beyond its brochure curve, so taken as unsheltered`);
+        return w;
+      }
+      const behind = Math.max(0, p.waveLoad) * 1000 * waveLoadFactor(s.hs, p);
+      shelterNotes.push(`${item.id} from ${sectorName(w.bearing)}: ${pct} behind ${s.breakwaterId} (Hm0 ${w.hs?.toFixed(2) ?? '?'} → ${s.hs.toFixed(2)} m)`);
+      return { ...w, q: (1 - s.share) * w.q + s.share * behind };
+    });
+    const loading = dirs.filter((w) => w.q > 0);
     if (loading.length === 0) return;
     const { length, along } = pierAxis({ id: item.id, start: item.start, end: item.end, width: item.width, locked: false, origin: 'manual' });
     if (!(length > 0)) return;
@@ -1578,6 +1597,21 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     comparison = { current, other: anchorTotals(alt.lines, otherType) };
   }
 
+  const estimatedWaves = (input.waves?.from ?? []).flatMap((bearing, i) => (input.waves?.estimated?.[i] ? [{ bearing, hs: input.waves?.hs50?.[i] ?? null }] : []));
+  if (estimatedWaves.length > 0) {
+    warn(
+      'WAVE_HEIGHT_ESTIMATED',
+      `No wind in the wave screening for ${estimatedWaves.map((w) => sectorName(w.bearing)).join(', ')}: the 50-year Hm0 of ${estimatedWaves.length > 1 ? 'these directions' : 'this direction'} (${estimatedWaves
+        .map((w) => `${w.hs?.toFixed(2) ?? '?'} m`)
+        .join(', ')}) is estimated from its fetch with the design wind ${p.windSpeed.toFixed(0)} m/s (USACE CEM). Fetch the wind climate in the Waves window for the site's winds.`,
+    );
+  }
+  if (shelterNotes.length > 0) {
+    warn(
+      'WAVE_LOAD_SHELTERED',
+      `Wave load behind the breakwaters from the transmitted height Hm0 × (1 − Ac) (brochure curves, I93): ${shelterNotes.join('; ')}. Diffraction round the breakwater ends, reflection and overtopping are not included.`,
+    );
+  }
   if (smallWaves.length > 0) {
     warn(
       'WAVE_LOAD_SMALL_WAVES',
