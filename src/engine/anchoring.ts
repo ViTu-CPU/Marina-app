@@ -495,6 +495,71 @@ export function anchorTotals(lines: readonly AnchorLine[], anchorType: AnchorTyp
   };
 }
 
+/** D62: friction coefficients of the sensitivity table. */
+export const SENSITIVITY_FRICTION = [0.2, 0.3, 0.5] as const;
+
+/** D62: the note under the sensitivity table. */
+export const SOFT_CLAY_NOTE = 'Gravity block capacity in soft clay is highly uncertain; requires geotechnical data.';
+
+export interface FrictionSensitivityRow {
+  /** Friction coefficient of the project's seabed for this row. */
+  friction: number;
+  /** Whether this is the coefficient in use. */
+  current: boolean;
+  /** Largest block mass one line needs, kg. */
+  maxKg: number;
+  /** Block mass of all the lines, kg. */
+  totalKg: number;
+  /** Lines that `maxAnchorsPerLine` blocks of the price list (no heavier than `maxAnchorMass`) hold. */
+  feasible: number;
+}
+
+export interface FrictionSensitivity {
+  seabed: Seabed;
+  /** Seabed lines of piers, access pontoons and breakwaters (stern buoys are sized by their table). */
+  lines: number;
+  /** Heaviest block of the price list allowed per line, kg (0 = none). */
+  heaviestBlockKg: number;
+  maxPerLine: number;
+  rows: FrictionSensitivityRow[];
+}
+
+/**
+ * D62: the mass plain concrete blocks would need on the seabed lines of a plan for friction
+ * coefficients 0.2 / 0.3 / 0.5 (and the one in use), from each line's H and V. The friction
+ * coefficient is the least certain input; in soft clay the holding of a block depends in practice
+ * on its embedment and the shear strength of the clay.
+ */
+export function frictionSensitivity(lines: readonly AnchorLine[], p: AnchoringParams, priceList: PriceList): FrictionSensitivity {
+  const own = lines.filter((l) => l.fixing === 'seabed' && l.role !== 'buoy');
+  const maxPerLine = Math.min(2, Math.max(1, Math.round(p.maxAnchorsPerLine)));
+  const heaviestBlockKg = priceList.products
+    .filter(
+      (x) =>
+        x.category === 'anchor' &&
+        (x.anchorKind ?? 'block') === 'block' &&
+        x.anchorMassKg !== null &&
+        x.anchorMassKg <= p.maxAnchorMass + 1e-9 &&
+        unitPriceVat0(x, 0) !== null &&
+        (x.seabeds.length === 0 || x.seabeds.includes(p.seabed)),
+    )
+    .reduce((m, x) => Math.max(m, x.anchorMassKg!), 0);
+  const inUse = p.friction[p.seabed];
+  const values = [...new Set([...SENSITIVITY_FRICTION, inUse])].sort((a, b) => a - b);
+  const rows = values.map((mu) => {
+    const q = { ...p, friction: { ...p.friction, [p.seabed]: mu } };
+    const masses = own.map((l) => requiredAnchorMass(l.horizontalKn * 1000, l.upliftKn * 1000, q));
+    return {
+      friction: mu,
+      current: Math.abs(mu - inUse) < 1e-9,
+      maxKg: masses.reduce((m, x) => Math.max(m, x), 0),
+      totalKg: masses.reduce((t, x) => t + x, 0),
+      feasible: masses.filter((x) => heaviestBlockKg > 0 && x <= maxPerLine * heaviestBlockKg + 1e-9).length,
+    };
+  });
+  return { seabed: p.seabed, lines: own.length, heaviestBlockKg, maxPerLine, rows };
+}
+
 /** D62: seabed anchor lines (stern buoys included) by status. */
 export function anchoringStatus(lines: readonly AnchorLine[]): { ok: number; infeasible: number } {
   const seabed = lines.filter((l) => l.fixing === 'seabed');

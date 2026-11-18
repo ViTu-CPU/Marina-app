@@ -86,6 +86,11 @@ describe('anchoring regression (D62): never several weights per line', () => {
     expect(row('Anchoring status')![1]).toMatch(/^\d+ lines OK, \d+ lines INFEASIBLE$/);
     expect(row(/^Breakwater breakwater-1: /)).toBeTruthy();
     expect(row(ANCHOR_BY_DESIGN_NAME)).toBeTruthy();
+    // The friction sensitivity table and its note.
+    const head = summary.findIndex((r) => String(r[0] ?? '').startsWith('Friction sensitivity: plain concrete blocks'));
+    expect(head).toBeGreaterThan(0);
+    expect(summary.slice(head + 2, head + 5).map((r) => r[0])).toEqual([0.2, '0.3 (in use)', 0.5]);
+    expect(summary[head + 5]![0]).toBe('Gravity block capacity in soft clay is highly uncertain; requires geotechnical data.');
     // The anchor lines sheet: one anchor at most, the status and the reason.
     const lines = sheets.find((s) => s.name === 'Anchor lines')!.rows;
     const col = (key: string) => lines[0]!.indexOf(key);

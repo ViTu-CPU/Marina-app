@@ -3,7 +3,7 @@
  * with A4 print styles. The browser prints it; "Save as PDF" gives the PDF report
  * (SPEC Phase 3). Every page carries the disclaimer (SPEC §1).
  */
-import type { AnchoringParams } from '../../engine/anchoring';
+import { frictionSensitivity, type AnchoringParams } from '../../engine/anchoring';
 import { BOM_GROUPS, type BomGroup } from '../../engine/bom';
 import { as3962NotesFor } from '../as3962Notes';
 import { breakwaterProposal, breakwaterShelter, weightPerMetre } from '../../engine/breakwater';
@@ -374,6 +374,25 @@ export function buildReportHtml(input: ReportInput): string {
       ]),
     );
     parts.push(issues(anchoring.issues));
+    // D62: block masses for other friction coefficients.
+    const sens = frictionSensitivity(anchoring.lines, project.anchoring, priceList);
+    if (sens.lines > 0) {
+      const dec = (x: number) => String(x).replace('.', language === 'fi' ? ',' : '.');
+      parts.push(`<h3>${esc(t('sensitivity.title'))}</h3>`);
+      parts.push(
+        table(
+          [t('sensitivity.friction'), `${t('sensitivity.largest')} (kg)`, `${t('sensitivity.total')} (t)`, `${t('sensitivity.feasible')} (${sens.maxPerLine > 1 ? `${sens.maxPerLine} × ` : ''}${formatCount(sens.heaviestBlockKg, language)} kg)`],
+          sens.rows.map((r) => [
+            `${esc(dec(r.friction))}${r.current ? ` (${esc(t('sensitivity.inUse'))})` : ''}`,
+            esc(formatCount(r.maxKg, language)),
+            esc(formatCount(r.totalKg / 1000, language)),
+            `${esc(formatCount(r.feasible, language))} / ${esc(formatCount(sens.lines, language))}`,
+          ]),
+          [1, 2, 3],
+        ),
+      );
+      parts.push(`<p class="small">${esc(t('sensitivity.note'))}</p>`);
+    }
     parts.push(`<p class="small">${esc(t('anchoring.note'))}</p><p class="small">${esc(t('anchoring.compare'))}</p>`);
 
     parts.push(`<h2>${esc(t('section.cost'))}</h2>`);

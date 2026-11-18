@@ -44,6 +44,19 @@ describe('printable report (U24)', () => {
     expect(html).toContain('2026-11-15');
   });
 
+  it('anchoring status, unpriced items, the excludes note on the totals and the friction sensitivity (D62)', () => {
+    expect(html).toContain(translate('en', 'anchoring.status'));
+    expect(html).toMatch(/\d+ lines OK, \d+ lines INFEASIBLE/);
+    expect(model.estimate.unpriced.length).toBeGreaterThan(0);
+    expect(html).toContain(`${translate('en', 'cost.unpriced')}: ${model.estimate.unpriced.length}`);
+    expect(html).toMatch(/Total VAT 0 % \(excludes \d+ unpriced items?, see list\)/);
+    expect(html).toContain(translate('en', 'sensitivity.title'));
+    expect(html).toContain('Gravity block capacity in soft clay is highly uncertain; requires geotechnical data.');
+    const fi = buildReportHtml({ project, layout, model, image: null, language: 'fi', date: '2026-11-15' });
+    expect(fi).toMatch(/Yhteensä ALV 0 % \(ei sisällä \d+ hinnoittelematonta erää, ks\. luettelo\)/);
+    expect(fi).toContain(translate('fi', 'sensitivity.note'));
+  });
+
   it('has the AS 3962-2001 advisory checks (D52)', () => {
     expect(html).toContain(translate('en', 'as3962.title'));
     expect(html).toContain('3.6.1');

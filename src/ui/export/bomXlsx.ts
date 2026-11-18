@@ -4,7 +4,7 @@
  * disclaimer (SPEC §1).
  */
 import { writeXlsx, type CellValue } from '../../catalog/xlsx';
-import { anchoringStatus, anchoringStatusText } from '../../engine/anchoring';
+import { anchoringStatus, anchoringStatusText, frictionSensitivity, SOFT_CLAY_NOTE } from '../../engine/anchoring';
 import { excludesNote } from '../../engine/bom';
 import type { Layout, Project } from '../../engine/model';
 import { DISCLAIMER } from '../../state/projectFile';
@@ -17,6 +17,8 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
   const { estimate, anchoring, choices, priceList } = model;
   // D62: the totals say what they leave out.
   const excludes = excludesNote(estimate);
+  // D62: block masses for other friction coefficients (the least certain input).
+  const sens = frictionSensitivity(anchoring.lines, project.anchoring, priceList);
   const summary: CellValue[][] = [
     ['Marina Layout Planner – bill of materials and cost estimate'],
     [DISCLAIMER],
@@ -59,6 +61,15 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
           [`Unpriced items (not in the totals, the range or the per-berth figures): ${estimate.unpriced.length}`],
           ['item', 'quantity', 'unit', 'why not priced'],
           ...estimate.unpriced.map((u): CellValue[] => [u.name, r1(u.quantity), u.unit, u.reason]),
+        ]
+      : []),
+    ...(sens.lines > 0
+      ? [
+          [],
+          [`Friction sensitivity: plain concrete blocks on the ${sens.lines} seabed lines of piers, access pontoons and breakwaters (seabed ${sens.seabed})`],
+          ['friction coefficient', 'largest block needed (kg)', 'blocks in total (t)', `lines that ${sens.maxPerLine > 1 ? `${sens.maxPerLine} × ` : ''}${sens.heaviestBlockKg} kg holds`],
+          ...sens.rows.map((r): CellValue[] => [r.current ? `${r.friction} (in use)` : r.friction, Math.round(r.maxKg), r1(r.totalKg / 1000), r.feasible]),
+          [SOFT_CLAY_NOTE],
         ]
       : []),
     [],

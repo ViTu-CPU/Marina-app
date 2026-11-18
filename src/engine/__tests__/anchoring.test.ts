@@ -3,6 +3,8 @@ import {
   anchoringPlan,
   anchoringStatus,
   anchoringStatusText,
+  frictionSensitivity,
+  SOFT_CLAY_NOTE,
   anchorTotals,
   waveAction,
   chainLengthFor,
@@ -449,6 +451,32 @@ describe('anchoring plan of a pier', () => {
     expect(anchors.reduce((n, l) => n + l.orderQuantity, 0)).toBe(plan.lines.length);
     expect(anchors.every((l) => l.unitPrice !== null && l.total! > 0)).toBe(true);
     expect(e.lines.some((l) => l.productId === 'anchor-point-by-design')).toBe(false);
+  });
+
+  it('friction sensitivity: block masses for μ 0.2 / 0.3 / 0.5 from each line’s H and V (D62)', () => {
+    const onClay = anchoringPlan({ layout: { piers: [pier], berths }, site: pierSite, classes: [boat], params: { ...params, seabed: 'clay' }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+    const s = frictionSensitivity(onClay.lines, { ...params, seabed: 'clay' }, LIST);
+    expect(s).toMatchObject({ seabed: 'clay', lines: onClay.lines.length, heaviestBlockKg: 3000, maxPerLine: 1 });
+    expect(s.rows.map((r) => [r.friction, r.current])).toEqual([
+      [0.2, false],
+      [0.3, true],
+      [0.5, false],
+    ]);
+    // μ in use: the plan's own masses.
+    const mid = s.rows[1]!;
+    expect(mid.maxKg).toBeCloseTo(Math.max(...onClay.lines.map((l) => l.requiredAnchorKg)), 6);
+    expect(mid.totalKg).toBeCloseTo(onClay.lines.reduce((t, l) => t + l.requiredAnchorKg, 0), 6);
+    expect(mid.feasible).toBe(onClay.lines.filter((l) => l.status === 'OK').length);
+    // A line: 1.5 · (H / μ + V) / 5.7225 → lower μ, heavier blocks, fewer lines a 3 000 kg block holds.
+    const l = onClay.lines[0]!;
+    expect(s.rows[0]!.maxKg).toBeGreaterThanOrEqual((1.5 * ((l.horizontalKn * 1000) / 0.2 + l.upliftKn * 1000)) / (9.81 * (1 - 1000 / 2400)) - 1e-6);
+    expect(s.rows[0]!.maxKg).toBeGreaterThan(s.rows[1]!.maxKg);
+    expect(s.rows[2]!.maxKg).toBeLessThan(s.rows[1]!.maxKg);
+    expect(s.rows[0]!.feasible).toBeLessThanOrEqual(s.rows[1]!.feasible);
+    expect(s.rows[2]!.feasible).toBeGreaterThanOrEqual(s.rows[1]!.feasible);
+    // Another μ in use adds its row.
+    expect(frictionSensitivity(onClay.lines, { ...params, seabed: 'clay', friction: { ...params.friction, clay: 0.26 } }, LIST).rows.map((r) => r.friction)).toEqual([0.2, 0.26, 0.3, 0.5]);
+    expect(SOFT_CLAY_NOTE).toBe('Gravity block capacity in soft clay is highly uncertain; requires geotechnical data.');
   });
 
   it('shore chains under the gangway of a pier 4 m off the wall (D49)', () => {
