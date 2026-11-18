@@ -13,7 +13,7 @@ import { bearingOf, DEFAULT_WAVES, waveAssessment, type WaveSettings } from '../
 import { breakwaterProposal, defaultBreakwaterProduct } from '../engine/breakwater';
 import { pierAxis } from '../engine/rows';
 import type { PriceList } from '../engine/catalog';
-import { DEFAULT_BOAT_CLASSES, DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
+import { DEFAULT_BOAT_CLASSES, DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS, DEFAULT_SITE_DEPTH } from '../engine/defaults';
 import { DEMO_PROJECTS, type DemoEntry } from '../engine/demos';
 import {
   addPier,
@@ -44,6 +44,8 @@ import {
   type PierSide,
   type Project,
   type Site,
+  type SiteDepthResult,
+  type SiteDepthSettings,
   type Vec2,
   type ZoneKind,
 } from '../engine/model';
@@ -120,6 +122,7 @@ export function emptyProject(): Project {
     cost: { ...DEFAULT_COST },
     waves: structuredClone(DEFAULT_WAVES),
     waterLevels: null,
+    siteDepth: structuredClone(DEFAULT_SITE_DEPTH),
     generatedFrom: null,
   };
 }
@@ -226,6 +229,12 @@ export interface AppState {
   setWaves: (patch: Partial<WaveSettings>, options?: CommitOptions) => void;
   /** D50: keep a gauge's levels and set the anchoring water levels from them (one undo step). */
   applyWaterLevels: (info: WaterLevelInfo) => void;
+  /** I121: settings of the depth lookup around the site position. */
+  setSiteDepth: (patch: Partial<SiteDepthSettings>) => void;
+  /** I121: keep a depth lookup and set the anchoring design depth from it (1 decimal; one undo step). */
+  applySiteDepth: (result: SiteDepthResult) => void;
+  /** I121: a design depth typed in by hand: the depth no longer follows the lookup. */
+  setDesignDepth: (depth: number, options?: CommitOptions) => void;
   /** D24: product choices; `priceList` replaces the built-in list (null restores it). */
   setCost: (patch: Partial<CostSettings>, options?: CommitOptions) => void;
   setBuiltInPriceList: (list: PriceList | null, error?: string | null) => void;
@@ -422,6 +431,10 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       setAnchoring: (patch, options) => get().commit((p) => ({ ...p, anchoring: { ...p.anchoring, ...patch } }), options),
       setWaves: (patch, options) => get().commit((p) => ({ ...p, waves: { ...p.waves, ...patch } }), options),
       applyWaterLevels: (info) => get().commit((p) => ({ ...p, waterLevels: info, anchoring: { ...p.anchoring, ...anchoringLevels(info.levels) } })),
+      setSiteDepth: (patch) => get().commit((p) => ({ ...p, siteDepth: { ...p.siteDepth, ...patch } })),
+      applySiteDepth: (result) =>
+        get().commit((p) => ({ ...p, siteDepth: { ...p.siteDepth, result }, anchoring: { ...p.anchoring, depth: Math.round(result.depth * 10) / 10 } })),
+      setDesignDepth: (depth, options) => get().commit((p) => ({ ...p, anchoring: { ...p.anchoring, depth }, siteDepth: { ...p.siteDepth, auto: false } }), options),
       setCost: (patch, options) => get().commit((p) => ({ ...p, cost: { ...p.cost, ...patch } }), options),
       setBuiltInPriceList: (builtInPriceList, priceListError = null) => set({ builtInPriceList, priceListError }),
 

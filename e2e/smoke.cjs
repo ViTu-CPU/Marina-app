@@ -614,7 +614,17 @@ async function waitForServer() {
         }
         route.fulfill({ json: { latitude: 60.25, longitude: 25.0, hourly: { time, wind_speed_10m: speed, wind_direction_10m: dir } } });
       });
+      // I121: the design depth was typed in (6 m), so the position does not start a depth lookup.
+      const emodnetAsked = [];
+      await page.route('https://rest.emodnet-bathymetry.eu/**', (route) => {
+        emodnetAsked.push(route.request().url());
+        route.fulfill({ json: new Array(1000).fill(-3.64) });
+      });
       await tool.getByLabel('Position').fill('60.15, 24.95');
+      await page.waitForTimeout(1200);
+      const sd = await page.evaluate(() => window.__marina.getState().project);
+      assert.deepEqual([emodnetAsked.length, sd.anchoring.depth, sd.siteDepth.auto], [0, 6, false]);
+      await page.unroute('https://rest.emodnet-bathymetry.eu/**');
       await tool.getByLabel('First year', { exact: true }).fill('2016');
       await tool.getByLabel('Last year', { exact: true }).fill('2024');
       await tool.getByRole('button', { name: 'Fetch wind data', exact: true }).click();
@@ -729,6 +739,15 @@ async function waitForServer() {
       );
       await page.route('https://rajapinnat.ymparisto.fi/**', (route) => route.fulfill({ json: { value: [] } }));
       await page.getByText('Anchoring parameters', { exact: true }).click();
+      // I121: ticked again, the design depth follows the mean depth around the position (EMODnet mocked: 3.64 m).
+      await page.route('https://rest.emodnet-bathymetry.eu/**', (route) => route.fulfill({ json: new Array(1000).fill(-3.64) }));
+      await page.getByTestId('site-depth-auto').check();
+      await page.getByTestId('site-depth-result').waitFor();
+      const sd = await page.evaluate(() => window.__marina.getState().project);
+      assert.equal(sd.anchoring.depth, 3.6);
+      assert.deepEqual([sd.siteDepth.result.source, sd.siteDepth.result.radius, sd.siteDepth.auto], ['emodnet', 200, true]);
+      assert.match(await page.getByTestId('site-depth-result').innerText(), /^Mean depth 3\.6 m \(samples 3\.6–3\.6 m; EMODnet; 100 % of the samples in water; within 200 m of 60\.1500, 24\.9500; \d{4}-\d{2}-\d{2}\) · used as the design depth$/);
+      await page.unroute('https://rest.emodnet-bathymetry.eu/**');
       await page.getByRole('button', { name: 'Find water-level gauges', exact: true }).click();
       const box = page.getByTestId('water-levels');
       await box.getByText(/Helsinki Kaivopuisto/).waitFor();

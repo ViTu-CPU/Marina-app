@@ -15,6 +15,8 @@ import { downloadBytes, readFileAsBytes, safeFileName, XLSX_MIME } from '../expo
 import { formatCount, formatEuro, formatKn, formatLength } from '../format';
 import { gaugeLevels, findGauges, type Gauge } from '../../state/waterLevels';
 import { useSitePosition } from '../sitePosition';
+import { DESIGN_DEPTH_RANGE, resetSiteDepthTries, runSiteDepthLookup, siteDepthKey, useSiteDepthStatus } from '../siteDepth';
+import { DEPTH_SOURCES, MIN_DEPTH_COVERAGE } from '../../state/depth';
 import { useT } from '../useT';
 import { Button, NumberField, OptionalNumberField, Section } from './fields';
 import { IssueList } from './IssueList';
@@ -100,6 +102,87 @@ function NormalLevelField({ name, min = 0 }: { name: 'normalHighWater' | 'normal
       <div className="w-20 shrink-0">
         <OptionalNumberField label={t(`anchoring.${name}`)} value={value ?? undefined} min={min} max={20} onChange={(v) => state().setAnchoring({ [name]: v ?? null }, { coalesce: `anchoring:${name}` })} />
       </div>
+    </div>
+  );
+}
+
+/** I121: the design depth; typing one in stops it following the lookup around the site position. */
+function DepthField() {
+  const t = useT();
+  const depth = useAppStore((s) => s.project.anchoring.depth);
+  return (
+    <NumberField
+      label={t('anchoring.depth')}
+      value={depth}
+      min={DESIGN_DEPTH_RANGE[0]}
+      max={DESIGN_DEPTH_RANGE[1]}
+      onChange={(v) => state().setDesignDepth(v, { coalesce: 'anchoring:depth' })}
+    />
+  );
+}
+
+/** I121: mean depth around the site position (EMODnet at sea, SYKE's lake depth zones), by itself or on request. */
+function SiteDepthLookup() {
+  const t = useT();
+  const language = useAppStore((s) => s.language);
+  const settings = useAppStore((s) => s.project.siteDepth);
+  const depth = useAppStore((s) => s.project.anchoring.depth);
+  const { position } = useSitePosition();
+  const status = useSiteDepthStatus();
+  const len = (m: number) => formatLength(m, language);
+  const r = settings.result;
+  const busy = status.kind === 'running';
+  const applied = r !== null && Math.round(r.depth * 10) / 10 === depth;
+  return (
+    <div className="space-y-1 rounded border border-slate-200 p-2" data-testid="site-depth">
+      <div className="text-xs font-semibold text-slate-600">{t('siteDepth.title')}</div>
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('siteDepth.auto')}
+        <input
+          type="checkbox"
+          data-testid="site-depth-auto"
+          checked={settings.auto}
+          onChange={(e) => {
+            const on = e.target.checked;
+            resetSiteDepthTries();
+            // A kept lookup of the same position applies at once; otherwise the lookup runs by itself.
+            if (on && r && position && siteDepthKey(r.position, r.radius) === siteDepthKey(position, settings.radius) && !applied) state().applySiteDepth(r);
+            state().setSiteDepth({ auto: on });
+          }}
+        />
+      </label>
+      <NumberField label={t('siteDepth.radius')} value={settings.radius} min={20} max={2000} step={10} onChange={(v) => state().setSiteDepth({ radius: v })} />
+      <Button disabled={!position || busy} onClick={() => position && void runSiteDepthLookup(position, settings.radius)}>
+        {t('siteDepth.run')}
+      </Button>
+      {busy && (
+        <span role="status" className="ml-2 animate-pulse text-xs text-sky-800">
+          {t('siteDepth.running')} {status.done} / {status.total}
+        </span>
+      )}
+      {!position && <p className="text-xs text-slate-600">{t('siteDepth.noPosition')}</p>}
+      {status.kind === 'error' && (
+        <p role="alert" className="text-xs text-red-700">
+          {t('siteDepth.error')} {status.message}
+        </p>
+      )}
+      {status.kind === 'none' && <p className="text-xs text-amber-800">{t('siteDepth.none')}</p>}
+      {status.kind === 'outOfRange' && (
+        <p className="text-xs text-amber-800">
+          {t('siteDepth.outOfRange')} {len(status.depth)} m ({len(DESIGN_DEPTH_RANGE[0])}–{formatCount(DESIGN_DEPTH_RANGE[1], language)} m).
+        </p>
+      )}
+      {r && (
+        <p className="text-xs text-slate-600" data-testid="site-depth-result">
+          {t('siteDepth.result')} {len(r.depth)} m ({t('siteDepth.range')} {len(r.min)}–{len(r.max)} m; {r.source === 'emodnet' ? 'EMODnet' : 'SYKE'};{' '}
+          {formatCount(Math.round(r.coverage * 100), language)} % {t('siteDepth.coverage')}; {t('siteDepth.within')} {formatCount(r.radius, language)} m {t('siteDepth.of')} {r.position.lat.toFixed(4)},{' '}
+          {r.position.lon.toFixed(4)}; {r.fetchedOn}) · {applied ? t('siteDepth.applied') : t('siteDepth.notApplied')}
+        </p>
+      )}
+      {r && r.coverage < MIN_DEPTH_COVERAGE && <p className="text-xs text-amber-800">{t('siteDepth.lowCoverage')}</p>}
+      <p className="text-xs text-slate-500">
+        {t('siteDepth.note')} {DEPTH_SOURCES.emodnet}; {DEPTH_SOURCES.syke}.
+      </p>
     </div>
   );
 }
@@ -233,7 +316,8 @@ export function AnchoringSection() {
   const range = SEABED_FRICTION[seabed].range;
   return (
     <Section title={t('section.anchoring')} defaultOpen={false}>
-      <AnchoringField name="depth" min={0.5} max={100} />
+      <DepthField />
+      <SiteDepthLookup />
       <AnchoringField name="highWater" min={0} max={10} />
       <AnchoringField name="lowWater" min={0} max={10} />
       <NormalLevelField name="normalHighWater" />

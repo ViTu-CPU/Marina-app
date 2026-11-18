@@ -8,7 +8,7 @@ import type { CharacteristicLevels, WaterLevelInfo } from '../engine/waterLevels
 import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type AutoDepth, type AutoFetch, type WaveSettings } from '../engine/waves';
 import { SECTORS, type WindClimate } from '../engine/wind';
 import { ANCHOR_KINDS, CAPACITY_BASES, PRODUCT_CATEGORIES, PRODUCT_UNITS, SEABED_TYPES, type PriceList, type Product } from '../engine/catalog';
-import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
+import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS, DEFAULT_SITE_DEPTH } from '../engine/defaults';
 import {
   PROJECT_SCHEMA_VERSION,
   type AccessPontoon,
@@ -28,6 +28,8 @@ import {
   type Project,
   type RestrictedZone,
   type Site,
+  type SiteDepthResult,
+  type SiteDepthSettings,
   type Vec2,
 } from '../engine/model';
 
@@ -415,6 +417,33 @@ function waterLevelInfo(v: unknown): WaterLevelInfo {
   };
 }
 
+/**
+ * I121: the depth lookup around the site position. Files from before I121 follow the lookup only
+ * when their design depth is still the default (a depth entered by hand is kept).
+ */
+function siteDepthOf(v: unknown, anchoringDepth: number): SiteDepthSettings {
+  if (v === undefined || v === null) return { ...DEFAULT_SITE_DEPTH, auto: anchoringDepth === DEFAULT_ANCHORING.depth };
+  const o = obj(v, 'siteDepth');
+  const radius = num(o.radius, 'siteDepth.radius');
+  if (!(radius > 0)) fail('siteDepth.radius must be positive');
+  let result: SiteDepthResult | null = null;
+  if (o.result !== undefined && o.result !== null) {
+    const r = obj(o.result, 'siteDepth.result');
+    const n = (k: string) => num(r[k], `siteDepth.result.${k}`);
+    result = {
+      depth: n('depth'),
+      min: n('min'),
+      max: n('max'),
+      source: oneOf(r.source, ['emodnet', 'syke'] as const, 'siteDepth.result.source'),
+      coverage: n('coverage'),
+      position: latLon(r.position, 'siteDepth.result.position'),
+      radius: n('radius'),
+      fetchedOn: str(r.fetchedOn, 'siteDepth.result.fetchedOn'),
+    };
+  }
+  return { auto: bool(o.auto, 'siteDepth.auto'), radius, result };
+}
+
 /** D47: a saved automatic fetch lookup. */
 function autoFetchOf(v: unknown): AutoFetch {
   const o = obj(v, 'waves.autoFetch');
@@ -658,6 +687,7 @@ export function parseProject(text: string): ParseResult {
       fail(`Unsupported project version ${String(p.schemaVersion)} (this app reads version ${PROJECT_SCHEMA_VERSION})`);
     }
     const layouts = arr(p.layouts ?? [], 'layouts').map(layout);
+    const anchoringParams = anchoring(p.anchoring);
     const preferred = p.preferredLayoutId === null || p.preferredLayoutId === undefined ? null : str(p.preferredLayoutId, 'preferredLayoutId');
     const project: Project = {
       schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -670,10 +700,11 @@ export function parseProject(text: string): ParseResult {
       preferredLayoutId: preferred !== null && layouts.some((l) => l.id === preferred) ? preferred : null,
       background: background(p.background),
       map: mapBackground(p.map),
-      anchoring: anchoring(p.anchoring),
+      anchoring: anchoringParams,
       cost: costSettings(p.cost),
       waves: waveSettings(p.waves),
       waterLevels: p.waterLevels === undefined || p.waterLevels === null ? null : waterLevelInfo(p.waterLevels),
+      siteDepth: siteDepthOf(p.siteDepth, anchoringParams.depth),
       generatedFrom: typeof p.generatedFrom === 'string' ? p.generatedFrom : null,
     };
     return { ok: true, project };

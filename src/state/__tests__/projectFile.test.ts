@@ -223,6 +223,26 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).buoySinkerMethod = 'guess'))).ok).toBe(false);
   });
 
+  it('depth lookup around the site (I121): kept; older files follow it only with the default depth; invalid refused', () => {
+    const result = { depth: 3.64, min: 1.2, max: 6.8, source: 'emodnet', coverage: 0.8, position: { lat: 60.15, lon: 24.95 }, radius: 200, fetchedOn: '2026-11-18' };
+    const kept = parseProject(fileWith((p) => (p.siteDepth = { auto: false, radius: 300, result })));
+    expect(kept.ok && kept.project.siteDepth).toEqual({ auto: false, radius: 300, result });
+    const old = (depth: number) =>
+      parseProject(
+        fileWith((p) => {
+          delete p.siteDepth;
+          (p.anchoring as Record<string, unknown>).depth = depth;
+        }),
+      );
+    const fresh = old(4);
+    expect(fresh.ok && fresh.project.siteDepth).toEqual({ auto: true, radius: 200, result: null });
+    const entered = old(6.5);
+    expect(entered.ok && entered.project.siteDepth.auto).toBe(false);
+    expect(entered.ok && entered.project.anchoring.depth).toBe(6.5);
+    expect(parseProject(fileWith((p) => (p.siteDepth = { auto: true, radius: 0, result: null }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => (p.siteDepth = { auto: true, radius: 200, result: { ...result, source: 'guess' } }))).ok).toBe(false);
+  });
+
   it('wave screening inputs (D40): kept, older files have none, invalid values refused', () => {
     const old = parseProject(fileWith((p) => delete (p as Record<string, unknown>).waves));
     expect(old.ok && old.project.waves).toEqual(DEFAULT_WAVES);

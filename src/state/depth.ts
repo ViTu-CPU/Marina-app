@@ -10,6 +10,7 @@
  *    Licence CC BY 4.0 (SYKE); sends access-control-allow-origin: *.
  * The depths refer to each source's own datum (chart datum at sea, the lake's reference level).
  */
+import { DEFAULT_SITE_DEPTH } from '../engine/defaults';
 import type { SectorFetch } from '../engine/fetchRays';
 import { tangentPlane } from './overpass';
 import { toTm35fin } from './waterLevels';
@@ -115,12 +116,8 @@ function zoneAt(e: number, n: number, zones: readonly DepthZone[]): DepthZone | 
   return null;
 }
 
-/**
- * Lake: mean of the depth-band midpoints at `LAKE_SAMPLES` points along the ray (in TM35FIN; grid
- * north is taken as north, a few degrees off away from 27° E) and their share; islands and points
- * outside the zones have no depth. Null below the coverage limit.
- */
-export function lakeMeanDepth(lat: number, lon: number, bearing: number, length: number, zones: readonly DepthZone[]): RayDepth | null {
+/** Depth-band midpoints at `LAKE_SAMPLES` points along a ray (TM35FIN; islands and points outside the zones left out). */
+function lakeSamples(lat: number, lon: number, bearing: number, length: number, zones: readonly DepthZone[]): number[] {
   const start = toTm35fin(lat, lon);
   const depths: number[] = [];
   for (let i = 0; i < LAKE_SAMPLES; i++) {
@@ -128,6 +125,16 @@ export function lakeMeanDepth(lat: number, lon: number, bearing: number, length:
     const z = zoneAt(start.e + s * Math.sin(rad(bearing)), start.n + s * Math.cos(rad(bearing)), zones);
     if (z?.band) depths.push((z.band[0] + z.band[1]) / 2);
   }
+  return depths;
+}
+
+/**
+ * Lake: mean of the depth-band midpoints at `LAKE_SAMPLES` points along the ray (in TM35FIN; grid
+ * north is taken as north, a few degrees off away from 27° E) and their share; islands and points
+ * outside the zones have no depth. Null below the coverage limit.
+ */
+export function lakeMeanDepth(lat: number, lon: number, bearing: number, length: number, zones: readonly DepthZone[]): RayDepth | null {
+  const depths = lakeSamples(lat, lon, bearing, length, zones);
   const coverage = depths.length / LAKE_SAMPLES;
   if (coverage < MIN_DEPTH_COVERAGE) return null;
   return { depth: depths.reduce((a, b) => a + b, 0) / depths.length, source: 'syke', coverage };
@@ -171,4 +178,54 @@ export async function lookupFetchDepths(lat: number, lon: number, rays: readonly
   }
   o.onProgress?.(open.length + 1, open.length + 1);
   return out;
+}
+
+/** I121: bearings of the rays around the site position (the eight wave sectors). */
+export const SITE_DEPTH_BEARINGS = [0, 45, 90, 135, 180, 225, 270, 315] as const;
+/** I121: default length of the rays, m (Assumption, see DEFAULT_SITE_DEPTH). */
+export const SITE_DEPTH_RADIUS = DEFAULT_SITE_DEPTH.radius;
+
+export interface SiteDepth extends RayDepth {
+  min: number;
+  max: number;
+}
+
+/** Mean, extremes and share of the samples with a depth; null when none has one. */
+function summary(depths: readonly number[], total: number, source: DepthSource): SiteDepth | null {
+  if (depths.length === 0 || total === 0) return null;
+  return { depth: depths.reduce((a, b) => a + b, 0) / depths.length, min: Math.min(...depths), max: Math.max(...depths), source, coverage: depths.length / total };
+}
+
+/**
+ * I121: mean water depth around the site: the samples of eight rays of `radius` m from (lat, lon),
+ * from EMODnet when at least `MIN_DEPTH_COVERAGE` of them are under water, else from SYKE's lake
+ * depth zones when they cover that share. When neither does, the one with the larger share (the
+ * share is shown with the result); null when neither has a depth.
+ */
+export async function lookupSiteDepth(lat: number, lon: number, radius: number, o: FetchOptions & { onProgress?: (done: number, total: number) => void } = {}): Promise<SiteDepth | null> {
+  const steps = SITE_DEPTH_BEARINGS.length + 1;
+  const sea: number[] = [];
+  let seaTotal = 0;
+  let done = 0;
+  for (const bearing of SITE_DEPTH_BEARINGS) {
+    const values = (await (await get(emodnetProfileUrl({ lat, lon }, rayEnd(lat, lon, bearing, radius)), o)).json()) as unknown;
+    const list = Array.isArray(values) ? (values as unknown[]) : [];
+    seaTotal += list.length;
+    for (const v of list) if (typeof v === 'number' && Number.isFinite(v) && v < 0) sea.push(-v);
+    o.onProgress?.(++done, steps);
+  }
+  const atSea = summary(sea, seaTotal, 'emodnet');
+  if (atSea && atSea.coverage >= MIN_DEPTH_COVERAGE) {
+    o.onProgress?.(steps, steps);
+    return atSea;
+  }
+  const start = toTm35fin(lat, lon);
+  const json = (await (await get(sykeZonesUrl({ minE: start.e - radius, minN: start.n - radius, maxE: start.e + radius, maxN: start.n + radius }), o)).json()) as { features?: ZoneFeature[] };
+  const zones = parseZones(json);
+  const lake = SITE_DEPTH_BEARINGS.flatMap((bearing) => lakeSamples(lat, lon, bearing, radius, zones));
+  const inLake = summary(lake, LAKE_SAMPLES * SITE_DEPTH_BEARINGS.length, 'syke');
+  o.onProgress?.(steps, steps);
+  if (inLake && inLake.coverage >= MIN_DEPTH_COVERAGE) return inLake;
+  const found = [atSea, inLake].filter((x): x is SiteDepth => x !== null).sort((a, b) => b.coverage - a.coverage);
+  return found[0] ?? null;
 }

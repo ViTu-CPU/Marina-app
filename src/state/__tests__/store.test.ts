@@ -297,3 +297,27 @@ describe('access pontoons (D21)', () => {
     expect(parsed.ok && (parsed.project.site.accessPontoons ?? [])).toEqual([]);
   });
 });
+
+describe('design depth from the lookup around the site (I121)', () => {
+  const result = { depth: 3.64, min: 1.2, max: 6.8, source: 'emodnet' as const, coverage: 0.8, position: { lat: 60.15, lon: 24.95 }, radius: 200, fetchedOn: '2026-11-18' };
+
+  it('a new project follows the lookup; applying it sets the depth to 1 decimal in one undo step', () => {
+    const store = createAppStore();
+    expect(store.getState().project.siteDepth).toEqual({ auto: true, radius: 200, result: null });
+    expect(store.getState().project.anchoring.depth).toBe(4);
+    store.getState().applySiteDepth(result);
+    expect(store.getState().project.anchoring.depth).toBe(3.6);
+    expect(store.getState().project.siteDepth.result).toEqual(result);
+    store.getState().undo();
+    expect(store.getState().project.anchoring.depth).toBe(4);
+    expect(store.getState().project.siteDepth.result).toBeNull();
+  });
+
+  it('a depth typed in by hand stops following the lookup', () => {
+    const store = createAppStore();
+    store.getState().applySiteDepth(result);
+    store.getState().setDesignDepth(5.2);
+    expect(store.getState().project.anchoring.depth).toBe(5.2);
+    expect(store.getState().project.siteDepth).toMatchObject({ auto: false, result });
+  });
+});
