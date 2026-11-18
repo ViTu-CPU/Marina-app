@@ -103,6 +103,24 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parsed.ok && parsed.project.anchoring.profileHeightRatio).toBe(0.25);
   });
 
+  it('an imported price list keeps the anchor columns (D62); older files without them read as blocks', () => {
+    const product = {
+      id: 'screw-1', category: 'anchor', supplier: 'x', series: '', name: 'Screw', code: '', unit: 'pcs', price: 100, priceIncludesVat: false, marginPct: 0,
+      lengthM: null, widthM: null, weightKg: null, capacityKg: null, freeboardM: null, chainDiameterMm: null, chainGrade: '', breakingLoadKn: null, massKgPerM: null,
+      anchorMassKg: null, anchorKind: 'screw', capacityHorizontalKn: 50, capacityUpliftKn: null, capacityBasis: 'published', seabeds: ['clay'], installedPrice: 900,
+      shackleMm: null, sourceUrl: 'https://example.com', sourceDate: '2026-11-18', note: '',
+    };
+    const withList = (p: Record<string, unknown>) => parseProject(fileWith((f) => ((f.cost as Record<string, unknown>).priceList = { title: 't', products: [p], parameters: [] })));
+    const parsed = withList(product);
+    expect(parsed.ok && parsed.project.cost.priceList!.products[0]).toEqual(product);
+    const old: Record<string, unknown> = { ...product };
+    for (const k of ['anchorKind', 'capacityHorizontalKn', 'capacityUpliftKn', 'capacityBasis', 'seabeds', 'installedPrice']) delete old[k];
+    const older = withList(old);
+    expect(older.ok && older.project.cost.priceList!.products[0]).toMatchObject({ anchorKind: null, capacityHorizontalKn: null, capacityUpliftKn: null, capacityBasis: null, seabeds: [], installedPrice: null });
+    expect(withList({ ...product, anchorKind: 'helix' }).ok).toBe(false);
+    expect(withList({ ...product, seabeds: ['mud'] }).ok).toBe(false);
+  });
+
   it('gangways of an access pontoon (D32): kept when given, missing = none, negative refused', () => {
     const withPontoon = (gangways: unknown) =>
       parseProject(

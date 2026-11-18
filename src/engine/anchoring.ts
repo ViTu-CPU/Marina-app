@@ -50,7 +50,7 @@
  *     the chain is at least the table's size and strong enough for the boat's stern-on wind.
  *     The friction method of step 6 is shown for comparison.
  */
-import { unitPriceVat0, type PriceList, type Product } from './catalog';
+import { unitPriceVat0, type PriceList, type Product, type SeabedType } from './catalog';
 import { breakwaterJoints, breakwaterProductOf, breakwatersOf } from './breakwater';
 import { add, distance, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
 import type { BoatClass, Finger, Issue, Layout, MainPier, Site, Vec2 } from './model';
@@ -58,7 +58,7 @@ import { jointPositions } from './modules';
 import { pierAxis } from './rows';
 import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierShoreLink, SHORE_TOLERANCE } from './site';
 
-export type Seabed = 'clay' | 'sand' | 'rock';
+export type Seabed = SeabedType;
 
 /**
  * 'block': plain concrete block holding by friction. 'wedge': Pearl Harbor type concrete

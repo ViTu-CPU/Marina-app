@@ -31,6 +31,25 @@ export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
 export const PRODUCT_UNITS = ['pcs', 'm', 'kg', 'h', 'day', 'lump'] as const;
 export type ProductUnit = (typeof PRODUCT_UNITS)[number];
 
+/** Seabed types of the anchoring calculation (D23). */
+export const SEABED_TYPES = ['clay', 'sand', 'rock'] as const;
+export type SeabedType = (typeof SEABED_TYPES)[number];
+
+/**
+ * D62: kinds of anchor in the price list (`anchor_type`). 'block' = concrete weight holding by
+ * friction (sized by the friction model); the others hold by their published capacity only.
+ */
+export const ANCHOR_KINDS = ['block', 'screw', 'pile', 'rock_bolt', 'drag'] as const;
+export type AnchorKind = (typeof ANCHOR_KINDS)[number];
+
+/**
+ * D62: where an anchor's capacity comes from (`capacity_basis`): 'friction_model' = computed from
+ * its mass and the seabed friction (blocks); 'published' = the supplier's published figure (needs
+ * source_url and source_date).
+ */
+export const CAPACITY_BASES = ['friction_model', 'published'] as const;
+export type CapacityBasis = (typeof CAPACITY_BASES)[number];
+
 export interface Product {
   /** Unique key, stable across edits of the file. */
   id: string;
@@ -59,6 +78,20 @@ export interface Product {
   breakingLoadKn: number | null;
   massKgPerM: number | null;
   anchorMassKg: number | null;
+  /** D62: anchors: the kind (`anchor_type`); null = not given, which counts as 'block'. */
+  anchorKind: AnchorKind | null;
+  /** D62: anchors other than blocks: holding capacity of one piece against horizontal pull as published, kN. */
+  capacityHorizontalKn: number | null;
+  /** D62: anchors other than blocks: holding capacity of one piece against uplift as published, kN. */
+  capacityUpliftKn: number | null;
+  capacityBasis: CapacityBasis | null;
+  /** D62: anchors: the seabeds the product suits; empty = not stated (a block suits any). */
+  seabeds: SeabedType[];
+  /**
+   * D62: price of one piece installed (supply and installation), €, with the VAT status of `price`;
+   * null = `price` is the supply price and the installation is estimated from the labour parameters.
+   */
+  installedPrice: number | null;
   shackleMm: number | null;
   sourceUrl: string;
   /** Date the source was read, YYYY-MM-DD. */
@@ -96,3 +129,12 @@ export function unitPriceVat0(product: Product, vatPct: number): number | null {
   if (product.price === null) return null;
   return product.priceIncludesVat ? product.price / (1 + vatPct / 100) : product.price;
 }
+
+/** D62: installed price of one piece without VAT, €, or null when the list gives none. */
+export function installedPriceVat0(product: Product, vatPct: number): number | null {
+  if (product.installedPrice === null) return null;
+  return product.priceIncludesVat ? product.installedPrice / (1 + vatPct / 100) : product.installedPrice;
+}
+
+/** D62: the kind of an anchor; rows without `anchor_type` are concrete blocks. */
+export const anchorKindOf = (product: Product): AnchorKind => product.anchorKind ?? 'block';

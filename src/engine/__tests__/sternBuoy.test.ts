@@ -107,7 +107,7 @@ describe('stern-buoy sizing (D36, D37), hand-calculated', () => {
   const product = (p: Partial<Product> & Pick<Product, 'id' | 'category'>): Product => ({
     supplier: '', series: '', name: p.id, code: '', unit: 'pcs', price: 1, priceIncludesVat: false, marginPct: 0, lengthM: null, widthM: null,
     weightKg: null, capacityKg: null, freeboardM: null, chainDiameterMm: null, chainGrade: '', breakingLoadKn: null, massKgPerM: null,
-    anchorMassKg: null, shackleMm: null, sourceUrl: '', sourceDate: '', note: '', ...p,
+    anchorMassKg: null, anchorKind: null, capacityHorizontalKn: null, capacityUpliftKn: null, capacityBasis: null, seabeds: [], installedPrice: null, shackleMm: null, sourceUrl: '', sourceDate: '', note: '', ...p,
   });
   const LIST: PriceList = {
     title: 'test',

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { parameter, PRODUCT_CATEGORIES, unitPriceVat0, type PriceList } from '../../engine/catalog';
-import { parsePriceListFile, priceListFromSheets, priceListToSheets, priceListToXlsx } from '../priceList';
+import { anchorKindOf, installedPriceVat0, parameter, PRODUCT_CATEGORIES, unitPriceVat0, type PriceList, type Product } from '../../engine/catalog';
+import { anchorRowErrors, parsePriceListFile, priceListFromSheets, priceListToSheets, priceListToXlsx, seabedList } from '../priceList';
 import { readXlsx } from '../xlsx';
 
 const parsed = parsePriceListFile(readFileSync('data/hinnasto.xlsx'), 'hinnasto.xlsx');
@@ -43,6 +43,17 @@ describe('data/hinnasto.xlsx (D19)', () => {
     expect(parameter(list(), 'vat_pct', NaN)).toBe(25.5);
   });
 
+  it('its anchors are concrete blocks sized by the friction model, without published capacities (D62)', () => {
+    const anchors = list().products.filter((p) => p.category === 'anchor');
+    expect(anchors.length).toBeGreaterThan(10);
+    for (const a of anchors) {
+      expect([a.anchorKind, a.capacityBasis, a.capacityHorizontalKn, a.capacityUpliftKn], a.id).toEqual(['block', 'friction_model', null, null]);
+      expect(a.anchorMassKg, a.id).toBeGreaterThan(0);
+    }
+    // No row other than an anchor carries an anchor type.
+    expect(list().products.filter((p) => p.category !== 'anchor' && p.anchorKind !== null)).toEqual([]);
+  });
+
   it('prices are converted to VAT 0 %', () => {
     const mx = list().products.find((p) => p.id === 'pontoon-alaiturit-mx12-3')!;
     expect(mx.price).toBe(17490);
@@ -62,6 +73,84 @@ describe('data/hinnasto.xlsx (D19)', () => {
       const p = list().products.find((x) => x.id === row[id])!;
       expect(row[col], p.id).toBeCloseTo(unitPriceVat0(p, 25.5)!, 2);
     }
+  });
+});
+
+describe('anchor columns of the price list (D62)', () => {
+  const base = list().products.find((p) => p.category === 'anchor')!;
+  const screw: Product = {
+    ...base,
+    id: 'screw-test',
+    name: 'Screw anchor (test)',
+    anchorMassKg: null,
+    anchorKind: 'screw',
+    capacityHorizontalKn: 50,
+    capacityUpliftKn: 60,
+    capacityBasis: 'published',
+    seabeds: ['clay', 'sand'],
+    installedPrice: 1255,
+    priceIncludesVat: true,
+  };
+
+  it('a screw anchor with published capacities, seabeds and an installed price survives writing and reading', () => {
+    const withScrew: PriceList = { ...list(), products: [...list().products, screw] };
+    const again = parsePriceListFile(priceListToXlsx(withScrew, 25.5), 'x');
+    expect(again.ok ? [] : again.errors).toEqual([]);
+    expect(again.ok && again.priceList.products.at(-1)).toEqual(screw);
+    expect(installedPriceVat0(screw, 25.5)).toBeCloseTo(1000, 9);
+    expect(anchorKindOf(screw)).toBe('screw');
+    // A row without anchor_type is a concrete block.
+    expect(anchorKindOf({ ...base, anchorKind: null })).toBe('block');
+  });
+
+  it('seabeds are separated by commas, semicolons or spaces', () => {
+    expect(seabedList('Clay, sand;rock')).toEqual(['clay', 'sand', 'rock']);
+    expect(seabedList('')).toEqual([]);
+  });
+
+  it('blocks are sized by the friction model; other kinds only by a published capacity with source and date', () => {
+    const at = 'Products, row 9';
+    expect(anchorRowErrors(screw, at)).toEqual([]);
+    expect(anchorRowErrors({ ...base, capacityBasis: 'published' }, at)).toEqual([
+      `${at}, capacity_basis: concrete blocks are sized by the friction model; use friction_model or leave it empty.`,
+    ]);
+    expect(anchorRowErrors({ ...base, capacityHorizontalKn: 20 }, at)).toEqual([
+      `${at}: concrete blocks are sized by the friction model from anchor_mass_kg; leave capacity_horizontal_kn and capacity_uplift_kn empty.`,
+    ]);
+    expect(anchorRowErrors({ ...screw, capacityBasis: null }, at)).toEqual([`${at}, capacity_basis: a capacity needs capacity_basis = published (the supplier's figure).`]);
+    expect(anchorRowErrors({ ...screw, capacityBasis: 'friction_model' }, at)).toEqual([
+      `${at}, capacity_basis: only concrete blocks use the friction model; a screw needs a published capacity.`,
+      `${at}, capacity_basis: a capacity needs capacity_basis = published (the supplier's figure).`,
+    ]);
+    expect(anchorRowErrors({ ...screw, sourceUrl: '' }, at)).toEqual([`${at}: a published capacity needs source_url and source_date (YYYY-MM-DD).`]);
+    expect(anchorRowErrors({ ...screw, sourceDate: '2026' }, at)).toEqual([`${at}: a published capacity needs source_url and source_date (YYYY-MM-DD).`]);
+    // A screw anchor without a capacity is allowed (it is then never chosen by itself).
+    expect(anchorRowErrors({ ...screw, capacityHorizontalKn: null, capacityUpliftKn: null, capacityBasis: null }, at)).toEqual([]);
+  });
+
+  it('unknown kinds, bases and seabeds, negative values and anchor types on other rows are refused', () => {
+    const at = 'Products, row 9';
+    const errors = anchorRowErrors(
+      { ...screw, anchorKind: 'helix' as Product['anchorKind'], capacityBasis: 'guess' as Product['capacityBasis'], seabeds: ['mud' as Product['seabeds'][number]], capacityUpliftKn: -1 },
+      at,
+    );
+    expect(errors).toEqual([
+      `${at}, anchor_type: "helix" is not one of block, screw, pile, rock_bolt, drag.`,
+      `${at}, capacity_basis: "guess" is not one of friction_model, published.`,
+      `${at}, seabed: "mud" is not one of clay, sand, rock.`,
+      `${at}, capacity_uplift_kn: must not be negative.`,
+      `${at}, capacity_basis: a capacity needs capacity_basis = published (the supplier's figure).`,
+    ]);
+    expect(anchorRowErrors({ ...base, category: 'chain', anchorKind: 'block', capacityBasis: null }, at)).toEqual([`${at}, anchor_type: only for rows of category anchor.`]);
+  });
+
+  it('the workbook check reports anchor problems by row', () => {
+    const sheets = priceListToSheets({ ...list(), products: [...list().products, { ...screw, sourceUrl: '' }] }, 25.5).map((s) => ({
+      name: s.name,
+      rows: s.rows.map((r) => r.map((c) => (c !== null && typeof c === 'object' ? c.value : c))),
+    }));
+    const result = priceListFromSheets(sheets, 'x');
+    expect(!result.ok && result.errors).toEqual([`Products, row ${list().products.length + 2}: a published capacity needs source_url and source_date (YYYY-MM-DD).`]);
   });
 });
 

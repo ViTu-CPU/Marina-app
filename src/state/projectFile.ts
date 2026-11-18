@@ -6,7 +6,7 @@ import { BREAKWATERS } from '../engine/breakwater';
 import type { CharacteristicLevels, WaterLevelInfo } from '../engine/waterLevels';
 import { DEFAULT_WAVES, emptySectors, WAVE_SECTORS, waveSectorOf, type AutoDepth, type AutoFetch, type WaveSettings } from '../engine/waves';
 import { SECTORS, type WindClimate } from '../engine/wind';
-import { PRODUCT_CATEGORIES, PRODUCT_UNITS, type PriceList, type Product } from '../engine/catalog';
+import { ANCHOR_KINDS, CAPACITY_BASES, PRODUCT_CATEGORIES, PRODUCT_UNITS, SEABED_TYPES, type PriceList, type Product } from '../engine/catalog';
 import { DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../engine/defaults';
 import {
   PROJECT_SCHEMA_VERSION,
@@ -572,6 +572,13 @@ function priceList(v: unknown): PriceList | null {
       breakingLoadKn: optNum(e.breakingLoadKn, `${p}.breakingLoadKn`),
       massKgPerM: optNum(e.massKgPerM, `${p}.massKgPerM`),
       anchorMassKg: optNum(e.anchorMassKg, `${p}.anchorMassKg`),
+      // D62: missing in older files.
+      anchorKind: e.anchorKind === undefined || e.anchorKind === null ? null : oneOf(e.anchorKind, ANCHOR_KINDS, `${p}.anchorKind`),
+      capacityHorizontalKn: optNum(e.capacityHorizontalKn, `${p}.capacityHorizontalKn`),
+      capacityUpliftKn: optNum(e.capacityUpliftKn, `${p}.capacityUpliftKn`),
+      capacityBasis: e.capacityBasis === undefined || e.capacityBasis === null ? null : oneOf(e.capacityBasis, CAPACITY_BASES, `${p}.capacityBasis`),
+      seabeds: e.seabeds === undefined ? [] : arr(e.seabeds, `${p}.seabeds`).map((x, k) => oneOf(x, SEABED_TYPES, `${p}.seabeds[${k}]`)),
+      installedPrice: optNum(e.installedPrice, `${p}.installedPrice`),
       shackleMm: optNum(e.shackleMm, `${p}.shackleMm`),
       sourceUrl: text('sourceUrl'),
       sourceDate: text('sourceDate'),
