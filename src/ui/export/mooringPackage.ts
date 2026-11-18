@@ -60,7 +60,7 @@ export function mooringPackage(project: Project, layout: Layout, anchoring: Anch
     ice: { iceLineLoad_kNm: a.iceLineLoad, winterInWater: a.winterInWater, note: 'ice loads are not designed by the tool' },
     seabed: { type: a.seabed, slope_deg: a.slopeDeg, cohesive: a.cohesive },
     pontoons,
-    loads_kN: anchoring.loads.map((l) => ({ pontoon: l.id, q_kPa: r2(l.q * 1000) / 1000, cases: l.cases.map((c) => ({ case: c.id, wind: r2(c.wind), current: r2(c.current), wave: r2(c.wave), uls: r2(c.F_uls) })), ice: l.ice })),
+    loads_kN: anchoring.loads.map((l) => ({ pontoon: l.id, q_kPa: r2(l.q * 1000) / 1000, cases: l.cases.map((c) => ({ case: c.id, wind: r2(c.wind), current: r2(c.current), wave: r2(c.wave), uls: r2(c.F_uls) })), ice: l.ice, passedToAttachedPiers: l.transfers.map((x) => ({ case: x.case, pier: x.to, pierCase: x.toCase, kN: r2(x.kN) })) })),
     chainLegsOfTheToolsPlan: anchoring.lines
       .filter((l) => l.role !== 'buoy')
       .map((l) => ({ id: l.id, pontoon: l.holdsId, fixing: l.fixing, fix: { x: r2(l.fix.x), y: r2(l.fix.y) }, anchor: { x: r2(l.anchor.x), y: r2(l.anchor.y) }, dirDeg: r2(l.dirDeg), chainLength_m: r2(l.chainLength), maxHorizontal_kN: r2(l.horizontalKn) })),

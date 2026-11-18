@@ -525,6 +525,7 @@ export const fi: Partial<Record<StringKey, string>> = {
   'mooring.wind': 'Tuuli',
   'mooring.current': 'Virta',
   'mooring.wave': 'Aalto',
+  'mooring.transfers': 'Access pontooniin kiinnitettyjen laitureiden kantama kuorma (D28, vaikutuspituuden mukaan; mukana laiturin linjoissa):',
   'mooring.uls': 'Murtorajatila',
   'mooring.chainFoS': 'Ketjun varmuus',
   'mooring.anchorFoS': 'Ankkurin varmuus',

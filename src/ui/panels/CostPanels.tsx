@@ -565,6 +565,14 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
               )}
             </tbody>
           </table>
+          {anchoring.loads.some((pl) => pl.transfers.length > 0) && (
+            <p className="mt-1 text-xs text-slate-600" data-testid="mooring-transfers">
+              {t('mooring.transfers')}{' '}
+              {anchoring.loads
+                .flatMap((pl) => pl.transfers.map((x) => `${pl.id} ${x.case} → ${x.to} ${x.toCase}: ${formatKn(x.kN, language)} kN`))
+                .join('; ')}
+            </p>
+          )}
         </details>
         {/* D64: per line the governing case (spec §8). */}
         <details>

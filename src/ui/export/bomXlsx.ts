@@ -4,7 +4,7 @@
  * disclaimer (SPEC §1).
  */
 import { writeXlsx, type CellValue } from '../../catalog/xlsx';
-import { anchoringStatus, anchoringStatusText, frictionSensitivity, MOORING_DISCLAIMER, MOORING_NOTES, SOFT_CLAY_NOTE, type AnchorLine } from '../../engine/anchoring';
+import { carriedForAccess, anchoringStatus, anchoringStatusText, frictionSensitivity, MOORING_DISCLAIMER, MOORING_NOTES, SOFT_CLAY_NOTE, type AnchorLine } from '../../engine/anchoring';
 import { excludesNote } from '../../engine/bom';
 import type { Layout, Project } from '../../engine/model';
 import { DISCLAIMER } from '../../state/projectFile';
@@ -147,10 +147,27 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
     }),
   ];
   // D64: the load table of the spec (§8): wind, current, wave and the ULS sum per direction.
+  // I122: an access pontoon's load passed to the piers attached to it, and what each pier carries for it.
+  const carried = carriedForAccess(anchoring.loads);
   const loadRows: CellValue[][] = [
-    ['pontoon', 'kind', 'case', 'q_kpa', 'wind_kn', 'current_kn', 'wave_kn', 'uls_kn', 'ice_kn (reported only)'],
+    ['pontoon', 'kind', 'case', 'q_kpa', 'wind_kn', 'current_kn', 'wave_kn', 'uls_kn', 'ice_kn (reported only)', 'passed_to_attached_piers', 'carried_for_access_pontoon_kn'],
     ...anchoring.loads.flatMap((p) =>
-      p.cases.map((c): CellValue[] => [p.id, p.kind, c.id, r2(p.q * 1000) / 1000, r2(c.wind), r2(c.current), r2(c.wave), r2(c.F_uls), p.ice ? r2(c.id.startsWith('perp') ? p.ice.F_perp : p.ice.F_par) : null]),
+      p.cases.map((c): CellValue[] => [
+        p.id,
+        p.kind,
+        c.id,
+        r2(p.q * 1000) / 1000,
+        r2(c.wind),
+        r2(c.current),
+        r2(c.wave),
+        r2(c.F_uls),
+        p.ice ? r2(c.id.startsWith('perp') ? p.ice.F_perp : p.ice.F_par) : null,
+        p.transfers
+          .filter((t) => t.case === c.id)
+          .map((t) => `${t.to} ${t.toCase} ${r2(t.kN)}`)
+          .join('; ') || null,
+        carried.get(p.id)?.has(c.id) ? r2(carried.get(p.id)!.get(c.id)!) : null,
+      ]),
     ),
   ];
   const a = project.anchoring;

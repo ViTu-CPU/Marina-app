@@ -19,6 +19,7 @@ import {
   MOORING_NOTES,
   resetAnchoringFactors,
   SOFT_CLAY_NOTE,
+  tributaryLengths,
   type AnchoringInput,
   type AnchoringParams,
 } from '../anchoring';
@@ -317,7 +318,7 @@ describe('the layout of other legs', () => {
     expect(new Set(shore.flatMap((l) => l.loadCases.map((c) => c.case)))).toEqual(new Set(['par+', 'perp+', 'perp-']));
   });
 
-  it('an access pontoon in front of the wall: chains on the water side and shore chains at its gangway (D28)', () => {
+  it('an access pontoon in front of the wall without piers: chains of its own on the water side and shore chains at its gangway (D28)', () => {
     const wall: Site = { ...site, shoreline: [{ x: -100, y: 0 }, { x: 100, y: 0 }], accessPontoons: [{ id: 'AP1', start: { x: -20, y: 2 }, end: { x: 20, y: 2 }, width: 3 }] };
     const r = anchoringPlan({ ...base(), layout: { piers: [], berths: [] }, site: wall, classes: [] });
     const own = r.lines.filter((l) => l.holdsId === 'AP1');
@@ -330,6 +331,47 @@ describe('the layout of other legs', () => {
     const alone = anchoringPlan({ ...base(), layout: { piers: [], berths: [] }, site: { ...wall, shoreline: [] }, classes: [] });
     expect(alone.lines.some((l) => l.anchor.y < l.fix.y)).toBe(true);
     expect(alone.issues.map((i) => i.code)).toContain('ACCESS_PONTOON_NO_SHORE');
+  });
+
+  it('tributary lengths: half-way to the neighbours, the ends to the member ends, shared at one position (I122)', () => {
+    expect(tributaryLengths([10, 20, 30], 40)).toEqual([15, 10, 15]);
+    expect(tributaryLengths([20, 10, 10], 40)).toEqual([25, 7.5, 7.5]);
+    expect(tributaryLengths([50], 40)).toEqual([40]);
+  });
+
+  it('an access pontoon with piers attached to it: held by them and its shore chains, no chains of its own into the berths (D28, I122)', () => {
+    // AP1 0 … 40 m along x, wall-side edge at y 0.5 (wall at y 0), water-side edge at y 3.5; PA and PB start from it.
+    const wall: Site = { ...site, shoreline: [{ x: -100, y: 0 }, { x: 100, y: 0 }], accessPontoons: [{ id: 'AP1', start: { x: -20, y: 2 }, end: { x: 20, y: 2 }, width: 3 }] };
+    const pa: MainPier = { id: 'PA', start: { x: -10, y: 3.5 }, end: { x: -10, y: 33.5 }, width: 3, locked: false, origin: 'manual' };
+    const pb: MainPier = { ...pa, id: 'PB', start: { x: 10, y: 3.5 }, end: { x: 10, y: 33.5 } };
+    const r = anchoringPlan({ ...base(), layout: { piers: [pa, pb], berths: [] }, site: wall, classes: [] });
+    const own = r.lines.filter((l) => l.holdsId === 'AP1');
+    expect(own.map((l) => [l.id, l.fixing])).toEqual([
+      ['AP1-S1', 'wall'],
+      ['AP1-S2', 'wall'],
+    ]);
+    const ap = r.loads.find((l) => l.id === 'AP1')!;
+    const F = ap.cases.find((c) => c.id === 'perp+')!.F_uls;
+    expect(ap.cases.find((c) => c.id === 'perp-')!.F_uls).toBeCloseTo(F, 9);
+    // Off the wall (+y): PA 0–15 m, the gangway (middle) 15–25 m, PB 25–40 m; towards the wall: PA and PB 20 m each.
+    expect(ap.transfers.map((x) => [x.case, x.to, x.toCase, x.kN / F])).toEqual([
+      ['perp+', 'PA', 'par+', 15 / 40],
+      ['perp+', 'PB', 'par+', 15 / 40],
+      ['perp-', 'PA', 'par-', 0.5],
+      ['perp-', 'PB', 'par-', 0.5],
+    ]);
+    // The shore chains hold the gangway's quarter off the wall (both active: cos 45° each) and never towards the wall.
+    for (const l of own) {
+      const off = l.loadCases.find((c) => c.case === 'perp+' && c.waterLevel === 'HW')!;
+      expect(off.Th).toBeCloseTo((0.25 * F * DEFAULT_ANCHORING.unevenFactor) / (2 * Math.SQRT1_2), 6);
+      expect(l.loadCases.some((c) => c.case === 'perp-')).toBe(false);
+    }
+    // The piers carry it with their own legs: their along cases are larger than without the access pontoon.
+    const alone = anchoringPlan({ ...base(), layout: { piers: [pa, pb], berths: [] }, site: { ...site, shoreline: [{ x: -100, y: 0 }, { x: 100, y: 0 }] }, classes: [] });
+    const peak = (res: typeof r, c: string) => Math.max(...res.lines.filter((l) => l.holdsId === 'PA').flatMap((l) => l.loadCases.filter((x) => x.case === c).map((x) => x.Th)));
+    expect(peak(r, 'par+')).toBeGreaterThan(peak(alone, 'par+'));
+    expect(peak(r, 'par-')).toBeGreaterThan(peak(alone, 'par-'));
+    expect(r.issues.find((i) => i.code === 'ACCESS_PONTOON_SHORE_CHAINS')!.message).toContain('by the piers attached to it (PA, PB)');
   });
 
   it('a breakwater: outward pairs at both ends, sized as a wave attenuator with the FCG 2022 rules (D58)', () => {

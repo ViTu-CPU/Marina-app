@@ -535,6 +535,7 @@ export const en = {
   'mooring.wind': 'Wind',
   'mooring.current': 'Current',
   'mooring.wave': 'Wave',
+  'mooring.transfers': 'Carried by the piers attached to an access pontoon (D28, by tributary length; included in the pier’s lines):',
   'mooring.uls': 'ULS',
   'mooring.chainFoS': 'Chain FoS',
   'mooring.anchorFoS': 'Anchor FoS',

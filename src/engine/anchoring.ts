@@ -56,7 +56,7 @@ import {
   type VesselType,
 } from './mooring';
 import { pierAxis } from './rows';
-import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierShoreLink } from './site';
+import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierShoreLink, SHORE_TOLERANCE } from './site';
 
 /** D64: seabed types of NAVFAC DM-7.02 (engine/mooring.ts). */
 export type Seabed = SeabedKey;
@@ -499,6 +499,41 @@ export interface PontoonLoads {
   cases: LoadCase[];
   /** Ice load reported only (kN), when an ice line load is given. */
   ice: { F_perp: number; F_par: number } | null;
+  /**
+   * D28, I122: an access pontoon's load passed to the piers attached to it (by tributary length);
+   * its own legs hold the rest. Each entry: its case, the pier and the pier's case that carries it.
+   */
+  transfers: { case: LoadCase['id']; to: string; toCase: LoadCase['id']; kN: number }[];
+}
+
+/** I122: what each pontoon carries for an access pontoon in each of its cases, kN. */
+export function carriedForAccess(loads: readonly PontoonLoads[]): Map<string, Map<LoadCase['id'], number>> {
+  const out = new Map<string, Map<LoadCase['id'], number>>();
+  for (const l of loads) {
+    for (const t of l.transfers) {
+      const m = out.get(t.to) ?? new Map<LoadCase['id'], number>();
+      m.set(t.toCase, (m.get(t.toCase) ?? 0) + t.kN);
+      out.set(t.to, m);
+    }
+  }
+  return out;
+}
+
+/**
+ * I122: tributary length of each restraint at `positions` (m along a member of length `length`):
+ * from half-way to its neighbours, the ends to the member's ends; restraints at the same position
+ * share theirs equally.
+ */
+export function tributaryLengths(positions: readonly number[], length: number): number[] {
+  const unique = [...new Set(positions.map((t) => Math.min(length, Math.max(0, t))))].sort((a, b) => a - b);
+  const share = new Map<number, number>();
+  unique.forEach((t, i) => {
+    const lo = i === 0 ? 0 : (unique[i - 1]! + t) / 2;
+    const hi = i === unique.length - 1 ? length : (t + unique[i + 1]!) / 2;
+    share.set(t, hi - lo);
+  });
+  const clamped = positions.map((t) => Math.min(length, Math.max(0, t)));
+  return clamped.map((t) => share.get(t)! / clamped.filter((x) => x === t).length);
 }
 
 export interface AnchoringResult {
@@ -625,6 +660,8 @@ interface Held {
   splayed: boolean;
   /** Access pontoon in front of the shore: the side facing it (chains on the water side only, D28). */
   wallSide?: 'left' | 'right';
+  /** D28, I122: access pontoon: its gangways and the piers starting from its water-side edge (m along it). */
+  restraints?: { gangways: number[]; piers: { id: string; t: number }[] };
   /** D58: a breakwater: outward chains at both ends and joints from its own modules. */
   free?: { joints: readonly number[] };
 }
@@ -793,7 +830,20 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
         wallSide = toLeft <= toRight ? 'left' : 'right';
         item.wallSide = wallSide;
       }
-      const pairs = Math.max(2, Math.ceil(length / p.lineSpacing) + 1);
+      const a = accessPontoonsOf(site).find((x) => x.id === item.id);
+      // D28, I122: the piers starting from the water-side edge hold the pontoon with their own chains.
+      const attached: { id: string; t: number }[] = [];
+      if (wallSide && a) {
+        const waterSign = wallSide === 'left' ? -1 : 1;
+        const edge: [Vec2, Vec2] = [at(0, (waterSign * item.width) / 2), at(length, (waterSign * item.width) / 2)];
+        for (const pier of layout.piers) {
+          const { left: pl } = pierAxis(pier);
+          const corners = [0, pier.width / 2, -pier.width / 2].map((l) => add(pier.start, scale(pl, l)));
+          if (corners.some((c) => distancePointToPolyline(c, edge) <= SHORE_TOLERANCE)) attached.push({ id: pier.id, t: Math.min(length, Math.max(0, dot(sub(pier.start, item.start), along))) });
+        }
+        item.restraints = { gangways: gangwayPositions(a), piers: attached };
+      }
+      const pairs = attached.length > 0 ? 0 : Math.max(2, Math.ceil(length / p.lineSpacing) + 1);
       let n = 0;
       for (let i = 0; i < pairs; i++) {
         const t = Math.min(length - STATION_INSET, Math.max(STATION_INSET, (i * length) / (pairs - 1)));
@@ -802,7 +852,6 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
           legs.push({ id: `${item.id}-A${++n}`, holdsId: item.id, role: 'side', splay: 'none', fixing: 'seabed', fix: at(t, (fixSign * item.width) / 2), direction: scale(left, -fixSign), minSpan: minSpan(0) });
         }
       }
-      const a = accessPontoonsOf(site).find((x) => x.id === item.id);
       if (wallSide && a) {
         const wallSign = wallSide === 'left' ? 1 : -1;
         gangwayPositions(a).forEach((tg, g) => {
@@ -823,9 +872,13 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
             });
           }
         });
+        const gangwayText = `two shore chains at each gangway${(a.gangways ?? []).length > 0 ? '' : ' (assumed at its middle)'}`;
+        const piersText = attached.map((x) => x.id).join(', ');
         warn(
           'ACCESS_PONTOON_SHORE_CHAINS',
-          `Access pontoon ${item.id}: chains on the water side only; off the wall it is held by two shore chains at each gangway${(a.gangways ?? []).length > 0 ? '' : ' (assumed at its middle)'}. Each pontoon is sized on its own: the piers attached to it share no load with it (spec §4). The fixings in the wall and the joints between the pontoons are not checked.`,
+          attached.length > 0
+            ? `Access pontoon ${item.id} (D28): off the wall it is held by ${gangwayText} and by the piers attached to it (${piersText}), towards the wall by those piers, each by its tributary length; along the wall by the shore chains. It has no chains of its own to the seabed. The piers' chains carry its load with their own (see the load table). The fixings in the wall and the joints between the pontoons are not checked; equal sharing by tributary length is an assumption.`
+            : `Access pontoon ${item.id} (D28): no pier starts from it, so it has square chains of its own on the water side (towards the wall); off the wall and along it ${gangwayText} hold it. The fixings in the wall are not checked.`,
           item.id,
         );
       } else if (!wallSide) {
@@ -872,19 +925,77 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
 
   const pileLines = new Map<string, AnchorLine[]>();
   const alongGovernsBy = new Map<string, number>();
-  for (const item of [...held, ...accessItems, ...breakwaterItems]) {
+  const items = [...held, ...accessItems, ...breakwaterItems];
+  const axisOf = (item: Held) => pierAxis({ id: item.id, start: item.start, end: item.end, width: item.width, locked: false, origin: 'manual' });
+  const loadsOf = new Map(
+    items.map((item) => {
+      const pontoon = { length: axisOf(item).length, width: item.width, freeboard: item.freeboard, draft: item.draft, type: item.kind === 'breakwater' ? ('wave_attenuator' as const) : ('walkway' as const) };
+      return [item.id, environmentalLoads(pontoon, { sideA: item.sideA, sideB: item.sideB }, env, loadOpts)] as const;
+    }),
+  );
+  // D28, I122: an access pontoon passes its load across to the piers attached to it, by tributary
+  // length: off the wall shared with its gangways' shore chains, towards the wall to the piers alone.
+  // A pier carries it in its own case of the same direction.
+  const ownShare = new Map<string, Map<LoadCase['id'], number>>();
+  const received = new Map<string, Map<LoadCase['id'], number>>();
+  const transfersOf = new Map<string, PontoonLoads['transfers']>();
+  for (const item of accessItems) {
+    const r = item.restraints;
+    const el = loadsOf.get(item.id);
+    if (!r || r.piers.length === 0 || !el || !item.wallSide) continue;
+    const { length, along, left } = axisOf(item);
+    const toWall = scale(left, item.wallSide === 'left' ? 1 : -1);
+    const shares = new Map<LoadCase['id'], number>();
+    const transfers: PontoonLoads['transfers'] = [];
+    for (const c of el.cases) {
+      const g = add(scale(along, c.dir[0]), scale(left, c.dir[1]));
+      const towards = dot(g, toWall);
+      if (Math.abs(towards) < 0.5) continue;
+      // Off the wall: the gangways and the piers; towards it: the piers only.
+      const restraints = [...(towards < 0 ? r.gangways.map((t) => ({ id: null as string | null, t })) : []), ...r.piers.map((x) => ({ id: x.id as string | null, t: x.t }))];
+      const trib = tributaryLengths(restraints.map((x) => x.t), length);
+      let own = 0;
+      restraints.forEach((x, i) => {
+        const part = trib[i]! / length;
+        if (x.id === null) {
+          own += part;
+          return;
+        }
+        const pier = layout.piers.find((q) => q.id === x.id)!;
+        const pa = pierAxis(pier);
+        const comps: [LoadCase['id'], number][] = [
+          [dot(g, pa.along) >= 0 ? 'par+' : 'par-', Math.abs(dot(g, pa.along))],
+          [dot(g, pa.left) >= 0 ? 'perp+' : 'perp-', Math.abs(dot(g, pa.left))],
+        ];
+        for (const [toCase, k] of comps) {
+          if (k < 1e-6) continue;
+          const kN = c.F_uls * part * k;
+          const m = received.get(pier.id) ?? new Map<LoadCase['id'], number>();
+          m.set(toCase, (m.get(toCase) ?? 0) + kN);
+          received.set(pier.id, m);
+          transfers.push({ case: c.id, to: pier.id, toCase, kN });
+        }
+      });
+      shares.set(c.id, own);
+    }
+    ownShare.set(item.id, shares);
+    transfersOf.set(item.id, transfers);
+  }
+  for (const item of items) {
     const legs = legsOf.get(item.id);
     if (!legs) continue;
-    const { length, along: axis, left } = pierAxis({ id: item.id, start: item.start, end: item.end, width: item.width, locked: false, origin: 'manual' });
-    const pontoon = { length, width: item.width, freeboard: item.freeboard, draft: item.draft, type: item.kind === 'breakwater' ? ('wave_attenuator' as const) : ('walkway' as const) };
-    const el = environmentalLoads(pontoon, { sideA: item.sideA, sideB: item.sideB }, env, loadOpts);
-    loads.push({ id: item.id, kind: item.kind, q: el.q, cases: el.cases, ice: el.ice });
+    const { along: axis, left } = axisOf(item);
+    const el = loadsOf.get(item.id)!;
+    loads.push({ id: item.id, kind: item.kind, q: el.q, cases: el.cases, ice: el.ice, transfers: transfersOf.get(item.id) ?? [] });
     for (const w of el.warnings) warnOnce(w);
     const dirDeg = (l: LegSpec) => (Math.atan2(dot(l.direction, left), dot(l.direction, axis)) * 180) / Math.PI;
     const legDirs = legs.map((l) => ({ dirDeg: dirDeg(l) }));
     const perLeg = legs.map(() => [] as { case: LoadCase['id']; Th: number }[]);
     for (const c of el.cases) {
-      const dist = distributeToLegs(c.F_uls, c.dir, legDirs, p.unevenFactor);
+      // The load the pontoon's own legs hold: less what it passes to attached piers, plus what it carries for an access pontoon.
+      const F = c.F_uls * (ownShare.get(item.id)?.get(c.id) ?? 1) + (received.get(item.id)?.get(c.id) ?? 0);
+      if (F <= 1e-9) continue;
+      const dist = distributeToLegs(F, c.dir, legDirs, p.unevenFactor);
       if (!dist.ok) {
         warn('NO_LEG_FOR_DIRECTION', `${item.id} ${c.id}: ${dist.error} The pontoon is not anchored in this direction (e.g. splay angle 0°): add legs.`, item.id, 'error');
         continue;
@@ -908,7 +1019,10 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
             ['HW', hHigh],
           ] as const);
       const chain = sizeChain(cases, levels, length);
-      if (chain && !chain.holds) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds leg ${leg.id} with the factor of safety ${p.chainSafetyFactor.toFixed(1)}; it has no chain.`, item.id);
+      if (chain && !chain.holds) {
+        const hint = wall && item.kind === 'access' ? ' More gangways (each with two shore chains, D32) or more piers attached to the access pontoon share its load.' : '';
+        warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds leg ${leg.id} with the factor of safety ${p.chainSafetyFactor.toFixed(1)}; it has no chain.${hint}`, item.id);
+      }
       if (chain?.estimated && chain.holds) chainEstimated = true;
       const results = chain?.results ?? [];
       const maxTh = cases.reduce((m, c) => Math.max(m, c.Th), 0);
@@ -1013,6 +1127,8 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     });
     // The chain-length rules concern chains to the seabed; every leg (shore chains too) counts as an anchor point.
     const seabedLegs = mooringLegs.filter((_, i) => legs[i]!.fixing === 'seabed');
+    const pontoon = { length: axisOf(item).length, width: item.width, freeboard: item.freeboard, draft: item.draft, type: item.kind === 'breakwater' ? ('wave_attenuator' as const) : ('walkway' as const) };
+    const attachedPiers = item.restraints?.piers.map((x) => x.id) ?? [];
     const rules = ruleChecks({ legs: seabedLegs, pontoon, env, ...(item.kind === 'breakwater' ? { opts: { preset: 'FCG_wave_attenuator' as const } } : {}) }).filter(
       (w) => w.code !== 'FEWER_THAN_4_ANCHOR_POINTS' || mooringLegs.length < 4,
     );
@@ -1020,7 +1136,8 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       if (w.code === 'CHAIN_BELOW_4_DEPTHS' || w.code === 'CHAIN_BELOW_5_DEPTHS') warnOnce({ code: w.code, message: `${item.id}: ${w.message.replace(/^[^:]+: /, 'chains ')}` }, item.id);
       else if (w.code === 'FCG_CHAIN') warnOnce({ code: w.code, message: `${item.id}: ${w.message.replace(/^[^:]+: /, '')}` }, item.id);
       else if (w.code === 'WINTER_IN_WATER') warnOnce(w);
-      else if (w.code === 'FEWER_THAN_4_ANCHOR_POINTS') warnOnce({ code: w.code, message: `${item.id}: ${mooringLegs.length} anchor points < 4 per pontoon (FCG 2022).` }, item.id);
+      else if (w.code === 'FEWER_THAN_4_ANCHOR_POINTS')
+        warnOnce({ code: w.code, message: `${item.id}: ${mooringLegs.length} anchor points < 4 per pontoon (FCG 2022)${attachedPiers.length > 0 ? `; it is also held by the piers attached to it (${attachedPiers.join(', ')})` : ''}.` }, item.id);
       else warnOnce({ code: w.code, message: `${item.id}: ${w.message}` }, item.id);
     }
   }

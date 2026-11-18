@@ -98,7 +98,11 @@ describe('anchoring regression (D62): never several weights per line', () => {
     expect(String(lines.find((r) => r[col('status')] === 'PILE')![col('status_note')])).toMatch(/^pile anchor: block: needs .* kg, max product 3 000 kg$/);
     // D64: the governing case of the spec per line, with its colour.
     expect(lines[0]).toEqual(expect.arrayContaining(['governing_case', 'water_level', 'th_kn', 't_fair_kn', 'fv_kn', 'uplift_deg', 'chain_fos', 'anchor_capacity_kn', 'anchor_fos', 'anchor_colour', 'anchor_fos_ge_1_8', 'required_dry_mass_kg']));
-    expect(sheets.find((s) => s.name === 'Loads')!.rows[0]).toEqual(['pontoon', 'kind', 'case', 'q_kpa', 'wind_kn', 'current_kn', 'wave_kn', 'uls_kn', 'ice_kn (reported only)']);
+    const loadSheet = sheets.find((s) => s.name === 'Loads')!.rows;
+    expect(loadSheet[0]).toEqual(['pontoon', 'kind', 'case', 'q_kpa', 'wind_kn', 'current_kn', 'wave_kn', 'uls_kn', 'ice_kn (reported only)', 'passed_to_attached_piers', 'carried_for_access_pontoon_kn']);
+    // I122: access-1 passes its load across to P2, the pier starting from its edge, which carries it.
+    expect(String(loadSheet.find((r) => r[0] === 'access-1' && r[2] === 'perp-')![9])).toMatch(/^P2 par- [\d.]+; P2 perp- [\d.]+$/);
+    expect(Number(loadSheet.find((r) => r[0] === 'P2' && r[2] === 'par-')![10])).toBeGreaterThan(0);
   });
 });
 

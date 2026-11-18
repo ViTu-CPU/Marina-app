@@ -424,6 +424,8 @@ async function waitForServer() {
       await page.getByLabel(`Gangways at (m from its first point) (${pontoon.id})`, { exact: true }).fill('20; 150');
       await page.waitForFunction(() => (window.__marina.getState().project.site.accessPontoons[0].gangways ?? []).length === 2);
       assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), String(4 + 2 * ownGangways));
+      // I122: the piers starting from it hold it with their chains; it has no chains of its own into the berths.
+      assert.match(await page.getByTestId('anchoring-issues').textContent(), new RegExp(`Access pontoon ${pontoon.id} \\(D28\\): off the wall it is held by two shore chains at each gangway and by the piers attached to it`));
       await page.screenshot({ path: path.join(outDir, 'access-pontoon.png') });
     });
 

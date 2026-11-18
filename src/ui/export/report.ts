@@ -390,6 +390,9 @@ export function buildReportHtml(input: ReportInput): string {
         [2, 3, 4, 5],
       ),
     );
+    // I122: an access pontoon's load carried by the piers attached to it.
+    const transfers = anchoring.loads.flatMap((pl) => pl.transfers.map((x) => `${pl.id} ${x.case} → ${x.to} ${x.toCase}: ${n2(x.kN)} kN`));
+    if (transfers.length > 0) parts.push(`<p>${esc(t('mooring.transfers'))} ${esc(transfers.join('; '))}</p>`);
     parts.push(`<h3>${esc(t('mooring.governing'))}</h3>`);
     // Factor of safety with its colour of the spec (§8): ● target met, ◐ at least 1, ○ below 1.
     const fosText = (x: number | null | undefined, goal: number) =>
