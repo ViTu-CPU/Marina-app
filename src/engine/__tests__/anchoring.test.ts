@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   anchoringPlan,
+  anchoringStatus,
+  anchoringStatusText,
   anchorTotals,
   waveAction,
   chainLengthFor,
@@ -19,6 +21,8 @@ import {
   type AnchoringParams,
 } from '../anchoring';
 import { anchorPieceCost, chooseLineAnchor, groupThousands, installParams } from '../anchorChoice';
+import { costEstimate, resolveChoices } from '../bom';
+import { DEFAULT_COST, DEFAULT_PARAMS } from '../defaults';
 import type { PriceList, Product } from '../catalog';
 import type { Berth, BoatClass, MainPier, Site } from '../model';
 
@@ -430,6 +434,21 @@ describe('anchoring plan of a pier', () => {
     expect(tandem.lines[0]).toMatchObject({ status: 'OK', anchorId: 'a2000', anchorCount: 2 });
     expect(2 * 2000).toBeGreaterThanOrEqual(tandem.lines[0]!.requiredAnchorKg);
     expect(tandem.issues.find((i) => i.code === 'TANDEM_ANCHORS')!.message).toMatch(/^\d+ lines have 2 anchors in tandem \(maxAnchorsPerLine = 2, the user's choice/);
+  });
+
+  it('a line that needs at most 3 000 kg: one block, status OK, priced (D62)', () => {
+    expect(plan.lines.length).toBeGreaterThan(0);
+    for (const l of plan.lines) {
+      expect(l.requiredAnchorKg, l.id).toBeLessThanOrEqual(3000);
+      expect(l, l.id).toMatchObject({ status: 'OK', anchorKind: 'block', anchorCount: 1, infeasibleReason: null });
+    }
+    expect(anchoringStatus(plan.lines)).toEqual({ ok: plan.lines.length, infeasible: 0 });
+    expect(anchoringStatusText(anchoringStatus(plan.lines))).toBe(`${plan.lines.length} lines OK, 0 lines INFEASIBLE`);
+    const e = costEstimate({ layout: { piers: [pier], fingers: [], berths }, site: pierSite, priceList: LIST, choices: resolveChoices(LIST, DEFAULT_COST, DEFAULT_PARAMS), anchoring: plan });
+    const anchors = e.lines.filter((l) => l.productId.startsWith('a') && l.group === 'anchoring');
+    expect(anchors.reduce((n, l) => n + l.orderQuantity, 0)).toBe(plan.lines.length);
+    expect(anchors.every((l) => l.unitPrice !== null && l.total! > 0)).toBe(true);
+    expect(e.lines.some((l) => l.productId === 'anchor-point-by-design')).toBe(false);
   });
 
   it('shore chains under the gangway of a pier 4 m off the wall (D49)', () => {

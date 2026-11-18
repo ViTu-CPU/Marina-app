@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AnchoringResult, AnchorLine } from '../anchoring';
-import { costEstimate, moduleCombination, resolveChoices } from '../bom';
+import { costEstimate, excludesNote, moduleCombination, resolveChoices } from '../bom';
 import type { PriceList, PriceParameter, Product } from '../catalog';
 import { DEFAULT_COST, DEFAULT_PARAMS as DEFAULTS } from '../defaults';
 
@@ -360,6 +360,42 @@ describe('cost estimate, hand-calculated', () => {
     const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: old, choices, anchoring });
     expect(e.lines.find((l) => l.productId === 'rate-diving-team')!.quantity).toBe(4);
     expect(e.notes.some((n) => n.startsWith('The price list has the older installation keys diver_h_per_anchor_line, boat_days_per_10_anchor_lines'))).toBe(true);
+  });
+
+  it('every unpriced item is listed by name and left out of the totals (D62)', () => {
+    expect(estimate.unpriced).toEqual([]);
+    expect(excludesNote(estimate)).toBe('');
+    // A breakwater (no price), an INFEASIBLE line, a product without a price and products missing from the list.
+    const withBreakwater: Site = { ...site, breakwaters: [{ id: 'breakwater-1', start: { x: -40, y: 55 }, end: { x: 40, y: 55 }, product: '4300K' }] };
+    const bad: AnchorLine = { ...line('X1'), anchorId: null, anchorKind: null, anchorCount: 0, status: 'INFEASIBLE', infeasibleReason: 'block: needs 4 000 kg, max product 1 000 kg', requiredAnchorKg: 4000 };
+    const thin: PriceList = {
+      ...LIST,
+      products: LIST.products.filter((p) => !['spring14', 'ladder'].includes(p.id)).map((p) => (p.id === 'anode16' ? { ...p, price: null } : p)),
+    };
+    const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site: withBreakwater, priceList: thin, choices, anchoring: { ...anchoring, lines: [line('A1'), bad] } });
+    const names = e.unpriced.map((u) => u.name);
+    expect(names).toEqual([
+      expect.stringMatching(/^Breakwater breakwater-1: Marinetek K-series Breakwater 4300K, \d+ × \S+/),
+      'Anchor point – type and size by geotechnical/mooring design',
+      'Spring links of the anchor lines',
+      'Chain anodes of the anchor lines',
+      'Safety ladders',
+    ]);
+    expect(e.unpriced[0]).toMatchObject({ unit: 'pcs', reason: expect.stringContaining('No breakwater in the price list') });
+    expect(e.unpriced[2]).toEqual({ name: 'Spring links of the anchor lines', quantity: 2, unit: 'pcs', reason: 'No spring with a size and a price in the price list.' });
+    // The anode without a price is a product without a price, not a missing product: no anode line in the BOM.
+    expect(e.lines.some((l) => l.productId === 'anode16')).toBe(false);
+    expect(e.missingPrices).toBe(5);
+    expect(excludesNote(e)).toBe(' (excludes 5 unpriced items, see list)');
+    expect(excludesNote({ unpriced: e.unpriced.slice(0, 1) })).toBe(' (excludes 1 unpriced item, see list)');
+    expect(e.notes).toContain('5 items without a price are not in the totals: see the list of unpriced items.');
+    // Not in the totals: the breakwater and the anchor point add nothing.
+    expect(e.byGroup.pontoons).toBe(estimate.byGroup.pontoons);
+    // A missing rate row is an unpriced item too.
+    const noBoat: PriceList = { ...LIST, products: LIST.products.filter((p) => p.id !== 'rate-work-boat') };
+    expect(costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: noBoat, choices, anchoring }).unpriced).toEqual([
+      { name: 'Work-boat days', quantity: 1, unit: 'day', reason: 'The price list has no row "rate-work-boat".' },
+    ]);
   });
 
   it('totals: overheads 10 %, contingency 15 %, VAT 25.5 %, range −30 … +50 %', () => {

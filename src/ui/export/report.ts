@@ -13,7 +13,7 @@ import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../.
 import { targetCount } from '../../engine/targets';
 import { translate, type Language, type StringKey } from '../../i18n';
 import { comparisonRows } from '../compare';
-import { otherTypeText, type CostModel } from '../costModel';
+import { anchoringStatusLabel, excludesLabel, otherTypeText, type CostModel } from '../costModel';
 import { formatCount, formatEuro, formatKn, formatLength, formatPercent } from '../format';
 import { groupIssues } from '../issueGroups';
 
@@ -348,6 +348,7 @@ export function buildReportHtml(input: ReportInput): string {
     parts.push(
       kv([
         [t('anchoring.lines'), formatCount(anchoring.lines.length, language)],
+        [t('anchoring.status'), anchoringStatusLabel(t, anchoring.lines, language)],
         [t('anchoring.maxLine'), `${formatKn(anchoring.lines.reduce((m, l) => Math.max(m, l.horizontalKn), 0), language)} kN`],
         [t('anchoring.maxMass'), `${formatCount(anchoring.lines.filter((l) => l.role !== 'buoy').reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0), language)} kg`],
         ...(anchoring.comparison
@@ -377,20 +378,32 @@ export function buildReportHtml(input: ReportInput): string {
 
     parts.push(`<h2>${esc(t('section.cost'))}</h2>`);
     const euro = (v: number) => `${formatEuro(v, language)} €`;
+    const excludes = excludesLabel(t, estimate.unpriced.length);
     parts.push(
       kv([
         ...BOM_GROUPS.map((g): [string, string] => [t(BOM_GROUP_KEY[g]), euro(estimate.byGroup[g])]),
         [t('cost.subtotal'), euro(estimate.subtotal)],
         [t('cost.overhead'), euro(estimate.overhead)],
         [t('cost.contingency'), euro(estimate.contingency)],
-        [t('cost.totalVat0'), euro(estimate.totalVat0)],
+        [`${t('cost.totalVat0')}${excludes}`, euro(estimate.totalVat0)],
         [`${t('cost.vat')} ${String(estimate.vatPct).replace('.', language === 'fi' ? ',' : '.')} %`, euro(estimate.vat)],
-        [t('cost.totalWithVat'), euro(estimate.totalWithVat)],
+        [`${t('cost.totalWithVat')}${excludes}`, euro(estimate.totalWithVat)],
         [t('cost.range'), `${euro(estimate.range[0])} … ${euro(estimate.range[1])}`],
         [t('cost.perBerth'), euro(estimate.perBerth)],
         [t('cost.perPierMetre'), euro(estimate.perPierMetre)],
       ]),
     );
+    // D62: what the totals leave out, by name.
+    if (estimate.unpriced.length > 0) {
+      parts.push(`<h3>${esc(t('cost.unpriced'))}: ${formatCount(estimate.unpriced.length, language)}</h3>`);
+      parts.push(
+        table(
+          [t('cost.product'), t('cost.quantity'), t('report.basis')],
+          estimate.unpriced.map((u) => [esc(u.name), `${esc(String(Math.round(u.quantity * 10) / 10).replace('.', language === 'fi' ? ',' : '.'))} ${esc(u.unit)}`, `<span class="small">${esc(u.reason)}</span>`]),
+          [1],
+        ),
+      );
+    }
     parts.push(`<p class="small">${esc(t('cost.note'))} ${esc(t('cost.benchmark'))}</p>`);
     if (estimate.notes.length > 0) parts.push(`<ul class="small">${estimate.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>`);
     parts.push(`<h3>${esc(t('cost.bom'))}</h3>`);

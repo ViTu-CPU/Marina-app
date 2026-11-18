@@ -469,7 +469,7 @@ async function waitForServer() {
       await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
       assert.match(await page.getByTestId('as3962').textContent(), /Table 3\.3/);
       await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
-      const total = page.getByText('Total VAT 0 %', { exact: true });
+      const total = page.getByText(/^Total VAT 0 %( \(excludes \d+ unpriced items?, see list\))?$/);
       await total.scrollIntoViewIfNeeded();
       assert.ok(await total.isVisible());
       assert.ok(await page.getByText('Anchor lines', { exact: true }).isVisible());
@@ -479,7 +479,10 @@ async function waitForServer() {
       assert.ok(await legend.getByText('Concrete anchor', { exact: true }).isVisible());
       assert.ok(await legend.getByText('Gangway', { exact: true }).isVisible());
       await page.getByRole('button', { name: '▾ Legend', exact: true }).click();
-      // Grouped warnings (U21): one row for the many "several anchors" lines, expandable.
+      // D62: the anchoring status and the unpriced items (the demo's lines on clay need more than 3 t).
+      assert.match(await page.getByTestId('anchoring-status').textContent(), /^Anchoring status\d+ lines OK, \d+ lines INFEASIBLE$/);
+      assert.match(await page.getByTestId('unpriced-items').textContent(), /Anchor point – type and size by geotechnical\/mooring design/);
+      // Grouped warnings (U21): one row for the INFEASIBLE lines of the many piers, expandable.
       const groupToggle = page.getByTestId('anchoring-issues').getByRole('button', { name: /similar – show all$/ }).first();
       await groupToggle.scrollIntoViewIfNeeded();
       await groupToggle.click();
@@ -491,10 +494,10 @@ async function waitForServer() {
       const list = await download('Download price list (.xlsx)');
       assert.ok(fs.statSync(list).size > 10000);
       // Importing the downloaded list keeps the totals.
-      const before = await page.getByText('Total VAT 0 %', { exact: true }).locator('xpath=following-sibling::span').textContent();
+      const before = await page.getByText(/^Total VAT 0 %( \(excludes \d+ unpriced items?, see list\))?$/).locator('xpath=following-sibling::span').textContent();
       await page.getByTestId('import-price-list').setInputFiles(list);
       await page.getByText('(imported)').first().waitFor();
-      const after = await page.getByText('Total VAT 0 %', { exact: true }).locator('xpath=following-sibling::span').textContent();
+      const after = await page.getByText(/^Total VAT 0 %( \(excludes \d+ unpriced items?, see list\))?$/).locator('xpath=following-sibling::span').textContent();
       assert.equal(after, before);
       await page.getByRole('button', { name: 'Use built-in', exact: true }).click();
       await page.screenshot({ path: path.join(outDir, 'cost.png') });

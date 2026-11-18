@@ -495,6 +495,16 @@ export function anchorTotals(lines: readonly AnchorLine[], anchorType: AnchorTyp
   };
 }
 
+/** D62: seabed anchor lines (stern buoys included) by status. */
+export function anchoringStatus(lines: readonly AnchorLine[]): { ok: number; infeasible: number } {
+  const seabed = lines.filter((l) => l.fixing === 'seabed');
+  const infeasible = seabed.filter((l) => l.status === 'INFEASIBLE').length;
+  return { ok: seabed.length - infeasible, infeasible };
+}
+
+/** D62: "12 lines OK, 140 lines INFEASIBLE". */
+export const anchoringStatusText = (s: { ok: number; infeasible: number }): string => `${s.ok} lines OK, ${s.infeasible} lines INFEASIBLE`;
+
 export interface AnchoringResult {
   lines: AnchorLine[];
   /** End piles of fingers longer than `fingerPileMinLength` (D31); not priced. */

@@ -4,6 +4,8 @@
  * disclaimer (SPEC §1).
  */
 import { writeXlsx, type CellValue } from '../../catalog/xlsx';
+import { anchoringStatus, anchoringStatusText } from '../../engine/anchoring';
+import { excludesNote } from '../../engine/bom';
 import type { Layout, Project } from '../../engine/model';
 import { DISCLAIMER } from '../../state/projectFile';
 import type { CostModel } from '../costModel';
@@ -13,6 +15,8 @@ const r1 = (x: number) => Math.round(x * 10) / 10;
 
 export function bomWorkbook(project: Project, layout: Layout, model: CostModel, date: string): Uint8Array {
   const { estimate, anchoring, choices, priceList } = model;
+  // D62: the totals say what they leave out.
+  const excludes = excludesNote(estimate);
   const summary: CellValue[][] = [
     ['Marina Layout Planner – bill of materials and cost estimate'],
     [DISCLAIMER],
@@ -40,14 +44,23 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
     ['Subtotal', r2(estimate.subtotal)],
     ['Site overheads', r2(estimate.overhead)],
     ['Contingency', r2(estimate.contingency)],
-    ['Total VAT 0 %', r2(estimate.totalVat0)],
+    [`Total VAT 0 %${excludes}`, r2(estimate.totalVat0)],
     [`VAT ${estimate.vatPct} %`, r2(estimate.vat)],
-    ['Total incl. VAT', r2(estimate.totalWithVat)],
+    [`Total incl. VAT${excludes}`, r2(estimate.totalWithVat)],
     ['Range (VAT 0 %), low', r2(estimate.range[0])],
     ['Range (VAT 0 %), high', r2(estimate.range[1])],
     ['Per berth (VAT 0 %)', r2(estimate.perBerth)],
     ['Per metre of main pier and access pontoon (VAT 0 %)', r2(estimate.perPierMetre)],
-    ['Lines without a price (not in the totals)', estimate.missingPrices],
+    ['Lines without a price (not in the totals)', estimate.unpriced.length],
+    ['Anchoring status', anchoringStatusText(anchoringStatus(anchoring.lines))],
+    ...(estimate.unpriced.length > 0
+      ? [
+          [],
+          [`Unpriced items (not in the totals, the range or the per-berth figures): ${estimate.unpriced.length}`],
+          ['item', 'quantity', 'unit', 'why not priced'],
+          ...estimate.unpriced.map((u): CellValue[] => [u.name, r1(u.quantity), u.unit, u.reason]),
+        ]
+      : []),
     [],
     ['Notes'],
     ...estimate.notes.map((n) => [n]),
@@ -72,7 +85,7 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
     ]),
   ];
   const lines: CellValue[][] = [
-    ['line', 'holds', 'role', 'fixing', 'splay', 'governs', 'horizontal_kn', 'top_tension_kn', 'uplift_kn', 'chain_length_m', 'chain', 'required_anchor_kg', 'anchor', 'anchor_count', 'fix_x', 'fix_y', 'anchor_x', 'anchor_y'],
+    ['line', 'holds', 'role', 'fixing', 'splay', 'governs', 'horizontal_kn', 'top_tension_kn', 'uplift_kn', 'chain_length_m', 'chain', 'required_anchor_kg', 'anchor', 'anchor_type', 'anchor_count', 'status', 'status_note', 'fix_x', 'fix_y', 'anchor_x', 'anchor_y'],
     ...anchoring.lines.map((l) => [
       l.id,
       l.holdsId,
@@ -87,7 +100,15 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
       l.chainId ?? '',
       Math.round(l.requiredAnchorKg),
       l.anchorId ?? '',
+      l.anchorKind ?? '',
       l.anchorCount,
+      // D62: why the line is INFEASIBLE, or the tandem warning.
+      l.fixing === 'seabed' ? l.status : '',
+      l.status === 'INFEASIBLE'
+        ? `${l.infeasibleReason}; anchor point by geotechnical/mooring design`
+        : l.anchorCount > 1
+          ? 'TANDEM: 2 anchors on one line (user choice); they do not necessarily hold as much as one anchor of the same total mass'
+          : '',
       r2(l.fix.x),
       r2(l.fix.y),
       r2(l.anchor.x),
@@ -108,7 +129,7 @@ export function bomWorkbook(project: Project, layout: Layout, model: CostModel, 
   return writeXlsx([
     { name: 'Summary', rows: summary, columnWidths: [48, 16] },
     { name: 'Bill of materials', rows: bom, header: true, columnWidths: [10, 30, 40, 22, 6, 10, 10, 12, 12, 40, 40, 11, 50] },
-    { name: 'Anchor lines', rows: lines, header: true, columnWidths: [12, 10, 9, 12, 12, 10, 12, 28, 14, 24, 10, 9, 9, 9, 9] },
+    { name: 'Anchor lines', rows: lines, header: true, columnWidths: [12, 10, 9, 8, 8, 8, 10, 10, 9, 10, 24, 12, 24, 9, 8, 11, 50, 9, 9, 9, 9] },
     { name: 'Parameters', rows: params, header: true, columnWidths: [32, 12, 10, 60] },
   ]);
 }

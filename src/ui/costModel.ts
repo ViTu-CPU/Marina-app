@@ -3,7 +3,7 @@
  * the project and the price list. Like fairways and issues, nothing here is stored.
  */
 import { useMemo } from 'react';
-import { anchoringPlan, type AnchoringResult, type AnchorTotals } from '../engine/anchoring';
+import { anchoringPlan, anchoringStatus, type AnchoringResult, type AnchorTotals } from '../engine/anchoring';
 import { costEstimate, resolveChoices, type CostEstimate, type ResolvedChoices } from '../engine/bom';
 import { DEFAULT_VAT_PCT, parameter, type PriceList } from '../engine/catalog';
 import type { Layout, Project } from '../engine/model';
@@ -38,6 +38,18 @@ export function waveInput(project: Project, layout: Layout): { from: number[]; e
 /** I102: "12 345 kg (largest 3 260 kg, chains up to 47.0 m)" for the other anchor type. */
 export function otherTypeText(o: AnchorTotals, t: (key: StringKey) => string, language: Language): string {
   return `${formatCount(o.totalKg, language)} kg (${t('anchoring.largest')} ${formatCount(o.maxKg, language)} kg, ${t('anchoring.chainsUpTo')} ${formatLength(o.longestChainM, language)} m)`;
+}
+
+/** D62: " (excludes 3 unpriced items, see list)" after a total's label, or "". */
+export function excludesLabel(t: (key: StringKey) => string, unpriced: number): string {
+  if (unpriced === 0) return '';
+  return ` ${unpriced === 1 ? t('cost.excludesOne') : t('cost.excludes').replace('{n}', String(unpriced))}`;
+}
+
+/** D62: "12 lines OK, 140 lines INFEASIBLE" in the language of `t`. */
+export function anchoringStatusLabel(t: (key: StringKey) => string, lines: AnchoringResult['lines'], language: Language): string {
+  const s = anchoringStatus(lines);
+  return t('anchoring.statusValue').replace('{ok}', formatCount(s.ok, language)).replace('{bad}', formatCount(s.infeasible, language));
 }
 
 /** The price list in use: the project's imported one, else the built-in one. */

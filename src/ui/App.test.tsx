@@ -162,8 +162,11 @@ describe('app shell (SPEC §8)', () => {
     });
     expect(screen.getAllByText('Loading the price list …').length).toBeGreaterThan(0);
     act(() => appStore.getState().setBuiltInPriceList(parsed.ok ? parsed.priceList : null));
-    expect(screen.getByText('Total VAT 0 %')).toBeTruthy();
+    // D62: the demo's lines on clay need more than the heaviest block: the totals say what they leave out.
+    expect(screen.getByText(/^Total VAT 0 % \(excludes \d+ unpriced items?, see list\)$/)).toBeTruthy();
     expect(screen.getByText('Anchor lines')).toBeTruthy();
+    expect(screen.getByTestId('anchoring-status').textContent).toMatch(/^Anchoring status\d+ lines OK, \d+ lines INFEASIBLE$/);
+    expect(screen.getByTestId('unpriced-items').textContent).toContain('Anchor point – type and size by geotechnical/mooring design');
     // Choosing another pontoon series changes the project's choice (one undo step).
     fireEvent.change(screen.getByLabelText('Pontoons'), { target: { value: 'A-Laiturit MX 3 m' } });
     expect(appStore.getState().project.cost.pontoonSeries).toBe('A-Laiturit MX 3 m');

@@ -58,6 +58,19 @@ export interface ResolvedChoices {
   gangwayLength?: number;
 }
 
+/**
+ * D62: something the estimate knows is needed but cannot price; it is not in the totals. Every
+ * such item is listed by name: products without a price, anchor points by design, breakwaters,
+ * products missing from the price list, work without a rate.
+ */
+export interface UnpricedItem {
+  name: string;
+  quantity: number;
+  unit: ProductUnit;
+  /** Why it has no price. */
+  reason: string;
+}
+
 export interface CostEstimate {
   lines: BomLine[];
   byGroup: Record<BomGroup, number>;
@@ -73,8 +86,10 @@ export interface CostEstimate {
   totalWithVat: number;
   /** Range around the total VAT 0 %. */
   range: [number, number];
-  /** Lines without a price (their cost is not in the totals). */
+  /** Number of unpriced items (`unpriced.length`): their cost is not in the totals. */
   missingPrices: number;
+  /** D62: every unpriced item by name; not in the totals. */
+  unpriced: UnpricedItem[];
   /** Total VAT 0 % per berth and per metre of main pier and access pontoon, €. */
   perBerth: number;
   perPierMetre: number;
@@ -83,6 +98,13 @@ export interface CostEstimate {
 
 const priced = (p: Product, vat: number) => unitPriceVat0(p, vat);
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * D62: what a total's label adds when items are unpriced: " (excludes 3 unpriced items, see list)",
+ * else "".
+ */
+export const excludesNote = (estimate: Pick<CostEstimate, 'unpriced'>): string =>
+  estimate.unpriced.length === 0 ? '' : ` (excludes ${plural(estimate.unpriced.length, 'unpriced item')}, see list)`;
 export const seriesOf = (list: PriceList, category: Product['category'], series: string) =>
   list.products.filter((p) => p.category === category && p.series === series);
 
@@ -253,6 +275,11 @@ export function costEstimate(input: CostInput): CostEstimate {
     acc.set(key, entry);
   };
   const fmt = (x: number) => (Math.round(x * 10) / 10).toString();
+  /** D62: items needed but not priced (besides the BOM lines without a price). */
+  const unpriced: UnpricedItem[] = [];
+  const leaveOut = (name: string, quantity: number, unit: ProductUnit, reason: string) => {
+    if (quantity > 0) unpriced.push({ name, quantity, unit, reason });
+  };
 
   // --- Pontoons: main piers and access pontoons --------------------------------------
   const pontoonProducts = choices.pontoonSeries ? seriesOf(list, 'pontoon', choices.pontoonSeries) : [];
@@ -262,7 +289,10 @@ export function costEstimate(input: CostInput): CostEstimate {
   ];
   let moduleCount = 0;
   if (pontoonProducts.length === 0) {
-    if (held.length > 0) notes.push('No pontoon series in the price list: the pontoons are not priced.');
+    if (held.length > 0) {
+      notes.push('No pontoon series in the price list: the pontoons are not priced.');
+      leaveOut('Pontoons of the main piers and access pontoons', Math.round(held.reduce((t, h) => t + h.length, 0) * 10) / 10, 'm', 'No pontoon series in the price list.');
+    }
   } else {
     const width = pontoonProducts.find((p) => p.widthM !== null)?.widthM;
     for (const h of held) {
@@ -309,8 +339,14 @@ export function costEstimate(input: CostInput): CostEstimate {
     addQty('fingers', fit.product, 1, `${boom ? 'boom' : 'finger'} ${fmt(needed)} m`);
     fingerCount++;
   }
-  if (layout.fingers.some((f) => f.kind !== 'boom') && fingerProducts.length === 0) notes.push('No finger series in the price list: the fingers are not priced.');
-  if (layout.fingers.some((f) => f.kind === 'boom') && boomProducts.length === 0) notes.push('No boom series in the price list: the booms are not priced.');
+  if (layout.fingers.some((f) => f.kind !== 'boom') && fingerProducts.length === 0) {
+    notes.push('No finger series in the price list: the fingers are not priced.');
+    leaveOut('Fingers', layout.fingers.filter((f) => f.kind !== 'boom').length, 'pcs', 'No finger series in the price list.');
+  }
+  if (layout.fingers.some((f) => f.kind === 'boom') && boomProducts.length === 0) {
+    notes.push('No boom series in the price list: the booms are not priced.');
+    leaveOut('Booms', layout.fingers.filter((f) => f.kind === 'boom').length, 'pcs', 'No boom series in the price list.');
+  }
   if (tooShort.finger > 0) notes.push(`${tooShort.finger} fingers are longer than the longest product of "${choices.fingerSeries}"; the longest is used.`);
   if (tooShort.boom > 0) notes.push(`${tooShort.boom} booms are longer than the longest product of "${choices.boomSeries}"; the longest is used.`);
 
@@ -375,10 +411,15 @@ export function costEstimate(input: CostInput): CostEstimate {
   /** Stern buoys (D36) without a float of the needed buoyancy in the list. */
   let smallFloats = 0;
   let buoyLines = 0;
+  /** D62: fittings of the lines that the price list has no product for. */
+  const missing = { chainM: 0, float: 0, shackle: 0, spring: 0, anode: 0 };
   for (const line of anchoring.lines) {
     const chain = line.chainId ? byId.get(line.chainId) : undefined;
     if (chain) addQty('anchoring', chain, line.chainLength, line.id);
-    else missingChain++;
+    else {
+      missingChain++;
+      missing.chainM += line.chainLength;
+    }
     const anchor = line.anchorId ? byId.get(line.anchorId) : undefined;
     if (anchor) {
       const installed = installedPriceVat0(anchor, vat) !== null;
@@ -403,20 +444,29 @@ export function costEstimate(input: CostInput): CostEstimate {
       if (float) {
         if ((float.capacityKg ?? 0) < line.buoy.floatCapacityKg - 1e-9) smallFloats++;
         addQty('anchoring', float, 1, line.id);
-      }
+      } else missing.float++;
       // "Sakkelin nimellinen koko on aina suurempi kuin kettingin koko" (Top Marine).
       const buoyShackle = smallest('shackle', (p) => p.shackleMm, Math.max(d, line.buoy.tableChainMm) + 0.5);
       if (buoyShackle) addQty('anchoring', buoyShackle, par('shackles_per_buoy_line', 1), line.id);
+      else missing.shackle += par('shackles_per_buoy_line', 1);
       continue;
     }
     const shackle = smallest('shackle', (p) => p.shackleMm, d);
     if (shackle) addQty('anchoring', shackle, par('shackles_per_anchor_line', 2), line.id);
+    else missing.shackle += par('shackles_per_anchor_line', 2);
     const spring = smallest('spring', (p) => p.chainDiameterMm, d);
     if (spring) addQty('anchoring', spring, par('springs_per_anchor_line', 1), line.id);
+    else missing.spring += par('springs_per_anchor_line', 1);
     const anode = smallest('anode', (p) => p.chainDiameterMm, d);
     if (anode) addQty('anchoring', anode, par('anodes_per_anchor_line', 1), line.id);
+    else missing.anode += par('anodes_per_anchor_line', 1);
   }
   if (missingChain > 0) notes.push(`${missingChain} anchor lines have no chain strong enough in the price list; their chain is not priced.`);
+  leaveOut(`Anchor chain for ${plural(missingChain, 'line')}`, Math.round(missing.chainM * 10) / 10, 'm', 'No chain of the price list holds the line load with the safety factor.');
+  leaveOut('Stern-buoy floats', missing.float, 'pcs', 'No buoy float with a buoyancy and a price in the price list.');
+  leaveOut('Shackles of the anchor lines', missing.shackle, 'pcs', 'No shackle with a size and a price in the price list.');
+  leaveOut('Spring links of the anchor lines', missing.spring, 'pcs', 'No spring with a size and a price in the price list.');
+  leaveOut('Chain anodes of the anchor lines', missing.anode, 'pcs', 'No anode with a size and a price in the price list.');
   if (byDesign.length > 0) {
     const where = [...new Set(byDesign.map((l) => (l.role === 'buoy' ? 'stern buoys' : l.holdsId)))];
     const worst = byDesign.reduce((a, l) => (l.requiredAnchorKg > a.requiredAnchorKg ? l : a));
@@ -449,7 +499,10 @@ export function costEstimate(input: CostInput): CostEstimate {
       .filter((p) => p.category === 'wall_fixing' && priced(p, vat) !== null)
       .sort((a, b) => priced(a, vat)! - priced(b, vat)! || (a.id < b.id ? -1 : 1))[0];
     if (fixing) addQty('anchoring', fixing, wallLines, `${wallLines} shore chains`);
-    else notes.push('No wall fixing in the price list: the wall fixings of the shore chains are not priced.');
+    else {
+      notes.push('No wall fixing in the price list: the wall fixings of the shore chains are not priced.');
+      leaveOut('Wall fixings of the shore chains', wallLines, 'pcs', 'No wall fixing with a price in the price list.');
+    }
   }
   // D58, I106: breakwater modules; Marinetek's breakwater prices are not public and not in the price list.
   for (const b of breakwatersOf(site)) {
@@ -462,15 +515,32 @@ export function costEstimate(input: CostInput): CostEstimate {
       entry.count++;
       byCode.set(module.code, entry);
     }
-    const list = [...byCode.entries()].map(([code, e]) => `${e.count} × ${code}`).join(' + ');
+    const parts = [...byCode.entries()].map(([code, e]) => `${e.count} × ${code}`).join(' + ');
     const weight = [...byCode.values()].reduce((t, e) => t + e.count * e.weightT, 0);
     const built = modules.reduce((t, m) => t + m.length, 0);
-    notes.push(`Breakwater ${b.id}: ${product.name}, drawn ${fmt(length)} m: ${list} = ${fmt(built)} m (${fmt(weight)} t), not priced: no breakwater in the price list.`);
+    notes.push(`Breakwater ${b.id}: ${product.name}, drawn ${fmt(length)} m: ${parts} = ${fmt(built)} m (${fmt(weight)} t), not priced: no breakwater in the price list.`);
+    // D62: listed in the bill of materials without a price, so that it counts as unpriced.
+    extra.push({
+      group: 'pontoons',
+      productId: `breakwater-${b.id}`,
+      name: `Breakwater ${b.id}: ${product.name}, ${parts} (${fmt(weight)} t)`,
+      supplier: 'Marinetek',
+      unit: 'pcs',
+      quantity: modules.length,
+      orderQuantity: modules.length,
+      unitPrice: null,
+      total: null,
+      basis: `drawn ${fmt(length)} m, built ${fmt(built)} m`,
+      sourceUrl: 'https://www.marinetek.hr/en/brochures-and-specifications/',
+      sourceDate: '2026-11-15',
+      note: 'No breakwater in the price list (Marinetek publishes no prices): the modules and their installation are not priced; their anchor lines are in the anchoring.',
+    });
   }
   // End piles of long fingers (D31): no public prices.
   if (anchoring.piles.length > 0) {
     const guides = [...new Set(anchoring.piles.map((x) => x.guide ?? 'above G700'))].join(', ');
     notes.push(`${anchoring.piles.length} end piles with pile guides (${guides}) for fingers longer than the limit are not priced: no public prices.`);
+    leaveOut(`End piles with pile guides (${guides})`, anchoring.piles.length, 'pcs', 'No public prices; the piles are not designed here.');
   }
 
   // --- Fittings --------------------------------------------------------------------------
@@ -483,20 +553,20 @@ export function costEstimate(input: CostInput): CostEstimate {
   if (cleat && cleats > 0) {
     addQty('fittings', cleat, cleats, `${berths} berths × ${par('cleats_per_berth', 2)}`);
     smallItems += cleats;
-  }
+  } else if (!cleat) leaveOut('Cleats or mooring rings', cleats, 'pcs', 'No cleat with a price in the price list.');
   const ladder = cheapest('ladder');
   const ladders = held.length * par('ladders_per_pier', 1);
   if (ladder && ladders > 0) {
     addQty('fittings', ladder, ladders, `${held.length} piers and access pontoons × ${par('ladders_per_pier', 1)}`);
     smallItems += ladders;
-  }
+  } else if (!ladder) leaveOut('Safety ladders', ladders, 'pcs', 'No ladder with a price in the price list.');
   const perPedestal = par('berths_per_power_pedestal', 0);
   const power = cheapest('power');
   if (power && perPedestal > 0 && berths > 0) {
     const n = Math.ceil(berths / perPedestal);
     addQty('fittings', power, n, `${berths} berths ÷ ${perPedestal}`);
     smallItems += n;
-  }
+  } else if (!power && perPedestal > 0 && berths > 0) leaveOut('Power pedestals', Math.ceil(berths / perPedestal), 'pcs', 'No power pedestal with a price in the price list.');
 
   // --- Labour and plant ----------------------------------------------------------------------
   const rate = (id: string) => {
@@ -523,6 +593,10 @@ export function costEstimate(input: CostInput): CostEstimate {
   }
   // D62: diving hours per anchor piece (and per wall fixing of a shore chain) and per tonne of anchor.
   const divingHours = (placed.pieces + wallLines) * install.diverHoursPerAnchor + placed.tonnes * install.diverHoursPerTonne;
+  if (!installer) leaveOut('Installer hours', Math.round(crewHours * 10) / 10, 'h', 'The price list has no row "rate-installer".');
+  if (!diving) leaveOut('Diving-team hours', Math.round(divingHours * 10) / 10, 'h', 'The price list has no row "rate-diving-team".');
+  if (!crane) leaveOut('Crane hours (lifting and transport)', moduleCount * (par('crane_h_per_pontoon', 1) + par('transport_h_per_pontoon', 2)), 'h', 'The price list has no row "rate-crane".');
+  if (!boat) leaveOut('Work-boat days', Math.ceil(placed.pieces / install.anchorsPerBoatDay - 1e-9), 'day', 'The price list has no row "rate-work-boat".');
   if (diving && divingHours > 0) {
     addQty(
       'labour',
@@ -546,6 +620,12 @@ export function costEstimate(input: CostInput): CostEstimate {
     notes.push(
       `${placed.heavy} anchors (up to ${groupThousands(placed.heaviestKg)} kg) are heavier than the work boat lifts (work_boat_max_lift_kg ${groupThousands(install.workBoatMaxLiftKg)} kg): a heavier crane barge is needed; its cost is not in the estimate.`,
     );
+    leaveOut(
+      `Crane barge for ${plural(placed.heavy, 'anchor')} heavier than ${groupThousands(install.workBoatMaxLiftKg)} kg`,
+      placed.heavy,
+      'pcs',
+      'Heavier than the work boat lifts (work_boat_max_lift_kg); no rate for a heavier barge in the price list.',
+    );
   }
   if (placed.installed > 0) notes.push(`${placed.installed} anchors are priced installed (supply and installation); no diving or work-boat time is added for them.`);
   if (install.legacyKeys.length > 0) {
@@ -554,13 +634,11 @@ export function costEstimate(input: CostInput): CostEstimate {
 
   // --- Lines and totals ----------------------------------------------------------------------
   const lines: BomLine[] = [];
-  let missingPrices = 0;
   for (const group of BOM_GROUPS) {
     for (const { product, quantity, basis, installed } of [...acc.values()].filter((e) => e.group === group)) {
       const withMargin = quantity * (1 + product.marginPct / 100);
       const orderQuantity = product.unit === 'pcs' ? Math.ceil(withMargin - 1e-9) : Math.round(withMargin * 10) / 10;
       const unitPrice = installed ? installedPriceVat0(product, vat) : priced(product, vat);
-      if (unitPrice === null) missingPrices++;
       lines.push({
         group,
         productId: product.id,
@@ -577,12 +655,17 @@ export function costEstimate(input: CostInput): CostEstimate {
         note: installed ? `Installed price: supply and installation.${product.note ? ` ${product.note}` : ''}` : product.note,
       });
     }
-    for (const l of extra.filter((x) => x.group === group)) {
-      if (l.unitPrice === null) missingPrices++;
-      lines.push(l);
-    }
+    lines.push(...extra.filter((x) => x.group === group));
   }
-  if (missingPrices > 0) notes.push(`${missingPrices} lines have no price; they are not in the totals.`);
+  // D62: every unpriced item, by name: the BOM lines without a price first, then what has no line.
+  const extraIds = new Set(extra.map((l) => l.productId));
+  const allUnpriced: UnpricedItem[] = [
+    ...lines
+      .filter((l) => l.unitPrice === null)
+      .map((l) => ({ name: l.name, quantity: l.orderQuantity, unit: l.unit, reason: extraIds.has(l.productId) ? l.note : 'No price in the price list.' })),
+    ...unpriced,
+  ];
+  if (allUnpriced.length > 0) notes.push(`${plural(allUnpriced.length, 'item')} without a price ${allUnpriced.length === 1 ? 'is' : 'are'} not in the totals: see the list of unpriced items.`);
 
   const byGroup = Object.fromEntries(BOM_GROUPS.map((g) => [g, 0])) as Record<BomGroup, number>;
   for (const l of lines) byGroup[l.group] += l.total ?? 0;
@@ -609,7 +692,8 @@ export function costEstimate(input: CostInput): CostEstimate {
     vat: vatAmount,
     totalWithVat: totalVat0 + vatAmount,
     range: [totalVat0 * (1 + par('range_low_pct', -30) / 100), totalVat0 * (1 + par('range_high_pct', 50) / 100)],
-    missingPrices,
+    missingPrices: allUnpriced.length,
+    unpriced: allUnpriced,
     perBerth: berths > 0 ? totalVat0 / berths : 0,
     perPierMetre: pierMetres > 0 ? totalVat0 / pierMetres : 0,
     notes,

@@ -7,7 +7,7 @@ import { BOM_GROUPS, seriesNames, type BomGroup } from '../../engine/bom';
 import type { Layout } from '../../engine/model';
 import { parsePriceListFile, priceListToXlsx } from '../../catalog/priceList';
 import { appStore, useAppStore } from '../../state/store';
-import { otherTypeText, useCostModel, type CostModel } from '../costModel';
+import { anchoringStatusLabel, excludesLabel, otherTypeText, useCostModel, type CostModel } from '../costModel';
 import { bomWorkbook } from '../export/bomXlsx';
 import { downloadBytes, readFileAsBytes, safeFileName, XLSX_MIME } from '../export/download';
 import { formatCount, formatEuro, formatKn, formatLength } from '../format';
@@ -319,6 +319,11 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
           <span className="text-slate-600">{t('anchoring.lines')}</span>
           <span>{formatCount(anchoring.lines.length, language)}</span>
         </div>
+        {/* D62: lines that no anchor of the price list holds. */}
+        <div className="flex justify-between gap-2" data-testid="anchoring-status">
+          <span className="text-slate-600">{t('anchoring.status')}</span>
+          <span className={`text-right ${anchoring.lines.some((l) => l.status === 'INFEASIBLE') ? 'font-medium text-amber-800' : ''}`}>{anchoringStatusLabel(t, anchoring.lines, language)}</span>
+        </div>
         <div className="flex justify-between">
           <span className="text-slate-600">{t('anchoring.maxLine')}</span>
           <span>{formatKn(maxLine, language)} kN</span>
@@ -475,10 +480,11 @@ export function CostSection({ layout, model }: { layout: Layout; model: CostMode
   const row = (label: string, value: string, strong = false) => (
     <div className={`flex justify-between gap-2 text-sm ${strong ? 'font-semibold text-slate-900' : ''}`}>
       <span className={strong ? '' : 'text-slate-600'}>{label}</span>
-      <span>{value}</span>
+      <span className="shrink-0 whitespace-nowrap text-right">{value}</span>
     </div>
   );
   const pct = (key: string) => priceList.parameters.find((p) => p.key === key)?.value ?? 0;
+  const excludes = excludesLabel(t, estimate.unpriced.length);
   return (
     <Section title={t('section.cost')}>
       {header}
@@ -518,13 +524,28 @@ export function CostSection({ layout, model }: { layout: Layout; model: CostMode
         {row(t('cost.subtotal'), euro(estimate.subtotal))}
         {row(`${t('cost.overhead')} ${pct('site_overhead_pct')} %`, euro(estimate.overhead))}
         {row(`${t('cost.contingency')} ${pct('contingency_pct')} %`, euro(estimate.contingency))}
-        {row(t('cost.totalVat0'), euro(estimate.totalVat0), true)}
+        {row(`${t('cost.totalVat0')}${excludes}`, euro(estimate.totalVat0), true)}
         {row(`${t('cost.vat')} ${estimate.vatPct} %`, euro(estimate.vat))}
-        {row(t('cost.totalWithVat'), euro(estimate.totalWithVat), true)}
+        {row(`${t('cost.totalWithVat')}${excludes}`, euro(estimate.totalWithVat), true)}
         {row(t('cost.range'), `${euro(estimate.range[0])} … ${euro(estimate.range[1])}`)}
         {row(t('cost.perBerth'), euro(estimate.perBerth))}
         {row(t('cost.perPierMetre'), euro(estimate.perPierMetre))}
       </div>
+      {/* D62: everything the totals leave out, by name. */}
+      {estimate.unpriced.length > 0 && (
+        <div className="rounded border border-amber-300 bg-amber-50 p-1" data-testid="unpriced-items">
+          <div className="text-xs font-medium text-amber-900">
+            {t('cost.unpriced')}: {formatCount(estimate.unpriced.length, language)}
+          </div>
+          <ul className="list-disc space-y-0.5 pl-4 text-xs text-amber-900">
+            {estimate.unpriced.map((u, i) => (
+              <li key={i} title={u.reason}>
+                {u.name}: {u.unit === 'pcs' ? formatCount(u.quantity, language) : formatLength(u.quantity, language)} {t(`unit.${u.unit}`)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className="text-xs text-slate-500">{t('cost.benchmark')}</p>
       {estimate.notes.length > 0 && (
         <ul className="list-disc space-y-0.5 pl-4 text-xs text-amber-800">
