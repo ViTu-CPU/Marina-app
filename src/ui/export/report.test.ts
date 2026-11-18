@@ -51,6 +51,8 @@ describe('printable report (U24)', () => {
     expect(html).toContain(`${translate('en', 'cost.unpriced')}: ${model.estimate.unpriced.length}`);
     expect(html).toMatch(/Total VAT 0 % \(excludes \d+ unpriced items?, see list\)/);
     expect(html).toContain(translate('en', 'sensitivity.title'));
+    expect(html).toContain(translate('en', 'anchoring.maxAnchorsPerLine'));
+    expect(html).toContain(translate('en', 'anchoring.capacitySafetyFactor'));
     expect(html).toContain('Gravity block capacity in soft clay is highly uncertain; requires geotechnical data.');
     const fi = buildReportHtml({ project, layout, model, image: null, language: 'fi', date: '2026-11-15' });
     expect(fi).toMatch(/Yhteensä ALV 0 % \(ei sisällä \d+ hinnoittelematonta erää, ks\. luettelo\)/);

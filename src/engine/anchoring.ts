@@ -1495,9 +1495,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
 
   // D62: lines that no anchor of the price list holds within `maxAnchorsPerLine`, per pontoon (stern
   // buoys together), and lines with two anchors in tandem.
-  const heaviestBlock = priceList.products
-    .filter((x) => x.category === 'anchor' && (x.anchorKind ?? 'block') === 'block' && x.anchorMassKg !== null && x.anchorMassKg <= p.maxAnchorMass + 1e-9)
-    .reduce((m, x) => Math.max(m, x.anchorMassKg!), 0);
+  const heaviestBlock = frictionSensitivity([], p, priceList).heaviestBlockKg;
   const infeasible = new Map<string, { lines: AnchorLine[]; total: number; elementId: string }>();
   for (const l of lines) {
     if (l.fixing !== 'seabed') continue;

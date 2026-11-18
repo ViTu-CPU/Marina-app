@@ -72,6 +72,8 @@ const ANCHORING: (keyof AnchoringParams)[] = [
   'corrosionAllowance',
   'slidingSafetyFactor',
   'maxAnchorMass',
+  'maxAnchorsPerLine',
+  'capacitySafetyFactor',
   'tipAnchorMinLength',
   'fingerPileMinLength',
 ];
