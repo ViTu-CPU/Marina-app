@@ -375,6 +375,7 @@ export function costEstimate(input: CostInput): CostEstimate {
     }),
   ];
   const hasWidths = list.products.some((p) => p.category === 'gangway' && p.widthM !== null);
+  const widest = list.products.filter((p) => p.category === 'gangway' && p.widthM !== null).reduce((m, p) => Math.max(m, p.widthM!), 0);
   const narrow: string[] = [];
   let short = false;
   for (const need of needs) {
@@ -382,11 +383,21 @@ export function costEstimate(input: CostInput): CostEstimate {
     const pick = chooseGangway(list, gangwayProducts, need.served, wantedGangway, vat);
     if (!pick) continue;
     const chosen = pick;
-    if (!pick.wideEnough) narrow.push(`${need.what} (${need.served} berths, ${fmt(width)} m)`);
+    if (!pick.wideEnough) {
+      // D62: not priced with a narrower gangway; listed as unpriced with the width it needs.
+      narrow.push(`${need.what} (${need.served} berths, ${fmt(width)} m)`);
+      leaveOut(
+        `Gangway for ${need.what}, at least ${fmt(width)} m clear (AS 3962 Table 3.3, ${need.served} berths)`,
+        1,
+        'pcs',
+        `No gangway in the price list is ${fmt(width)} m wide or wider (widest ${fmt(widest)} m); not priced with a narrower one.`,
+      );
+      continue;
+    }
     if (!chosen.longEnough) short = true;
     addQty('gangways', chosen.product, 1, `${need.what}: ${need.served} berths → at least ${fmt(width)} m clear (AS 3962 Table 3.3)`);
   }
-  if (narrow.length > 0) notes.push(`No gangway in the price list is as wide as AS 3962 Table 3.3 asks for ${narrow.join(', ')}; the selected series is used.`);
+  if (narrow.length > 0) notes.push(`No gangway in the price list is as wide as AS 3962 Table 3.3 asks for ${narrow.join(', ')}; ${narrow.length === 1 ? 'it is' : 'they are'} not priced (see the unpriced items).`);
   if (short) notes.push(`No gangway wide enough is ${fmt(wantedGangway)} m long; the longest is used.`);
   if (needs.length > 0 && hasWidths) notes.push('Gangway widths: the product width is taken as the clear width between the handrails (assumption); AS 3962 Table 3.3 gives the clear width.');
 

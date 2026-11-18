@@ -258,10 +258,19 @@ describe('cost estimate, hand-calculated', () => {
     expect(four.notes.some((n) => n.startsWith('Gangway widths: the product width is taken as the clear width'))).toBe(true);
     // 2 berths: 0.7 m → the selected 0.8 m series is enough.
     expect(run(2).lines.find((l) => l.productId === 'g8')?.orderQuantity).toBe(1);
-    // 130 berths: 1.8 m → none is wide enough: the selected series and a note.
+    // 130 berths: 1.8 m → none is wide enough: not priced with a narrower one (D62), listed as unpriced.
     const many = run(130);
-    expect(many.lines.find((l) => l.productId === 'g8')?.orderQuantity).toBe(1);
-    expect(many.notes.find((n) => n.startsWith('No gangway in the price list is as wide'))).toContain('P1 (130 berths, 1.8 m)');
+    expect(many.lines.some((l) => l.group === 'gangways')).toBe(false);
+    expect(many.notes.find((n) => n.startsWith('No gangway in the price list is as wide'))).toBe(
+      'No gangway in the price list is as wide as AS 3962 Table 3.3 asks for P1 (130 berths, 1.8 m); it is not priced (see the unpriced items).',
+    );
+    expect(many.unpriced).toContainEqual({
+      name: 'Gangway for P1, at least 1.8 m clear (AS 3962 Table 3.3, 130 berths)',
+      quantity: 1,
+      unit: 'pcs',
+      reason: 'No gangway in the price list is 1.8 m wide or wider (widest 1.5 m); not priced with a narrower one.',
+    });
+    expect(many.byGroup.gangways).toBe(0);
   });
 
   it('anchoring: chain 2 × 16.5 m + 5 % = 34.7 m; anchors, shackles, springs, anodes = 1 223 €', () => {
