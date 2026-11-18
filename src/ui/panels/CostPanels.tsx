@@ -187,6 +187,7 @@ export function AnchoringSection() {
   const seabed = useAppStore((s) => s.project.anchoring.seabed);
   const friction = useAppStore((s) => s.project.anchoring.friction);
   const anchorType = useAppStore((s) => s.project.anchoring.anchorType);
+  const anchorsPerLine = useAppStore((s) => s.project.anchoring.maxAnchorsPerLine);
   return (
     <Section title={t('section.anchoring')} defaultOpen={false}>
       <AnchoringField name="depth" min={0.5} max={100} />
@@ -248,6 +249,22 @@ export function AnchoringSection() {
       <AnchoringField name="corrosionAllowance" min={0} max={10} step={0.5} />
       <AnchoringField name="slidingSafetyFactor" min={1} max={5} step={0.1} />
       <AnchoringField name="maxAnchorMass" min={100} max={50000} step={100} />
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('anchoring.maxAnchorsPerLine')}
+        <select
+          className="rounded border border-slate-300 px-1 py-0.5 text-sm"
+          data-testid="anchors-per-line"
+          value={anchorsPerLine}
+          onChange={(e) => state().setAnchoring({ maxAnchorsPerLine: Number(e.target.value) })}
+        >
+          {[1, 2].map((n) => (
+            <option key={n} value={n}>
+              {t(n === 1 ? 'anchorsPerLine.1' : 'anchorsPerLine.2')}
+            </option>
+          ))}
+        </select>
+      </label>
+      <AnchoringField name="capacitySafetyFactor" min={1} max={5} step={0.1} />
       <AnchoringField name="pontoonFreeboard" min={0.1} max={3} step={0.05} />
       <BuoyFields />
       <Button onClick={() => state().setAnchoring(resetAnchoringFactors(state().project.anchoring))}>{t('anchoring.resetFactors')}</Button>
@@ -282,10 +299,11 @@ export function AnchoringSummary({ model }: { model: CostModel | null }) {
   const { anchoring, priceList } = model;
   const name = (id: string | null) => (id ? (priceList.products.find((p) => p.id === id)?.name ?? id) : t('anchoring.none'));
   const chains = sumBy(anchoring.lines, (l) => name(l.chainId), (l) => l.chainLength);
+  // D62: INFEASIBLE lines as one row of anchor points by design.
   const anchors = sumBy(
     anchoring.lines.filter((l) => l.fixing === 'seabed'),
-    (l) => name(l.anchorId),
-    (l) => l.anchorCount,
+    (l) => (l.status === 'INFEASIBLE' ? t('anchoring.byDesign') : name(l.anchorId)),
+    (l) => (l.status === 'INFEASIBLE' ? 1 : l.anchorCount),
   );
   const wallFixings = anchoring.lines.filter((l) => l.fixing === 'wall').length;
   const piles = anchoring.piles.length;

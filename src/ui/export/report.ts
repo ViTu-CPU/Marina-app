@@ -364,8 +364,8 @@ export function buildReportHtml(input: ReportInput): string {
           : []),
         ...sum((l) => name(l.chainId), (l) => l.chainLength).map(([n, m]): [string, string] => [`${t('anchoring.chains')}: ${n}`, `${formatLength(m, language)} m`]),
         ...sum(
-          (l) => name(l.anchorId),
-          (l) => l.anchorCount,
+          (l) => (l.status === 'INFEASIBLE' ? t('anchoring.byDesign') : name(l.anchorId)),
+          (l) => (l.status === 'INFEASIBLE' ? 1 : l.anchorCount),
           anchoring.lines.filter((l) => l.fixing === 'seabed'),
         ).map(([n, c]): [string, string] => [`${t('anchoring.anchors')}: ${n}`, formatCount(c, language)]),
         ...(anchoring.lines.some((l) => l.fixing === 'wall') ? [[t('anchoring.wallFixings'), formatCount(anchoring.lines.filter((l) => l.fixing === 'wall').length, language)] as [string, string]] : []),

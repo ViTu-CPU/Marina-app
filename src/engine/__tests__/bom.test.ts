@@ -178,7 +178,10 @@ describe('cost estimate, hand-calculated', () => {
     chainId: 'c13',
     requiredAnchorKg: 900,
     anchorId: 'a1000',
+    anchorKind: 'block',
     anchorCount: 1,
+    status: 'OK',
+    infeasibleReason: null,
   });
   const anchoring: AnchoringResult = { lines: [line('A1'), line('A2')], piles: [], loads: [], issues: [] };
   const choices = resolveChoices(LIST, DEFAULT_COST, DEFAULT_PARAMS);

@@ -50,7 +50,7 @@ const ENTRIES: { layer: LayerId; label: StringKey; swatch: ReactNode }[] = [
   { layer: 'fetch', label: 'legend.fetchMax', swatch: line(COLORS.fetchMax, 2) },
   { layer: 'anchoring', label: 'legend.chain', swatch: line(COLORS.chain, 1.5, '3 2') },
   { layer: 'anchoring', label: 'legend.anchor', swatch: swatch(<rect x={W / 2 - 4} y={H / 2 - 4} width={8} height={8} fill={COLORS.anchor} />) },
-  { layer: 'anchoring', label: 'legend.severalAnchors', swatch: swatch(<rect x={W / 2 - 4} y={H / 2 - 4} width={8} height={8} fill={COLORS.issue} />) },
+  { layer: 'anchoring', label: 'legend.anchorProblem', swatch: swatch(<rect x={W / 2 - 4} y={H / 2 - 4} width={8} height={8} fill={COLORS.issue} />) },
   { layer: 'anchoring', label: 'legend.wallFixing', swatch: swatch(<circle cx={W / 2} cy={H / 2} r={3} fill={COLORS.anchor} />) },
   { layer: 'anchoring', label: 'legend.pile', swatch: swatch(<circle cx={W / 2} cy={H / 2} r={4.5} fill={COLORS.pier} stroke={COLORS.anchor} />) },
   { layer: 'issues', label: 'legend.issue', swatch: fill('none', COLORS.issue) },

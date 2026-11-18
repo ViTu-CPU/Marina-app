@@ -190,8 +190,16 @@ describe('stern-buoy sizing (D36, D37), hand-calculated', () => {
     expect(buoyLine(plan([k9(4)], { buoyExposed: true }))).toMatchObject({ chainId: 'c16', anchorId: 'a2000', buoy: { floatCapacityKg: 100, tableChainMm: 16 } });
     expect(buoyLine(plan([k9(4)], { buoyExposed: true })).requiredAnchorKg).toBeCloseTo(1714.29, 1);
     expect(buoyLine(plan([k9(4)], { buoyTable: 'topMarine' }))).toMatchObject({ requiredAnchorKg: 1000, anchorId: 'a1000', chainId: 'c16', buoy: { floatCapacityKg: 48 } });
-    // 3 × 4 t = 12 000 kg → 4 × 3 000 kg (heaviest piece 3 000 kg).
-    expect(buoyLine(plan([k9(4)], { buoySinkerMethod: 'factor' }))).toMatchObject({ requiredAnchorKg: 12000, anchorId: 'a3000', anchorCount: 4 });
+    // 3 × 4 t = 12 000 kg: no single sinker of the list (heaviest piece 3 000 kg), so INFEASIBLE (D62).
+    expect(buoyLine(plan([k9(4)], { buoySinkerMethod: 'factor' }))).toMatchObject({
+      requiredAnchorKg: 12000,
+      anchorId: null,
+      anchorCount: 0,
+      status: 'INFEASIBLE',
+      infeasibleReason: 'block: needs 12 000 kg, max product 3 000 kg',
+    });
+    const infeasible = plan([k9(4)], { buoySinkerMethod: 'factor' }).issues.filter((i) => i.code === 'ANCHOR_INFEASIBLE');
+    expect(infeasible.some((i) => i.message.startsWith('stern buoys: 1 of 1 anchor lines INFEASIBLE'))).toBe(true);
   });
 
   it('no weight: estimated from the length and flagged', () => {

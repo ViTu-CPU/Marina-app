@@ -6,7 +6,6 @@ import {
   chainLengthFor,
   chainLine,
   choosePileGuide,
-  chooseAnchor,
   chooseChain,
   DEFAULT_ANCHORING,
   requiredAnchorMass,
@@ -19,6 +18,7 @@ import {
   wedgeWorkingCapacity,
   type AnchoringParams,
 } from '../anchoring';
+import { anchorPieceCost, chooseLineAnchor, groupThousands, installParams } from '../anchorChoice';
 import type { PriceList, Product } from '../catalog';
 import type { Berth, BoatClass, MainPier, Site } from '../model';
 
@@ -172,18 +172,97 @@ describe('anchor mass and product choice', () => {
     expect(chooseChain(100, 5, DEFAULT_ANCHORING, onlyUnrated, 25.5)).toBeNull();
   });
 
-  it('the cheapest anchor heavy enough, otherwise several of the heaviest', () => {
-    expect(chooseAnchor(900, LIST, 25.5)).toEqual({ product: LIST.products[3], count: 1 });
-    expect(chooseAnchor(1500, LIST, 25.5)!.product.id).toBe('a2000');
-    expect(chooseAnchor(8737, LIST, 25.5)).toEqual({ product: LIST.products[5], count: 3 });
+  it('the formula of the regression case: H 36.22 kN, V 8.69 kN on clay → 33 922 kg (D62)', () => {
+    // 1.5 · (36 220 / 0.3 + 8 690) / (9.81 · (1 − 1000 / 2400)) = 194 135 / 5.7225 = 33 925 kg.
+    const p = { ...DEFAULT_ANCHORING, friction: { ...DEFAULT_ANCHORING.friction, clay: 0.3 }, slidingSafetyFactor: 1.5, concreteDensity: 2400, waterDensity: 1000 };
+    const m = requiredAnchorMass(36220, 8690, p);
+    expect(Math.abs(m - 33922) / 33922).toBeLessThanOrEqual(0.001);
+  });
+});
+
+describe('the anchor of one line (D62)', () => {
+  const opts = { seabed: 'clay' as const, maxPerLine: 1, maxBlockMassKg: 3000, capacitySafetyFactor: 1 };
+  const need = (blockMassKg: number, H = 10000, V = 0) => ({ H, V, blockMassKg });
+  const screw = product({
+    id: 'screw50',
+    category: 'anchor',
+    price: 1500,
+    anchorKind: 'screw',
+    capacityBasis: 'published',
+    capacityHorizontalKn: 50,
+    capacityUpliftKn: 50,
+    seabeds: ['clay'],
+    sourceUrl: 'https://example.com/screw',
+    sourceDate: '2026-11-18',
+  });
+  const withScrew = (s: Partial<Product> = {}): PriceList => ({ ...LIST, products: [...LIST.products, { ...screw, ...s }] });
+
+  it('the cheapest block heavy enough, one per line; never several', () => {
+    expect(chooseLineAnchor(need(900), opts, LIST, 25.5)).toEqual({ pick: { product: LIST.products[3], kind: 'block', count: 1, cost: 300 }, reason: null });
+    expect(chooseLineAnchor(need(1500), opts, LIST, 25.5).pick!.product.id).toBe('a2000');
+    // 8 737 kg: no single block of the list (3 000 kg at most) holds the line.
+    expect(chooseLineAnchor(need(8737), opts, LIST, 25.5)).toEqual({ pick: null, reason: 'block: needs 8 737 kg, max product 3 000 kg' });
   });
 
-  it('anchors heavier than the largest piece to be handled are not used (Chalmers 2026 §3.8)', () => {
-    // 2 500 kg with at most 2 000 kg pieces: two 2 000 kg anchors instead of one 3 000 kg.
-    expect(chooseAnchor(2500, LIST, 25.5, 2000)).toEqual({ product: LIST.products[4], count: 2 });
-    expect(chooseAnchor(2500, LIST, 25.5, 3000)).toEqual({ product: LIST.products[5], count: 1 });
-    // A limit below every anchor falls back to the whole list.
-    expect(chooseAnchor(900, LIST, 25.5, 100)).toEqual({ product: LIST.products[3], count: 1 });
+  it('two in tandem only when the user allows 2 per line', () => {
+    expect(chooseLineAnchor(need(5000), { ...opts, maxPerLine: 2 }, LIST, 25.5).pick).toMatchObject({ product: { id: 'a3000' }, count: 2, cost: 1400 });
+    expect(chooseLineAnchor(need(8737), { ...opts, maxPerLine: 2 }, LIST, 25.5).reason).toBe('block: needs 8 737 kg, max product 2 × 3 000 kg');
+  });
+
+  it('blocks heavier than the largest piece to be handled are not used (Chalmers 2026 §3.8)', () => {
+    expect(chooseLineAnchor(need(2500), { ...opts, maxBlockMassKg: 2000 }, LIST, 25.5)).toEqual({ pick: null, reason: 'block: needs 2 500 kg, max product 2 000 kg' });
+    expect(chooseLineAnchor(need(2500), { ...opts, maxBlockMassKg: 3000 }, LIST, 25.5).pick!.product.id).toBe('a3000');
+    expect(chooseLineAnchor(need(900), { ...opts, maxBlockMassKg: 100 }, LIST, 25.5).reason).toBe('block: needs 900 kg, no product within the largest piece 100 kg');
+  });
+
+  it('another kind holds the line by its published capacity', () => {
+    // The regression line: 33 922 kg as a block, or one screw anchor of 50 kN.
+    expect(chooseLineAnchor(need(33922, 36220, 8690), opts, withScrew(), 25.5)).toEqual({ pick: { product: { ...screw }, kind: 'screw', count: 1, cost: 1500 }, reason: null });
+    // A cheaper block wins where one holds the line.
+    expect(chooseLineAnchor(need(2500, 10000, 0), opts, withScrew(), 25.5).pick!.product.id).toBe('a3000');
+    // Installed price below the block's: the screw anchor.
+    expect(chooseLineAnchor(need(2500, 10000, 0), opts, withScrew({ installedPrice: 600 }), 25.5).pick).toMatchObject({ product: { id: 'screw50' }, cost: 600 });
+  });
+
+  it('a capacity factor, tandem, and what each kind lacks', () => {
+    // SF 1.5: 54.3 kN > 50 kN, and 13.0 kN uplift.
+    const sf = { ...opts, capacitySafetyFactor: 1.5 };
+    expect(chooseLineAnchor(need(33922, 36220, 8690), sf, withScrew(), 25.5).reason).toBe(
+      'block: needs 33 922 kg, max product 3 000 kg; screw: needs 54.3 kN horizontal, max product 50.0 kN; 13.0 kN uplift, max product 50.0 kN',
+    );
+    expect(chooseLineAnchor(need(33922, 36220, 8690), { ...sf, maxPerLine: 2 }, withScrew(), 25.5).pick).toMatchObject({ kind: 'screw', count: 2 });
+    // A lifting line needs an uplift capacity; a line on the bottom does not.
+    expect(chooseLineAnchor(need(33922, 36220, 8690), opts, withScrew({ capacityUpliftKn: null }), 25.5).reason).toBe(
+      'block: needs 33 922 kg, max product 3 000 kg; screw: needs 8.7 kN uplift, no uplift capacity published',
+    );
+    expect(chooseLineAnchor(need(30000, 36220, 0), opts, withScrew({ capacityUpliftKn: null }), 25.5).pick!.kind).toBe('screw');
+    // Never chosen without a published capacity, or on a seabed it does not list.
+    expect(chooseLineAnchor(need(33922, 36220, 0), opts, withScrew({ capacityHorizontalKn: null, capacityUpliftKn: null, capacityBasis: null }), 25.5).reason).toBe(
+      'block: needs 33 922 kg, max product 3 000 kg; screw: no published capacity in the price list',
+    );
+    expect(chooseLineAnchor(need(33922, 36220, 0), { ...opts, seabed: 'sand' }, withScrew(), 25.5).reason).toBe('block: needs 33 922 kg, max product 3 000 kg; screw: none for sand');
+    expect(chooseLineAnchor(need(33922, 36220, 0), opts, withScrew({ seabeds: [] }), 25.5).reason).toContain('screw: none for clay');
+    // Stern-buoy sinkers are blocks only.
+    expect(chooseLineAnchor(need(33922, 36220, 0), { ...opts, blocksOnly: true }, withScrew(), 25.5).reason).toBe('block: needs 33 922 kg, max product 3 000 kg');
+  });
+
+  it('the cost compared includes the installation when the price is the supply price', () => {
+    const rates: PriceList = {
+      ...LIST,
+      products: [...LIST.products, product({ id: 'rate-diving-team', category: 'labour', unit: 'h', price: 180 }), product({ id: 'rate-work-boat', category: 'plant', unit: 'day', price: 800 })],
+      parameters: [{ key: 'diver_h_per_anchor', value: 1, unit: 'h', description: '', source: 'Assumption.' }, { key: 'diver_h_per_tonne', value: 0.5, unit: 'h', description: '', source: 'Assumption.' }, { key: 'anchors_per_boat_day', value: 8, unit: 'pcs', description: '', source: 'Assumption.' }],
+    };
+    // 700 € + (1 h + 0.5 h/t · 3 t) · 180 €/h + 800 € / 8 = 700 + 450 + 100 = 1 250 €.
+    expect(anchorPieceCost(LIST.products[5]!, rates, 25.5)).toBeCloseTo(1250, 9);
+    // An installed price stands alone.
+    expect(anchorPieceCost({ ...LIST.products[5]!, installedPrice: 999 }, rates, 25.5)).toBe(999);
+    expect(groupThousands(33922.4)).toBe('33 922');
+  });
+
+  it('older price lists: the per-line installation keys stand in', () => {
+    const old: PriceList = { ...LIST, parameters: [{ key: 'diver_h_per_anchor_line', value: 2, unit: 'h', description: '', source: '' }, { key: 'boat_days_per_10_anchor_lines', value: 2, unit: 'day', description: '', source: '' }] };
+    expect(installParams(old)).toEqual({ diverHoursPerAnchor: 2, diverHoursPerTonne: 0, anchorsPerBoatDay: 5, workBoatMaxLiftKg: 3000, legacyKeys: ['diver_h_per_anchor_line', 'boat_days_per_10_anchor_lines'] });
+    expect(installParams(LIST)).toEqual({ diverHoursPerAnchor: 1, diverHoursPerTonne: 0, anchorsPerBoatDay: 10, workBoatMaxLiftKg: 3000, legacyKeys: [] });
   });
 });
 
@@ -330,15 +409,27 @@ describe('anchoring plan of a pier', () => {
     // On sand 1.5 · (3 970 / 0.6 + V) / (9.81 · 0.583) = 1 735 kg + uplift.
     expect(mass).toBeGreaterThan(1735);
     expect(line.anchorId).toBe(mass <= 2000 ? 'a2000' : 'a3000');
-    expect(line.anchorCount).toBe(1);
-    expect(plan.issues.some((i) => i.code === 'SEVERAL_ANCHORS')).toBe(false);
+    expect(line).toMatchObject({ anchorCount: 1, anchorKind: 'block', status: 'OK', infeasibleReason: null });
+    expect(plan.issues.some((i) => i.code === 'ANCHOR_INFEASIBLE')).toBe(false);
     expect(plan.issues.some((i) => i.code === 'ANCHORING_NOT_A_DESIGN')).toBe(true);
-    // On clay (μ 0.3) about twice that, over 3 000 kg: two 3 000 kg anchors per line.
+    // On clay (μ 0.3) about twice that, over 3 000 kg: no block of the list holds a line alone (D62).
     const onClay = anchoringPlan({ layout: { piers: [pier], berths }, site: pierSite, classes: [boat], params: { ...params, seabed: 'clay' }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
-    expect(onClay.lines[0]!.requiredAnchorKg).toBeGreaterThan(3470);
-    expect(onClay.lines[0]!.anchorId).toBe('a3000');
-    expect(onClay.lines[0]!.anchorCount).toBe(2);
-    expect(onClay.issues.some((i) => i.code === 'SEVERAL_ANCHORS')).toBe(true);
+    const first = onClay.lines[0]!;
+    expect(first.requiredAnchorKg).toBeGreaterThan(3470);
+    expect(first).toMatchObject({ status: 'INFEASIBLE', anchorId: null, anchorKind: null, anchorCount: 0 });
+    expect(first.infeasibleReason).toBe(`block: needs ${groupThousands(first.requiredAnchorKg)} kg, max product 3 000 kg`);
+    expect(onClay.lines.every((l) => l.anchorCount <= 1)).toBe(true);
+    const issue = onClay.issues.find((i) => i.code === 'ANCHOR_INFEASIBLE')!;
+    expect(issue.elementId).toBe('P1');
+    expect(issue.message).toMatch(/^P1: \d+ of 10 anchor lines INFEASIBLE: no anchor of the price list holds them with at most 1 anchor per line/);
+    expect(issue.message).toContain('closer lines are not a fix');
+    expect(onClay.issues.some((i) => i.code === 'TANDEM_ANCHORS')).toBe(false);
+    // Two in tandem only by the user's choice, with a warning.
+    const tandem = anchoringPlan({ layout: { piers: [pier], berths }, site: pierSite, classes: [boat], params: { ...params, seabed: 'clay', maxAnchorsPerLine: 2 }, priceList: LIST, vatPct: 25.5, pierFreeboard: 0.5 });
+    // The cheapest pair that holds: 2 × 2 000 kg (960 €) rather than 2 × 3 000 kg (1 400 €).
+    expect(tandem.lines[0]).toMatchObject({ status: 'OK', anchorId: 'a2000', anchorCount: 2 });
+    expect(2 * 2000).toBeGreaterThanOrEqual(tandem.lines[0]!.requiredAnchorKg);
+    expect(tandem.issues.find((i) => i.code === 'TANDEM_ANCHORS')!.message).toMatch(/^\d+ lines have 2 anchors in tandem \(maxAnchorsPerLine = 2, the user's choice/);
   });
 
   it('shore chains under the gangway of a pier 4 m off the wall (D49)', () => {

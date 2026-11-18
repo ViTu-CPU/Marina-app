@@ -306,6 +306,9 @@ export function buildDxf(input: DxfInput): string {
         const side = blocks.find((b) => b.name === name)!.length;
         // The symbol centred on the anchor point.
         e.insert('ANCHORS', name, add(l.anchor, { x: -side / 2, y: 0 }), 0);
+      } else if (l.status === 'INFEASIBLE') {
+        // D62: no anchor of the price list holds the line.
+        e.text('ANCHORS', l.anchor, 0.8, 'ANCHOR BY DESIGN');
       }
     }
   }

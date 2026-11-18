@@ -37,11 +37,14 @@
  *     V = H · sinh(atanh(h/L) − X/2a), at the pontoon T = √(H² + (V + wL)²).
  *  5. Chain: the cheapest chain of the price list with a published breaking load such that
  *     MBL · ((d − c)/d)² ≥ SF · T (c = corrosion allowance on the diameter).
- *  6. Anchor: submerged weight ≥ SF_slide · (H / μ + V); mass = that / (g (1 − ρ_w/ρ_c)).
- *     The cheapest concrete anchor of the price list at least that heavy and not heavier
- *     than the largest piece to be handled; otherwise several of the heaviest such piece.
- *     Friction only: the extra holding of an anchor embedded in the seabed is not counted
- *     (it depends on penetration, which is not known at this stage; Chalmers 2026 §7.5).
+ *  6. Anchor (D62, engine/anchorChoice.ts): a block needs the submerged weight
+ *     SF_slide · (H / μ + V); mass = that / (g (1 − ρ_w/ρ_c)). Friction only: the extra holding
+ *     of an anchor embedded in the seabed is not counted (it depends on penetration, which is
+ *     not known at this stage; Chalmers 2026 §7.5). Per line the cheapest anchor of the price
+ *     list that suits the seabed and holds it with at most `maxAnchorsPerLine` pieces (default
+ *     1): a block no heavier than the largest piece to be handled, or another kind by its
+ *     published capacity. When none does, the line is INFEASIBLE (not priced; anchor point by
+ *     geotechnical and mooring design); the mass is never split over more anchors.
  *  7. Stern buoys (D36, D37, I79–I85): one line per stern-buoy berth, from the buoy straight
  *     down to its sinker. Sinker, chain size and float from a selection table by boat weight
  *     (default Svenska Båtunionen's Hamnhandboken 2016, Tabell 3; or Top Marine's), one row up
@@ -50,7 +53,8 @@
  *     the chain is at least the table's size and strong enough for the boat's stern-on wind.
  *     The friction method of step 6 is shown for comparison.
  */
-import { unitPriceVat0, type PriceList, type Product, type SeabedType } from './catalog';
+import { chooseLineAnchor, installParams } from './anchorChoice';
+import { unitPriceVat0, type AnchorKind as ProductAnchorKind, type PriceList, type Product, type SeabedType } from './catalog';
 import { breakwaterJoints, breakwaterProductOf, breakwatersOf } from './breakwater';
 import { add, distance, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
 import type { BoatClass, Finger, Issue, Layout, MainPier, Site, Vec2 } from './model';
@@ -136,8 +140,20 @@ export interface AnchoringParams {
   friction: Record<Seabed, number>;
   /** Chain length as a multiple of the water depth at high water (at least depth + 1 m). */
   chainLengthFactor: number;
-  /** Heaviest single concrete anchor to be handled, kg; heavier needs give several anchors. */
+  /** Heaviest single concrete anchor to be handled, kg; heavier products are not chosen (D62). */
   maxAnchorMass: number;
+  /**
+   * D62: at most this many anchors on one line: 1 (default) or 2 (tandem, the user's choice, with a
+   * warning). A line that no anchor of the price list holds within it is INFEASIBLE; the mass is
+   * never split over more anchors.
+   */
+  maxAnchorsPerLine: number;
+  /**
+   * D62: factor of safety on the published capacities of anchors other than blocks:
+   * factor × H ≤ pieces × capacity_horizontal_kn (and the same for uplift). 1 = the published
+   * figures are working loads that already include the supplier's factor (Assumption).
+   */
+  capacitySafetyFactor: number;
   /**
    * Main piers at least this long get two crossed tip chains (D30), m. A value longer than
    * every pier turns them off.
@@ -176,6 +192,9 @@ export interface AnchoringParams {
  *    hence no corrosion allowance by default.
  *  - maxAnchorMass 3000 kg: SF Marina prefers anchors of about 3 t or less for smaller
  *    installations (Chalmers 2026 §3.8).
+ *  - maxAnchorsPerLine 1 (D62): one anchor per line; Chalmers 2026 notes that several anchors on
+ *    one line do not necessarily hold as much as one anchor of the same mass.
+ *  - capacitySafetyFactor 1 (D62, Assumption): published capacities taken as working loads.
  *  - concreteDensity 2400 kg/m³: "about 150 pounds per cubic foot" (DBW 2005, App. A p. 90).
  *  - friction sand 0.6: smooth concrete on quartz sand (Sound & Sea Technology 2009, Table 33).
  *  - anchorType 'block': the concrete anchors of the price list are plain blocks; kept as the
@@ -222,6 +241,8 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   friction: { sand: 0.6, clay: 0.3, rock: 0.5 },
   chainLengthFactor: 4,
   maxAnchorMass: 3000,
+  maxAnchorsPerLine: 1,
+  capacitySafetyFactor: 1,
   tipAnchorMinLength: 10,
   fingerPileMinLength: 12,
   anchorType: 'block',
@@ -306,11 +327,21 @@ export interface AnchorLine {
   upliftAngleDeg: number;
   /** How the anchor was sized: 'wedge' only where the wedge tables apply (not on rock); null for wall lines. */
   anchorType: AnchorType | null;
-  /** Required anchor mass in air, kg. */
+  /** Required mass in air of a concrete block anchor for this line, kg. */
   requiredAnchorKg: number;
   anchorId: string | null;
-  /** Number of anchors (more than 1 only when no single anchor is heavy enough). */
+  /** D62: price-list kind of the chosen anchor; null for wall lines and INFEASIBLE lines. */
+  anchorKind: ProductAnchorKind | null;
+  /** Number of anchors: at most `maxAnchorsPerLine` (D62); 0 for wall lines and INFEASIBLE lines. */
   anchorCount: number;
+  /**
+   * D62: 'OK' when an anchor of the price list holds the line within `maxAnchorsPerLine` (wall
+   * lines: always, their fixing is not checked); 'INFEASIBLE' when none does: the anchor point is
+   * not priced and needs a geotechnical and mooring design.
+   */
+  status: 'OK' | 'INFEASIBLE';
+  /** D62: why the line is INFEASIBLE, e.g. "block: needs 33 922 kg, max product 3 000 kg"; null when OK. */
+  infeasibleReason: string | null;
   /** Stern buoys only (D36). */
   buoy?: BuoyDetails;
 }
@@ -721,28 +752,6 @@ export function requiredAnchorMass(H: number, V: number, p: AnchoringParams): nu
   return submerged / (G * (1 - p.waterDensity / p.concreteDensity));
 }
 
-/**
- * The cheapest single anchor of at least `mass` kg, else the heaviest one several times.
- * Only anchors up to `maxPiece` kg are considered (all when none is that light).
- */
-export function chooseAnchor(mass: number, list: PriceList, vatPct: number, maxPiece = Infinity): { product: Product; count: number } | null {
-  const priced = list.products.filter(
-    (x) => x.category === 'anchor' && x.anchorMassKg !== null && x.anchorMassKg > 0 && unitPriceVat0(x, vatPct) !== null,
-  );
-  const handleable = priced.filter((x) => x.anchorMassKg! <= maxPiece);
-  const anchors = handleable.length > 0 ? handleable : priced;
-  if (anchors.length === 0) return null;
-  const heavyEnough = anchors.filter((x) => x.anchorMassKg! >= mass);
-  if (heavyEnough.length > 0) {
-    heavyEnough.sort(
-      (x, y) => unitPriceVat0(x, vatPct)! - unitPriceVat0(y, vatPct)! || x.anchorMassKg! - y.anchorMassKg! || (x.id < y.id ? -1 : 1),
-    );
-    return { product: heavyEnough[0]!, count: 1 };
-  }
-  const heaviest = anchors.reduce((a, b) => (b.anchorMassKg! > a.anchorMassKg! ? b : a));
-  return { product: heaviest, count: Math.ceil(mass / heaviest.anchorMassKg!) };
-}
-
 /** Stations at the ends of a pontoon lie this far in from them, m. */
 const STATION_INSET = 0.5;
 
@@ -889,6 +898,31 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   const lines: AnchorLine[] = [];
   const loads: AnchoringResult['loads'] = [];
   const unheld: string[] = [];
+  // D62: the anchor of each line, at most `maxAnchorsPerLine` pieces.
+  const install = installParams(priceList);
+  const maxPerLine = Math.min(2, Math.max(1, Math.round(p.maxAnchorsPerLine)));
+  const lineAnchor = (H: number, V: number, mass: number, blocksOnly: boolean, wedge: boolean) =>
+    chooseLineAnchor(
+      { H, V, blockMassKg: mass },
+      {
+        seabed: p.seabed,
+        maxPerLine,
+        maxBlockMassKg: p.maxAnchorMass,
+        capacitySafetyFactor: p.capacitySafetyFactor,
+        blocksOnly,
+        blockLabel: wedge ? 'block (wedge sizing)' : 'block',
+      },
+      priceList,
+      vatPct,
+      install,
+    );
+  /** The anchor fields of a line from the choice. */
+  const anchorFields = (choice: ReturnType<typeof lineAnchor>): Pick<AnchorLine, 'anchorId' | 'anchorKind' | 'anchorCount' | 'status' | 'infeasibleReason'> =>
+    choice.pick
+      ? { anchorId: choice.pick.product.id, anchorKind: choice.pick.kind, anchorCount: choice.pick.count, status: 'OK', infeasibleReason: null }
+      : { anchorId: null, anchorKind: null, anchorCount: 0, status: 'INFEASIBLE', infeasibleReason: choice.reason };
+  /** Wall lines (shore chains) have no seabed anchor. */
+  const WALL_ANCHOR = { anchorId: null, anchorKind: null, anchorCount: 0, status: 'OK', infeasibleReason: null } as const;
 
   const piers: Held[] = layout.piers.map((pier) => ({
     id: pier.id,
@@ -1040,7 +1074,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     const upAngle = upliftAngle(H, uplift);
     const wedgeMass = usesWedge(p) && chain ? requiredWedgeMass(H, upAngle, p) : null;
     const mass = wedgeMass ?? requiredAnchorMass(H, uplift, p);
-    const anchor = chooseAnchor(mass, priceList, vatPct, p.maxAnchorMass);
+    const choice = lineAnchor(H, uplift, mass, false, wedgeMass !== null);
     const length = chain?.length ?? chainLengthFor(hHigh, p);
     const span = chain ? chain.span : Math.sqrt(length * length - hHigh * hHigh);
     lines.push({
@@ -1062,17 +1096,9 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       chainLength: length,
       chainId: chain?.product.id ?? null,
       requiredAnchorKg: mass,
-      anchorId: anchor?.product.id ?? null,
-      anchorCount: anchor?.count ?? 0,
+      ...anchorFields(choice),
     });
     if (!chain) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(H / 1000).toFixed(1)} kN with the safety factor; line ${l.id} has no chain.`, l.holdsId);
-    if (anchor && anchor.count > 1) {
-      warn(
-        'SEVERAL_ANCHORS',
-        `Line ${l.id} needs ${Math.round(mass)} kg: ${anchor.count} anchors of ${anchor.product.anchorMassKg} kg. Several anchors on one line do not necessarily hold as much as one anchor of the same total mass.`,
-        l.holdsId,
-      );
-    }
   };
 
   for (const item of held) {
@@ -1156,8 +1182,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
             chainLength: shore.length,
             chainId: shore.product?.id ?? null,
             requiredAnchorKg: 0,
-            anchorId: null,
-            anchorCount: 0,
+            ...WALL_ANCHOR,
           });
           if (!shore.product) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(shore.tension / 1000).toFixed(1)} kN with the safety factor; shore chain ${id} has no chain.`, item.id);
         });
@@ -1229,8 +1254,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
           chainLength: shore.length,
           chainId: shore.product?.id ?? null,
           requiredAnchorKg: 0,
-          anchorId: null,
-          anchorCount: 0,
+          ...WALL_ANCHOR,
         });
         if (!shore.product) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(shore.tension / 1000).toFixed(1)} kN with the safety factor; shore chain ${id} has no chain.`, item.id);
       }
@@ -1261,7 +1285,8 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     const chain = chooseChain(H, hHigh, p, priceList, vatPct, { length, minDiameterMm: row.chainMm });
     const uplift = chain?.uplift ?? 0;
     const mass = p.buoySinkerMethod === 'table' ? row.sinkerKg : p.buoySinkerFactor * weight * 1000;
-    const anchor = chooseAnchor(mass, priceList, vatPct, p.maxAnchorMass);
+    // D62: sinkers are concrete blocks sized by mass (the table), one per buoy unless tandem.
+    const choice = lineAnchor(H, uplift, mass, true, false);
     const chainMass = chain ? chain.product.massKgPerM! * length * (1 - p.waterDensity / p.steelDensity) : 0;
     const line: AnchorLine = {
       id: `${b.id}-B`,
@@ -1280,8 +1305,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       upliftAngleDeg: upliftAngle(H, uplift),
       anchorType: 'block',
       requiredAnchorKg: mass,
-      anchorId: anchor?.product.id ?? null,
-      anchorCount: anchor?.count ?? 0,
+      ...anchorFields(choice),
       buoy: {
         boatWeightT: weight,
         weightEstimated,
@@ -1299,14 +1323,13 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   lines.push(...buoyLines);
   if (buoyLines.length > 0) {
     const heaviest = buoyLines.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
-    const several = buoyLines.filter((l) => l.anchorCount > 1).length;
     const sinker =
       p.buoySinkerMethod === 'table'
         ? `the sinker of ${tableName}${p.buoyTable === 'batunionen' ? ' (its weight in water as concrete in air)' : ''}`
         : `${p.buoySinkerFactor.toFixed(1)} × the boat’s weight (Top Marine’s rule of thumb, 3–5 × in sheltered waters; no other source found supports it)`;
     warn(
       'STERN_BUOYS',
-      `${buoyLines.length} stern buoys, each on its own sinker: ${sinker}${p.buoyExposed ? ', one row up for an exposed harbour' : ''}, heaviest ${Math.round(heaviest)} kg${several > 0 ? ` (${several} buoys need several anchors of at most ${Math.round(p.maxAnchorMass)} kg)` : ''}. Chain ${buoyLines[0]!.chainLength.toFixed(1)} m = the larger of ${p.buoyChainFactor.toFixed(2)} × the design depth and the depth at high water + ${p.buoyLift.toFixed(1)} m, at least the size of ${tableName} and strong enough for the boat’s stern-on wind; float of at least the table’s buoyancy and the chain’s weight in water. The wind on the boats broadside is left to the piers.`,
+      `${buoyLines.length} stern buoys, each on its own sinker: ${sinker}${p.buoyExposed ? ', one row up for an exposed harbour' : ''}, heaviest ${Math.round(heaviest)} kg. Chain ${buoyLines[0]!.chainLength.toFixed(1)} m = the larger of ${p.buoyChainFactor.toFixed(2)} × the design depth and the depth at high water + ${p.buoyLift.toFixed(1)} m, at least the size of ${tableName} and strong enough for the boat’s stern-on wind; float of at least the table’s buoyancy and the chain’s weight in water. The wind on the boats broadside is left to the piers.`,
     );
     const light = buoyLines.filter((l) => l.buoy!.windAnchorKg > l.requiredAnchorKg + 1e-6);
     if (light.length > 0) {
@@ -1393,6 +1416,43 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     if (piles.some((x) => x.guide === null)) {
       warn('PILE_LOAD_ABOVE_STANDARD_GUIDES', `${piles.filter((x) => x.guide === null).length} end piles need more than the 70 kN of Marinetek's strongest standard guide (G700).`);
     }
+  }
+
+  // D62: lines that no anchor of the price list holds within `maxAnchorsPerLine`, per pontoon (stern
+  // buoys together), and lines with two anchors in tandem.
+  const heaviestBlock = priceList.products
+    .filter((x) => x.category === 'anchor' && (x.anchorKind ?? 'block') === 'block' && x.anchorMassKg !== null && x.anchorMassKg <= p.maxAnchorMass + 1e-9)
+    .reduce((m, x) => Math.max(m, x.anchorMassKg!), 0);
+  const infeasible = new Map<string, { lines: AnchorLine[]; total: number; elementId: string }>();
+  for (const l of lines) {
+    if (l.fixing !== 'seabed') continue;
+    const key = l.role === 'buoy' ? 'stern buoys' : l.holdsId;
+    const entry = infeasible.get(key) ?? { lines: [], total: 0, elementId: l.holdsId };
+    entry.total++;
+    if (l.status === 'INFEASIBLE') entry.lines.push(l);
+    infeasible.set(key, entry);
+  }
+  for (const [what, e] of infeasible) {
+    if (e.lines.length === 0) continue;
+    const worst = e.lines.reduce((a, l) => (l.requiredAnchorKg > a.requiredAnchorKg ? l : a));
+    const ratio = heaviestBlock > 0 ? worst.requiredAnchorKg / (maxPerLine * heaviestBlock) : 0;
+    warn(
+      'ANCHOR_INFEASIBLE',
+      `${what}: ${e.lines.length} of ${e.total} anchor lines INFEASIBLE: no anchor of the price list holds them with at most ${maxPerLine} anchor${maxPerLine > 1 ? 's' : ''} per line (worst ${worst.id}: ${worst.infeasibleReason}). Their anchor points are not priced: type and size by geotechnical and mooring design (e.g. screw anchors, piles, rock bolts or embedded anchors; add products with published capacities to the price list).${
+        ratio > 1 ? ` The load per line falls only in proportion to the line spacing: the worst line needs ${ratio.toFixed(1)} × the heaviest block allowed per line, so closer lines are not a fix.` : ''
+      }${what !== 'stern buoys' && !usesWedge(p) && p.seabed !== 'rock' ? ' The comparison row shows the same plan with wedge anchors (shaped concrete anchors that dig in).' : ''}`,
+      e.elementId,
+    );
+  }
+  const tandem = lines.filter((l) => l.anchorCount > 1);
+  if (tandem.length > 0) {
+    warn(
+      'TANDEM_ANCHORS',
+      `${tandem.length} lines have 2 anchors in tandem (maxAnchorsPerLine = 2, the user's choice; ${tandem
+        .slice(0, 5)
+        .map((l) => l.id)
+        .join(', ')}${tandem.length > 5 ? ', …' : ''}). Two anchors on one line do not necessarily hold as much as one anchor of the same total mass (Chalmers 2026); the arrangement needs the mooring designer's approval.`,
+    );
   }
 
   if (unheld.length > 0) {

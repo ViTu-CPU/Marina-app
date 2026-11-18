@@ -9,8 +9,8 @@
  *   subtotal     = materials + labour + plant
  *   total VAT 0  = subtotal × (1 + overheads) × (1 + contingency)
  */
-import type { AnchoringResult } from './anchoring';
-import { DEFAULT_VAT_PCT, parameter, unitPriceVat0, type PriceList, type Product, type ProductUnit } from './catalog';
+import type { AnchoringResult, AnchorLine } from './anchoring';
+import { DEFAULT_VAT_PCT, installedPriceVat0, parameter, unitPriceVat0, type PriceList, type Product, type ProductUnit } from './catalog';
 import { distance, distancePointToPolyline } from './geometry';
 import type { CostSettings, Layout, Params, Site } from './model';
 import { rowFrame, toLocalRect } from './rows';
@@ -19,6 +19,10 @@ import { gangwayClearWidth } from './as3962';
 import { breakwaterModules, breakwaterProductOf, breakwatersOf } from './breakwater';
 
 export type BomGroup = 'pontoons' | 'fingers' | 'gangways' | 'anchoring' | 'fittings' | 'labour' | 'plant';
+
+/** D62: the BOM row of the anchor points that no anchor of the price list holds (INFEASIBLE lines). */
+export const ANCHOR_BY_DESIGN_ID = 'anchor-point-by-design';
+export const ANCHOR_BY_DESIGN_NAME = 'Anchor point – type and size by geotechnical/mooring design';
 export const BOM_GROUPS: BomGroup[] = ['pontoons', 'fingers', 'gangways', 'anchoring', 'fittings', 'labour', 'plant'];
 
 export interface BomLine {
@@ -231,12 +235,17 @@ export function costEstimate(input: CostInput): CostEstimate {
   const notes: string[] = [];
   const byId = new Map(list.products.map((p) => [p.id, p]));
 
-  /** Accumulated quantities per product and group, with the reasons. */
-  const acc = new Map<string, { group: BomGroup; product: Product; quantity: number; basis: string[] }>();
-  const addQty = (group: BomGroup, product: Product, quantity: number, basis: string) => {
+  /**
+   * Accumulated quantities per product and group, with the reasons. D62: an anchor with an
+   * installed price is priced at it ('installed': supply and installation).
+   */
+  const acc = new Map<string, { group: BomGroup; product: Product; quantity: number; basis: string[]; installed: boolean }>();
+  /** Rows without a product of the price list (D62: anchor points by design). */
+  const extra: BomLine[] = [];
+  const addQty = (group: BomGroup, product: Product, quantity: number, basis: string, installed = false) => {
     if (quantity <= 0) return;
-    const key = `${group}|${product.id}`;
-    const entry = acc.get(key) ?? { group, product, quantity: 0, basis: [] };
+    const key = `${group}|${product.id}${installed ? '|installed' : ''}`;
+    const entry = acc.get(key) ?? { group, product, quantity: 0, basis: [], installed };
     entry.quantity += quantity;
     entry.basis.push(basis);
     acc.set(key, entry);
@@ -353,6 +362,8 @@ export function costEstimate(input: CostInput): CostEstimate {
     return enough[0] ?? candidates.sort((a, b) => size(b)! - size(a)!)[0] ?? null;
   };
   let missingChain = 0;
+  /** D62: lines that no anchor of the price list holds (not priced: by design). */
+  const byDesign: AnchorLine[] = [];
   /** Stern buoys (D36) without a float of the needed buoyancy in the list. */
   let smallFloats = 0;
   let buoyLines = 0;
@@ -361,7 +372,8 @@ export function costEstimate(input: CostInput): CostEstimate {
     if (chain) addQty('anchoring', chain, line.chainLength, line.id);
     else missingChain++;
     const anchor = line.anchorId ? byId.get(line.anchorId) : undefined;
-    if (anchor) addQty('anchoring', anchor, line.anchorCount, line.id);
+    if (anchor) addQty('anchoring', anchor, line.anchorCount, line.id, installedPriceVat0(anchor, vat) !== null);
+    else if (line.status === 'INFEASIBLE') byDesign.push(line);
     const d = chain?.chainDiameterMm ?? 0;
     if (line.buoy) {
       // A stern buoy: float, sinker and chain with its shackles, as in Top Marine's buoy
@@ -385,6 +397,28 @@ export function costEstimate(input: CostInput): CostEstimate {
     if (anode) addQty('anchoring', anode, par('anodes_per_anchor_line', 1), line.id);
   }
   if (missingChain > 0) notes.push(`${missingChain} anchor lines have no chain strong enough in the price list; their chain is not priced.`);
+  if (byDesign.length > 0) {
+    const where = [...new Set(byDesign.map((l) => (l.role === 'buoy' ? 'stern buoys' : l.holdsId)))];
+    const worst = byDesign.reduce((a, l) => (l.requiredAnchorKg > a.requiredAnchorKg ? l : a));
+    extra.push({
+      group: 'anchoring',
+      productId: ANCHOR_BY_DESIGN_ID,
+      name: ANCHOR_BY_DESIGN_NAME,
+      supplier: '',
+      unit: 'pcs',
+      quantity: byDesign.length,
+      orderQuantity: byDesign.length,
+      unitPrice: null,
+      total: null,
+      basis: `${byDesign.length} INFEASIBLE lines (${where.join(', ')})`,
+      sourceUrl: '',
+      sourceDate: '',
+      note: `No anchor of the price list holds these lines within the anchors allowed per line (worst ${worst.id}: ${worst.infeasibleReason}). Supply and installation are not priced.`,
+    });
+    notes.push(
+      `${byDesign.length} anchor lines are INFEASIBLE (${where.join(', ')}): no anchor of the price list holds them; their anchor points are not priced and need a geotechnical and mooring design. Their chains are priced.`,
+    );
+  }
   if (buoyLines > 0 && !list.products.some((p) => p.category === 'buoy' && p.capacityKg !== null && priced(p, vat) !== null)) {
     notes.push('No buoy floats with a buoyancy in the price list: the stern buoys are not priced.');
   }
@@ -482,15 +516,15 @@ export function costEstimate(input: CostInput): CostEstimate {
   const lines: BomLine[] = [];
   let missingPrices = 0;
   for (const group of BOM_GROUPS) {
-    for (const { product, quantity, basis } of [...acc.values()].filter((e) => e.group === group)) {
+    for (const { product, quantity, basis, installed } of [...acc.values()].filter((e) => e.group === group)) {
       const withMargin = quantity * (1 + product.marginPct / 100);
       const orderQuantity = product.unit === 'pcs' ? Math.ceil(withMargin - 1e-9) : Math.round(withMargin * 10) / 10;
-      const unitPrice = priced(product, vat);
+      const unitPrice = installed ? installedPriceVat0(product, vat) : priced(product, vat);
       if (unitPrice === null) missingPrices++;
       lines.push({
         group,
         productId: product.id,
-        name: product.name,
+        name: installed ? `${product.name} (installed)` : product.name,
         supplier: product.supplier,
         unit: product.unit,
         quantity,
@@ -500,8 +534,12 @@ export function costEstimate(input: CostInput): CostEstimate {
         basis: basis.length > 4 ? `${basis.length} items` : basis.join('; '),
         sourceUrl: product.sourceUrl,
         sourceDate: product.sourceDate,
-        note: product.note,
+        note: installed ? `Installed price: supply and installation.${product.note ? ` ${product.note}` : ''}` : product.note,
       });
+    }
+    for (const l of extra.filter((x) => x.group === group)) {
+      if (l.unitPrice === null) missingPrices++;
+      lines.push(l);
     }
   }
   if (missingPrices > 0) notes.push(`${missingPrices} lines have no price; they are not in the totals.`);
