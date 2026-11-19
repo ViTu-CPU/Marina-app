@@ -122,22 +122,28 @@ fairway in front of every berth, connection to the entrance, pier connected to t
 - Piers built from pontoon modules (default Marinetek Premier 2700: 19,90 / 16,05 / 12,20 m, at
   most two shorter modules per pier), 4 m off the shore with a 6 m gangway; berth types finger
   pier, Y-boom, mixed (booms for small boats, fingers for large) and stern buoy.
-- Anchoring plan for one design depth, shown as a map layer: chains from every pontoon joint
-  in an X pattern (towards the head and the shore on both sides), two crossed shore chains
-  under each pier's gangway, the AS 3962 minimum wave load (2 kN/m) from the directions with
-  open water, and anchors per pier and access pontoon, chain and anchor chosen from the price list
-  by breaking load and required mass; anchor type concrete block (friction) or concrete wedge
-  (Pearl Harbor type, published capacities). **At most one anchor per line** (two only as a
-  tandem choice); other anchor kinds (screw, pile, rock bolt, drag) are chosen only by their
-  published capacity in the price list. A line that no anchor of the price list holds is shown
-  as INFEASIBLE and its anchor point is left unpriced ("type and size by geotechnical/mooring
-  design"). Main piers of 10 m or more get two crossed chains
-  at their head; fingers longer than 12 m get an end pile (Marinetek; not priced). An access pontoon in front of the shore has
-  chains on the water side only and is held off the wall by two shore chains at each of its
-  gangways (placed by the user, or one at its middle) and by the piers attached to it. Each
-  stern buoy gets its own sinker, chain and float from Svenska Båtunionen's table by boat weight
-  (or Top Marine's, or factor × boat weight), chain at a 1:1 slope. All factors are editable; a quantity estimate, not a
-  mooring design.
+- Anchoring plan sized after the owner's mooring specification
+  ([docs/ANKKUROINTI_MITOITUS_SPEC.md](docs/ANKKUROINTI_MITOITUS_SPEC.md)), shown as a map layer:
+  chains from every pontoon joint in an X pattern (towards the head and the shore on both sides),
+  two crossed shore chains under each pier's gangway, a crossed pair at the head of main piers of
+  10 m or more; AS 3962:2020 loads in four directions (30 s design wind, Table 4.4 windage, minimum
+  wave load 2 kN/m, current), the catenary at low and high water, chains with factor of safety 3 and
+  concrete anchors by friction (NAVFAC, by seabed) or an optional cohesive model. Concrete anchors of
+  **at most 5 t, one per line**; a line that needs more takes a **pile anchor** (length and section by
+  geotechnical design, unpriced unless the price list has one). The result view shows the
+  specification's disclaimer, the load table, the governing case of every line with its factors of
+  safety in colour, and exports a data package for the manufacturer of an elastic mooring.
+- Design depth from the mean depth around the site position (EMODnet at sea, SYKE lake depth zones)
+  when a position is known, else as entered (default 4 m).
+- An access pontoon in front of the shore is held by the piers attached to it and by two shore chains
+  at each of its gangways (placed by the user, or one at its middle); without piers it has chains of
+  its own on the water side. Fingers longer than 12 m get an end pile (Marinetek; not priced). Each
+  stern buoy gets its own sinker, chain and float from Svenska Båtunionen's table by boat weight (or
+  Top Marine's, or factor × boat weight), chain at a 1:1 slope. All factors are editable; a
+  preliminary sizing, not a mooring design.
+- Rescue ladders every 40 m, safety equipment posts every 80 m (Top Marine) and power and water
+  pedestals (one socket per berth, four per pedestal, an assumption) on every pier and access
+  pontoon: drawn, counted and priced.
 - Bill of materials and cost estimate: pontoon modules, fingers, gangways, anchoring
   hardware, fittings, labour and plant, with site overheads, contingency, VAT 25.5 % on the
   total and a range. Every line shows its basis and source. Everything the estimate needs but
@@ -215,21 +221,16 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   layouts, not provably optimal ones.
 - Fairway width is a single rule (factor × boat length, with a minimum). There is no
   turning-basin check.
-- One design water depth per project (no soundings). The anchoring plan covers wind and the
-  AS 3962 minimum wave load: no wave dynamics, currents, ice or berthing loads, no structural
-  check of pontoons and fixings. With waves the friction-only concrete blocks come out several
-  times heavier than in practice (docs/DECISIONS.md I99). With the default clay friction 0.3
-  the demos' lines need more than the heaviest 3 t block of the built-in price list, so their
-  anchor points are INFEASIBLE and unpriced (D62): the anchor type needs geotechnical data and
-  a mooring design, or price-list products with published capacities.
-  Wind loads follow UFC 4-152-07 and the defaults have public sources where one was found
-  (docs/RESEARCH.md §5, §9). Plain concrete blocks hold by friction and come out heavier
-  than suppliers' standard packages; the wedge (Pearl Harbor type) option uses published
-  working capacities and needs longer chains. The chains of a pier are splayed towards its
-  ends (default 45°, a weak source) so that they also hold the wind along the pier; how
-  real installations take that load is not documented publicly (docs/DECISIONS.md I49,
-  I54–I61, D25, D46). Nothing is checked against RIL 201-3-2013; AS 3962-2001 is used for
-  advisory checks only.
+- One design water depth per project (the mean of open depth data around the position, or entered;
+  no soundings). The anchoring plan follows the owner's specification: no wave dynamics, berthing
+  loads or ice design (ice loads are reported only), no structural check of pontoons, joints or wall
+  fixings, no moment or stiffness distribution between the legs. With the specification's minimum wave
+  load and friction-only concrete anchors, the demos' lines need 18–48 t each, so every line takes a
+  pile anchor (docs/DECISIONS.md D64): the specification does not hide this difference from practice.
+  Only a wave analysis, soil data for the cohesive model or a documented capacity factor brings them
+  down. The 30 s design wind has to be entered for the site (the conversion is an open TODO). Nothing
+  is checked against RIL 201-3-2013; AS 3962-2001 is used for advisory checks only. The equipment
+  spacings are a supplier's recommendation, not a requirement checked by the tool.
 - The automatic fetch and the water-level lookups need the VersaTiles tile server, FMI and SYKE
   services in the browser. The fetch is measured from OpenStreetMap water polygons in vector
   tiles (tiles.versatiles.org, a free demo server without guarantees); the position must be in

@@ -102,56 +102,50 @@ Built from the actual rows, so they also follow manual edits: a strip of the req
 width in front of every row and one across every pier head, united, clipped to the
 navigable region, minus piers and row blocks.
 
-## Anchoring plan and cost estimate (`anchoring.ts`, `bom.ts`)
+## Anchoring plan and cost estimate (`anchoring.ts`, `mooring.ts`, `bom.ts`, `equipment.ts`)
 
-Derived from a layout, the site and the price list (DECISIONS D23–D32, D62, I47–I73,
-I114–I119; price-list schema in [PRICE_LIST.md](PRICE_LIST.md)):
+Derived from a layout, the site and the price list. Since D64 the sizing is the owner's
+specification [ANKKUROINTI_MITOITUS_SPEC.md](ANKKUROINTI_MITOITUS_SPEC.md) (DECISIONS D23–D32,
+D62–D65, I121–I126; price-list schema in [PRICE_LIST.md](PRICE_LIST.md)):
 
-1. Wind load per pier after UFC 4-152-07 (I54): across the pier the boats are hit bow-on
-   (beam × profile height), windward row in full, leeward row 20 %, plus the pier face not
-   hidden by the windward boats; along the pier they are hit broadside (length × profile
-   height), the first boat of each row from the windward end in full and the others 20 %,
-   plus the pier end; for wind from the sea and from the shore.
-2. Crossed chain pairs every `lineSpacing` m, splayed by `splayAngle` from square to the
-   pier (D25, I60): the shore half towards the head (they hold wind from the sea), the head
-   half towards the shore (wind from the shore). Each direction is checked on its own:
-   across, the lines of one side share the load (÷ cos θ); along, the lines splayed against
-   it share it (÷ sin θ); a line takes the larger.
-2a. Tip chains (D30, I68): a main pier at least `tipAnchorMinLength` long gets two crossed
-   chains at its head, splayed outwards; they count as one more station across and join the
-   head-ward lines along. A finger longer than `fingerPileMinLength` (12 m) gets an end pile
-   (D31, I72), sized for half the full broadside wind of the boats beside it (UFC: no
-   shielding), with the smallest Marinetek pile guide that holds it; piles are not priced.
-2b. Access pontoon in front of the shore (D28, I64–I66): square lines on the water side only
-   (wind towards the wall). The wind pushing it off the wall is split by tributary length
-   between two shore chains at each gangway (placed by the user, D32, or one at its middle;
-   crossed at θ, to fixings in the wall) and the piers attached to its water-side edge, which add their share to the
-   load their shore-ward lines hold. The wind along the wall goes to the shore chains.
-3. Each line: chain length `k × depth at high water`, catenary with uplift at the anchor;
-   cheapest chain with breaking load × ((d − c)/d)² ≥ SF × tension. A block anchor needs the
-   mass m = SF × (H/μ + uplift) / (g (1 − ρw/ρc)); with wedge anchors (I59) the mass comes
-   from the published working capacities, chain lengthened until the angle at the anchor is
-   within the tables' limit.
-3a. Anchor of the line (D62, I114–I115, `anchorChoice.ts`): **at most `maxAnchorsPerLine`
-   pieces (default 1; 2 only as the user's tandem choice, with a warning)**. Candidates:
-   blocks no heavier than `maxAnchorMass` with ⌈m / mass⌉ pieces, and other kinds (screw,
-   pile, rock bolt, drag) only by their **published** capacity, ⌈SF_p × H / capacity⌉ and, for
-   a lifting line, ⌈SF_p × V / uplift capacity⌉ pieces, where they suit the seabed. The
-   cheapest per line wins (installed price, else supply price + installation estimate). If
-   none holds, the line is **INFEASIBLE**: the reason names what each kind would need
-   ("block: needs 33 922 kg, max product 3 000 kg"), the anchor point is not priced, and the
-   mass is never split over more anchors. The line spacing stays the user's: the load per
-   line only falls in proportion to it.
-4. Bill of materials: cheapest module combination per pier, fingers by length, gangways per
+0. Design depth (I121): with a site position the mean depth of eight 200 m rays around it
+   (EMODnet at sea, SYKE lake depth zones), unless typed in by hand; default 4 m.
+1. Legs (unchanged layout, D25, D30, D46, D49, D58): on main piers and breakwaters chains from
+   every module joint, splayed by `splayAngle` (45°) towards the head and towards the shore on
+   each side, crossed under the pier (X pattern), a pair at the shore end and the tip pair at the
+   head; two shore chains crossed under the gangway of a pier reached from the shore.
+1a. Access pontoon in front of the shore (D28, I122): the piers starting from its water-side
+   edge hold it; off the wall together with two shore chains at each gangway, by tributary length;
+   towards the wall the piers alone; along the wall the shore chains. A pier carries its share in
+   its own case of the same direction. Without piers it has square chains of its own on the water
+   side. Without a shoreline it is anchored on both sides.
+2. Loads per pontoon (spec §3, `mooring.ts`): wind pressure qz = 0.0006 V² (V = 30 s ULS wind),
+   AS 3962:2020 Table 4.4 windage by boat length and type, drag 0.9/1.1 for boats, 2.0 for the
+   pontoon; across the windward row in full and the leeward row 20 %; along the rows 100/50/30 %;
+   wave max(wave line load, 2 kN/m) × length (across) or × width (along); current
+   ½ρ·2.0·v² × area; ULS = wind + 1.5 current + 1.5 wave (+ extra static) in four directions.
+3. Distribution (spec §4): the legs whose unit vector points against the load share it with
+   equal horizontal tension, Th = F · uneven / Σ|u · d|; a direction no leg resists is an error.
+4. Each leg (spec §5): chain `chainLengthFactor` × depth at high water; inextensible catenary at
+   low and high water (wall legs: plan length + the water-level range); the cheapest chain with
+   MBL · ((d − c)/d)² / max T ≥ 3.0 at both levels; the anchor's required dry mass over every case,
+   m = (FoS · Th + Fv · μ) / ((μ cos β − sin β) · g · (1 − ρw/ρc)), FoS 1.5 (1.8 also shown), μ by
+   seabed (NAVFAC; soft clay/mud has none), or the cohesive model with soil data.
+5. Anchor (D63, I125): the cheapest concrete block(s) of at most `maxAnchorMass` (5 t) and
+   `maxAnchorsPerLine` (1) that hold; otherwise **a pile anchor** at the end of the chain (status
+   PILE, the reason "block: needs … kg, max product … kg"), priced only from a `pile` row.
+6. Rules (spec §6) as warnings: chain ≥ 5 × depth (FCG / Top Marine) and ≥ 4 × depth, at least
+   four anchor points per pontoon, the FCG wave attenuator preset for breakwaters, winter use.
+7. Bill of materials: cheapest module combination per pier, fingers by length, gangways per
    shore connection (not priced when none is as wide as AS 3962 Table 3.3 asks for, I118),
-   chain, anchors, shackles, springs, anodes per line, one row "Anchor point – type and size
-   by geotechnical/mooring design" without a price for the INFEASIBLE lines, breakwaters
-   without a price, fittings per berth and pier; labour and plant from output rates, diving
-   and work-boat time **per anchor piece** (I116); overheads, contingency, VAT, range.
-5. Unpriced items (I117): everything needed but not priced is listed by name and left out of
-   the totals, whose labels then say "(excludes N unpriced items, see list)"; the summary
-   adds "Anchoring status: X lines OK, Y lines INFEASIBLE" and the export a friction
-   sensitivity table for μ 0.2 / 0.3 / 0.5 (I119).
+   chain, anchors, shackles, springs, anodes per line, pile anchors (unpriced row unless the list
+   has one), breakwaters without a price, cleats per berth; **rescue ladders every 40 m, safety
+   equipment posts every 80 m and power and water pedestals (4 berths each, assumption)** placed
+   on each pier and access pontoon (D65, I126); labour and plant from output rates, diving and
+   work-boat time per anchor piece (I116); overheads, contingency, VAT, range.
+8. Unpriced items (I117): listed by name and left out of the totals, whose labels then say
+   "(excludes N unpriced items, see list)"; the summary adds the anchoring status and the export a
+   friction sensitivity table (I119), the load table and the governing case of every line.
 
 ## 5. Validation (`validate.ts`)
 

@@ -3,6 +3,44 @@
 Notable changes to Marina Layout Planner. Decisions and assumptions behind each change are in
 [docs/DECISIONS.md](docs/DECISIONS.md); earlier changes are in the git history and in DECISIONS.
 
+## 2026-11-19 — Mooring sizing after the owner's specification; site depth; harbour equipment (D63–D65)
+
+### Changed
+- **The anchoring is sized after the owner's specification**
+  ([docs/ANKKUROINTI_MITOITUS_SPEC.md](docs/ANKKUROINTI_MITOITUS_SPEC.md), D64): AS 3962:2020 loads
+  in four directions, equal tension on the legs anchored against the load, the catenary at low and high
+  water, chains with factor of safety 3.0, concrete anchors by friction (NAVFAC μ by seabed, FoS 1.5)
+  or the optional cohesive model; the practical rules as warnings. Its Appendix B tests pass.
+- **Concrete anchors of at most 5 t, one per line, else a pile anchor** at the end of the chain (D63).
+  Screw anchors, rock bolts, drag anchors and the concrete wedge are gone. The demos' lines now all take
+  pile anchors (18–48 t needed by friction on medium clay); the pile anchors are unpriced unless the
+  price list has one.
+- **Access pontoon**: held again by the piers attached to it (owner's D28) together with its shore
+  chains; it no longer has chains of its own running into the berths when piers start from it (I122).
+  The load table lists what the piers carry for it.
+- Seabeds are the specification's eight NAVFAC types (old files: clay → medium clay, sand → fine/medium
+  sand). The breakwater shelter and estimated wave heights of the first D63 step are replaced by the
+  specification's minimum wave load.
+
+### Added
+- The specification's inputs (slope, cohesive model, capacity factor with its basis, 30 s design wind,
+  wave line load and minimum, current, draught, extra static load, ice reported only, winter use, uneven
+  factor, boat type) and results: its disclaimer, the status, the smallest factors of safety in colour,
+  the load table, the governing case of every line, and a JSON data package for the manufacturer of an
+  elastic mooring. The workbook gets a Loads sheet and the governing case per line.
+- **Design depth from the mean depth around the site position** (I121): EMODnet at sea, SYKE lake depth
+  zones, eight 200 m rays; runs by itself when a position is known; a depth typed in turns it off.
+- **Rescue ladders, safety equipment posts and power and water pedestals** (D65): ladders every 40 m
+  and posts every 80 m (Top Marine), pedestals one socket per berth and four per pedestal (assumption);
+  drawn on their own layer, in the bill of materials, the DXF and the report. Price-list parameters
+  `ladder_spacing_m`, `safety_post_spacing_m`, `berths_per_power_pedestal` (now 4) and category
+  `safety_post` with Top Marine's post (1 265 € incl. VAT).
+- Price-list ESTIMATE rows for 4 000 and 5 000 kg concrete anchors (Savorak's price per kg).
+
+### Removed
+- `ladders_per_pier` (replaced by `ladder_spacing_m`); the UFC wind model, the Hm0 wave loads and the
+  wedge anchors of the anchoring.
+
 ## 2026-11-18 — Anchor sizing no longer multiplies weights (D62)
 
 A test project exported 1 828 concrete weights of 3 000 kg (11–12 per line on the main piers,

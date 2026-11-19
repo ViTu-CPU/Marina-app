@@ -276,6 +276,12 @@ the estimate as a range and compares it with the €/jm benchmark above.
 
 ## 5. Anchoring — method used by the tool
 
+> **Superseded by D64 (2026-11-18).** The sizing is now the owner's specification
+> [ANKKUROINTI_MITOITUS_SPEC.md](ANKKUROINTI_MITOITUS_SPEC.md) (AS 3962:2020 loads, NAVFAC friction,
+> catenary at both water levels; docs/ALGORITHM.md and DECISIONS D63–D64, I123–I125). The text
+> below is the earlier method (UFC 4-152-07 wind, Hm0 wave loads, wedge anchors), kept as the
+> record of its sources.
+
 The physics below is standard mechanics; the *values* of the factors are parameters. Each
 parameter is shown with its source or marked **assumption**.
 
@@ -1105,3 +1111,36 @@ date 14.11.2014), read for the breakwater proposal (DECISIONS D48):
   station (4015) has data from 2026 only. Answers carry `access-control-allow-origin: *`.
 - **Characteristic levels** HW, MHW, MW, MNW, NW: the Finnish hydrological convention used by SYKE (highest,
   mean high, mean, mean low, lowest water). The tool's reading of them for the anchoring plan is in DECISIONS I95.
+
+## 15. Mooring sizing, site depth and harbour equipment (read 2026-11-18)
+
+- **Owner's specification** [ANKKUROINTI_MITOITUS_SPEC.md](ANKKUROINTI_MITOITUS_SPEC.md): the source
+  of the anchoring sizing since D64; its own sources (AS 3962:2020, NAVFAC DM-26.5 friction, Chalmers
+  2026, FCG 2022, Top Marine, SF Marina) are listed in it. Not re-checked here: the spec forbids factors
+  from outside it.
+- **OCEL Consultants NZ, *Swing Mooring Design Report*** (2015, [PDF](https://www.boprc.govt.nz/media/456922/ocel-swing-mooring-design-report-v2.pdf),
+  read from the saved file with pdftotext): concrete blocks set into soft sediment hold by base shear and
+  passive earth pressure; *"soft cohesive sediment with an undrained shear strength, cu, of 10 kPa"*;
+  factors of safety *"generally above the minimum value of 2"*; friction alone gives a lower bound,
+  *"as low as 2.3 kN for the case of a weight on a thin veneer of soft material overlaying stiffer
+  material"*. A draft embedded-block model from it was **not adopted**: it conflicts with the spec
+  (friction, or the spec's own cohesive model with measured soil data).
+- **EMODnet Bathymetry DTM**: grid 1/16 × 1/16 arc minutes, about 115 × 115 m
+  ([EMODnet, DTM 2024 release](https://emodnet.ec.europa.eu/en/emodnet-bathymetry-dtm-2024-release)).
+  `depth_profile` answered a 200 m line with 1 000 samples (checked 2026-11-18). Used for the mean depth
+  around the site (I121).
+- **Top Marine, Pelastusvälineet** ([topmarinelaiturit.fi](https://topmarinelaiturit.fi/laituritarvikkeet/pelastusvalineet/)):
+  *"laituriin tulee turvatikkaat sijoittaa 40 metrin välein"* (a swimmer in clothes manages about 20 m);
+  *"pelastusvälinepylväät asennetaan 80 metrin välein"* (a rescuer runs at most 40 m), usually at the
+  pier head, several on long piers; both *"voivat vaihdella"*. Post set: *"pelastusrengas (4 kg)
+  heittoliina 30 m"*, *"pelastushaka (3 m)"*, *"alumiinitikkaat (3 m)"*. Prices incl. VAT, installation
+  not included: Turvaporras 382 €, Pelastusvälinepylväs 1 265 €, Sammutinkaapi 326 €. No authority or
+  standard is named on the page.
+- **Top Marine, Sähköpylväät** ([topmarinelaiturit.fi](https://topmarinelaiturit.fi/laituritarvikkeet/sahkopylvaat/)):
+  RM Platinum 2 × 16 A with water 1 416 €, 4 × 16 A with water 1 581 € (incl. VAT); *"Vaihtoehdot ovat
+  2 tai 4 pistorasiaa"*; no berths-per-pedestal figure or spacing.
+- **Search for spacing rules** (2026-11-18): harbour rules found (e.g. Porvoo guest harbour) say the
+  equipment is on the piers but give no distances. A Merenkulkulaitos guideline (3/2007) with ladders
+  every 25 m and a life ring within 50 m appeared only in a search excerpt; the document was not read and
+  is not used. pargas.fi and doria.fi did not answer from this environment (DNS).
+

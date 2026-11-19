@@ -26,7 +26,7 @@ Rules that apply to every row (D18, D19):
 | Column | Type | Meaning |
 |---|---|---|
 | `id` (required) | text | Unique key of the row; keep it when editing. |
-| `category` (required) | text | `pontoon`, `finger`, `gangway`, `chain`, `anchor`, `wall_fixing`, `buoy`, `shackle`, `spring`, `anode`, `cleat`, `ladder`, `power`, `labour`, `plant`, `transport`, `other`. |
+| `category` (required) | text | `pontoon`, `finger`, `gangway`, `chain`, `anchor`, `wall_fixing`, `buoy`, `shackle`, `spring`, `anode`, `cleat`, `ladder`, `safety_post` (D65), `power`, `labour`, `plant`, `transport`, `other`. |
 | `supplier` | text | Supplier or source. |
 | `series` | text | Products of one series are size alternatives (one pontoon width, one boom type). |
 | `name` (required) | text | Product name as published. |
@@ -43,11 +43,10 @@ Rules that apply to every row (D18, D19):
 | `breaking_load_kn` | number | Minimum breaking load as published, kN. Chains without it are never chosen. |
 | `mass_kg_per_m` | number | Chain mass, kg/m. |
 | `anchor_mass_kg` | number | Mass of a concrete anchor in air, kg. |
-| `anchor_type` | text | **D62.** Anchors only: `block` (concrete weight), `screw`, `pile`, `rock_bolt`, `drag`. Empty = `block`. |
-| `capacity_horizontal_kn` | number | **D62.** Anchors other than blocks: holding capacity of **one piece** against horizontal pull as published, kN. Empty = not known: the product is never chosen by itself. |
-| `capacity_uplift_kn` | number | **D62.** Anchors other than blocks: holding capacity of one piece against uplift as published, kN. Needed for lines whose chain lifts the anchor. |
-| `capacity_basis` | text | **D62.** `friction_model` (blocks: computed from the mass) or `published` (the supplier's figure; then `source_url` and `source_date` are required). |
-| `seabed` | text | **D62.** Seabeds the anchor suits, separated by commas: `clay`, `sand`, `rock`. Empty: a block suits any seabed; any other kind is not chosen. |
+| `anchor_type` | text | **D63, D64.** Anchors only: `block` (concrete anchor) or `pile` (pile anchor at the end of the chain). Empty = `block`. Screw anchors, rock bolts and drag anchors are not used (owner, D63). |
+| `capacity_horizontal_kn`, `capacity_uplift_kn` | number | Pile anchors: the supplier's published capacity of one piece, kN, kept for information; the tool does not size piles (length and section by geotechnical design, I125). Blocks: leave empty. |
+| `capacity_basis` | text | `friction_model` (blocks: computed from the mass) or `published` (a pile's published figure; then `source_url` and `source_date` are required). |
+| `seabed` | text | Blocks: seabeds the anchor suits, separated by commas, keys of the spec (NAVFAC): `rock`, `gravelCoarseSand`, `fineMediumSand`, `fineSiltySand`, `silt`, `stiffClay`, `mediumClay`, `softClayMud` (old `clay`, `sand` read as `mediumClay`, `fineMediumSand`). Empty = any seabed. |
 | `installed_unit_price_eur` | number | **D62.** Price of one piece **installed** (supply and installation), €, with the VAT status of `price_includes_vat`. Empty = `price_eur` is the supply price and the installation is estimated from the parameters below. |
 | `shackle_mm` | number | Nominal shackle size, mm. |
 | `source_url`, `source_date` | text | Where the price and data come from, and when it was read. |
@@ -55,27 +54,23 @@ Rules that apply to every row (D18, D19):
 
 The workbook written by the app adds a last column `price_vat0_eur (calculated, not read)`.
 
-### Anchors (D62)
+### Anchors (D64)
 
-How the anchoring plan uses the anchor rows (docs/ALGORITHM.md, DECISIONS I114–I115):
+How the anchoring plan uses the anchor rows (docs/ALGORITHM.md, DECISIONS D64, I124–I125):
 
-- **Blocks** are sized by the friction model: the line needs a mass
-  m = SF · (H / μ + V) / (g (1 − ρw/ρc)); a block of the list counts when it is no heavier than
-  the largest piece to be handled (`maxAnchorMass`) and ⌈m / mass⌉ ≤ `maxAnchorsPerLine`
-  (default 1). Their `capacity_*` columns must stay empty.
-- **Other kinds** count only with `capacity_basis` = `published`, a horizontal capacity, a
-  price and the project's seabed in `seabed`; pieces = ⌈SF · H / capacity_horizontal⌉, and for
-  a lifting line also ⌈SF · V / capacity_uplift⌉, at most `maxAnchorsPerLine`. SF is the project
-  parameter "Safety factor on published capacities" (`capacitySafetyFactor`, default 1: the
-  published figure is taken as a working load — Assumption).
-- Per line the **cheapest** that holds is chosen: pieces × (installed price, else supply price
-  + the installation estimated from the parameters below).
-- When none holds, the line is **INFEASIBLE**: its anchor point is not priced and appears as
-  "Anchor point – type and size by geotechnical/mooring design" without a price.
+- **Blocks** are sized by the owner's specification (docs/ANKKUROINTI_MITOITUS_SPEC.md §5): the
+  required dry mass m = (FoS · Th + Fv · μ) / ((μ cos β − sin β) · g · (1 − ρw/ρc)) (β = seabed slope) over every load case at low
+  and high water (FoS 1.5, μ by seabed). A block counts when it is no heavier than
+  `maxAnchorMass` (5 000 kg, the owner's limit) and ⌈m / mass⌉ ≤ `maxAnchorsPerLine` (1; 2 as the
+  tandem choice). The cheapest that holds is chosen.
+- When no block holds, the line takes a **pile anchor**: the cheapest `pile` row with a price
+  (installed price first; with a supply price only, its driving is listed as unpriced), else one
+  unpriced row "Pile anchor – length and section by geotechnical design". The tool does not size
+  piles.
 
-The built-in list has only concrete weights (`block`, `friction_model`). To let the tool
-choose a screw anchor or a pile, add a row with the supplier's published capacity, its source
-URL and date, the seabeds and a price or quote.
+The built-in list has concrete anchors only; its 4 000 and 5 000 kg rows are **ESTIMATE**s at
+Savorak's price per kg (I125). To price pile anchors, add a `pile` row with a quote, its source
+URL and date.
 
 ## Parameters
 
@@ -86,7 +81,10 @@ URL and date, the seabeds and a price or quote.
 | `contingency_pct` | 15 % | Reserve on the subtotal with overheads. | Assumption. |
 | `range_low_pct`, `range_high_pct` | −30 %, +50 % | Range shown around the total. | Assumption (AACE Class 4 as quoted by secondary sources). |
 | `gangway_length_m` | 6 m | Gangway length wanted from the shore. | Assumption. |
-| `cleats_per_berth`, `ladders_per_pier`, `berths_per_power_pedestal` | 2, 1, 0 | Fittings. | Assumption. |
+| `cleats_per_berth` | 2 | Cleats or mooring rings per berth. | Assumption. |
+| `ladder_spacing_m` | 40 m | **D65.** Rescue ladders on the piers and access pontoons: one per this length, at the middles of equal parts. 0 = none. | Top Marine, Pelastusvälineet: *"laituriin tulee turvatikkaat sijoittaa 40 metrin välein"* ([topmarinelaiturit.fi](https://topmarinelaiturit.fi/laituritarvikkeet/pelastusvalineet/), read 2026-11-18). |
+| `safety_post_spacing_m` | 80 m | **D65.** Safety equipment posts, placed as the ladders. 0 = none. | The same page: *"pelastusvälinepylväät asennetaan 80 metrin välein"*. |
+| `berths_per_power_pedestal` | 4 | **D65.** Berths served by one power and water pedestal (one socket each), over the berthed part of each pier. 0 = none. | Assumption (no source gives a ratio; Top Marine sells 2 and 4 × 16 A pedestals with water). |
 | `shackles_per_anchor_line`, `springs_per_anchor_line`, `anodes_per_anchor_line` | 2, 1, 1 | Hardware per anchor line. | Assumption / supplier kits. |
 | `shackles_per_buoy_line` | 1 | Shackles per stern buoy. | Top Marine buoy packages. |
 | `crane_h_per_pontoon`, `transport_h_per_pontoon` | 1 h, 2 h | Crane hours per pontoon module. | Assumption. |
@@ -97,4 +95,5 @@ URL and date, the seabeds and a price or quote.
 | `work_boat_max_lift_kg` | 3 000 kg | **D62.** Heaviest single anchor the work boat lifts; heavier anchors are flagged and a crane barge is listed as unpriced. | Assumption. |
 
 `diver_h_per_anchor_line` and `boat_days_per_10_anchor_lines` of older lists are still read
-(per anchor) when the new keys are missing, with a note in the estimate.
+(per anchor) when the new keys are missing, with a note in the estimate. `ladders_per_pier` of
+older lists is no longer read (D65: `ladder_spacing_m`).
