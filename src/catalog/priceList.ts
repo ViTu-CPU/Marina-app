@@ -8,13 +8,19 @@
  * the column keys below; their order does not matter and unknown columns are ignored.
  */
 import {
+  ANCHOR_KINDS,
+  CAPACITY_BASES,
   PRODUCT_CATEGORIES,
   PRODUCT_UNITS,
+  SEABED_TYPES,
+  type AnchorKind,
+  type CapacityBasis,
   type PriceList,
   type PriceParameter,
   type Product,
   type ProductCategory,
   type ProductUnit,
+  type SeabedType,
 } from '../engine/catalog';
 import { readXlsx, writeXlsx, type CellValue, type FormulaCell, type ReadSheet, type SheetData } from './xlsx';
 
@@ -50,6 +56,60 @@ export const PRODUCT_COLUMNS: Column[] = [
   { key: 'breaking_load_kn', kind: 'number', width: 9, help: ['Minimum breaking load as published, kN. Chains without it are not chosen by the anchoring calculation.', 'Murtokuorma kuten julkaistu, kN. Ankkurointilaskenta ei valitse kettinkiä ilman sitä.'] },
   { key: 'mass_kg_per_m', kind: 'number', width: 9, help: ['Chain mass, kg/m.', 'Kettingin paino, kg/m.'] },
   { key: 'anchor_mass_kg', kind: 'number', width: 9, help: ['Mass of a concrete anchor in air, kg.', 'Betoniankkurin massa ilmassa, kg.'] },
+  {
+    key: 'anchor_type',
+    kind: 'text',
+    width: 9,
+    help: [
+      `Anchors only: ${ANCHOR_KINDS.join(', ')}. Empty = block (concrete weight). Blocks are sized by the friction model from anchor_mass_kg; the other kinds only by their published capacity.`,
+      'Vain ankkurit: block = betonipaino (mitoitetaan kitkamallilla massasta), screw = kierreankkuri, pile = paalu, rock_bolt = kallioankkuri, drag = laahausankkuri. Tyhjä = block.',
+    ],
+  },
+  {
+    key: 'capacity_horizontal_kn',
+    kind: 'number',
+    width: 9,
+    help: [
+      'Anchors other than blocks: holding capacity of one piece against horizontal pull as the supplier publishes it, kN (with capacity_basis = published). Empty = not known: the tool never chooses the product by itself.',
+      'Muut kuin betonipainot: yhden kappaleen vaakapito kuten toimittaja julkaisee, kN (capacity_basis = published). Tyhjä = ei tiedossa: työkalu ei valitse tuotetta automaattisesti.',
+    ],
+  },
+  {
+    key: 'capacity_uplift_kn',
+    kind: 'number',
+    width: 9,
+    help: [
+      'Anchors other than blocks: holding capacity of one piece against uplift as published, kN. Needed for lines whose chain lifts at the anchor.',
+      'Muut kuin betonipainot: yhden kappaleen nostopito kuten julkaistu, kN. Tarvitaan linjoille, joiden ketju nostaa ankkuria.',
+    ],
+  },
+  {
+    key: 'capacity_basis',
+    kind: 'text',
+    width: 12,
+    help: [
+      `Anchors: ${CAPACITY_BASES.join(' or ')}. friction_model = blocks (computed from the mass); published = the supplier's figure, which needs source_url and source_date.`,
+      'Ankkurit: friction_model = betonipainot (lasketaan massasta); published = toimittajan julkaisema arvo, joka vaatii lähteen (source_url) ja päivämäärän (source_date).',
+    ],
+  },
+  {
+    key: 'seabed',
+    kind: 'text',
+    width: 12,
+    help: [
+      `Anchors: the seabeds the product suits, separated by commas (${SEABED_TYPES.join(', ')}). Empty = not stated: a block suits any seabed; other kinds are then not chosen.`,
+      'Ankkurit: pohjatyypit, joihin tuote sopii, pilkuin eroteltuina (clay = savi, sand = hiekka, rock = kallio). Tyhjä = ei ilmoitettu: betonipaino sopii kaikkiin, muita tyyppejä ei silloin valita.',
+    ],
+  },
+  {
+    key: 'installed_unit_price_eur',
+    kind: 'number',
+    width: 10,
+    help: [
+      'Price of one piece installed (supply and installation), €, with the VAT status of price_includes_vat. Empty = price_eur is the supply price and the installation is estimated from the labour parameters.',
+      'Asennetun kappaleen hinta (toimitus ja asennus), €, ALV kuten price_includes_vat. Tyhjä = price_eur on toimitushinta ja asennus arvioidaan työparametreista.',
+    ],
+  },
   { key: 'shackle_mm', kind: 'number', width: 8, help: ['Nominal shackle size, mm.', 'Sakkelin koko, mm.'] },
   { key: 'source_url', kind: 'text', width: 40, help: ['Where the price and data come from.', 'Hinnan ja tietojen lähde.'] },
   { key: 'source_date', kind: 'text', width: 11, help: ['Date the source was read, YYYY-MM-DD.', 'Lähteen lukupäivä, VVVV-KK-PP.'] },
@@ -72,6 +132,17 @@ export const SHEET_PARAMETERS = 'Parameters';
 export const SHEET_INSTRUCTIONS = 'Instructions';
 
 export type ParseResult = { ok: true; priceList: PriceList } | { ok: false; errors: string[] };
+
+/**
+ * "mediumClay, fineMediumSand" → ['mediumClay', 'fineMediumSand']; commas, semicolons or spaces
+ * between, any letter case. Unknown words are kept as typed for the check.
+ */
+export const seabedList = (text: string): SeabedType[] =>
+  text
+    .split(/[,;\s]+/)
+    .map((x) => x.trim())
+    .filter((x) => x !== '')
+    .map((x) => SEABED_TYPES.find((k) => k.toLowerCase() === x.toLowerCase()) ?? x) as SeabedType[];
 
 const toProduct = (row: Record<string, CellValue>): Product => {
   const text = (k: string) => (row[k] === null || row[k] === undefined ? '' : String(row[k]).trim());
@@ -97,6 +168,12 @@ const toProduct = (row: Record<string, CellValue>): Product => {
     breakingLoadKn: num('breaking_load_kn'),
     massKgPerM: num('mass_kg_per_m'),
     anchorMassKg: num('anchor_mass_kg'),
+    anchorKind: text('anchor_type') === '' ? null : (text('anchor_type').toLowerCase() as AnchorKind),
+    capacityHorizontalKn: num('capacity_horizontal_kn'),
+    capacityUpliftKn: num('capacity_uplift_kn'),
+    capacityBasis: text('capacity_basis') === '' ? null : (text('capacity_basis').toLowerCase() as CapacityBasis),
+    seabeds: seabedList(text('seabed')),
+    installedPrice: num('installed_unit_price_eur'),
     shackleMm: num('shackle_mm'),
     sourceUrl: text('source_url'),
     sourceDate: text('source_date'),
@@ -166,6 +243,7 @@ export function priceListFromSheets(sheets: ReadSheet[], title: string): ParseRe
       errors.push(`${where}, unit: "${p.unit}" is not one of ${PRODUCT_UNITS.join(', ')}.`);
     }
     if (p.price !== null && p.price < 0) errors.push(`${where}, price_eur: must not be negative.`);
+    errors.push(...anchorRowErrors(p, where));
   });
 
   const parameters: PriceParameter[] = records(parameterSheet, PARAMETER_COLUMNS, errors).map((r) => ({
@@ -181,6 +259,44 @@ export function priceListFromSheets(sheets: ReadSheet[], title: string): ParseRe
     keys.add(p.key);
   });
   return errors.length > 0 ? { ok: false, errors } : { ok: true, priceList: { title, products, parameters } };
+}
+
+/**
+ * D62: checks of the anchor columns of one product row: known kinds, bases and seabeds; blocks are
+ * sized by the friction model; other kinds only by a published capacity with its source and date.
+ */
+export function anchorRowErrors(p: Product, where: string): string[] {
+  const errors: string[] = [];
+  if (p.anchorKind !== null && !(ANCHOR_KINDS as readonly string[]).includes(p.anchorKind)) {
+    errors.push(`${where}, anchor_type: "${p.anchorKind}" is not one of ${ANCHOR_KINDS.join(', ')}.`);
+  }
+  if (p.anchorKind !== null && p.category !== 'anchor') errors.push(`${where}, anchor_type: only for rows of category anchor.`);
+  if (p.capacityBasis !== null && !(CAPACITY_BASES as readonly string[]).includes(p.capacityBasis)) {
+    errors.push(`${where}, capacity_basis: "${p.capacityBasis}" is not one of ${CAPACITY_BASES.join(', ')}.`);
+  }
+  for (const s of p.seabeds) {
+    if (!(SEABED_TYPES as readonly string[]).includes(s)) errors.push(`${where}, seabed: "${s}" is not one of ${SEABED_TYPES.join(', ')}.`);
+  }
+  for (const [key, value] of [
+    ['capacity_horizontal_kn', p.capacityHorizontalKn],
+    ['capacity_uplift_kn', p.capacityUpliftKn],
+    ['installed_unit_price_eur', p.installedPrice],
+  ] as const) {
+    if (value !== null && value < 0) errors.push(`${where}, ${key}: must not be negative.`);
+  }
+  const hasCapacity = p.capacityHorizontalKn !== null || p.capacityUpliftKn !== null;
+  const block = p.anchorKind === null || p.anchorKind === 'block';
+  if (block) {
+    if (p.capacityBasis === 'published') errors.push(`${where}, capacity_basis: concrete blocks are sized by the friction model; use friction_model or leave it empty.`);
+    if (hasCapacity) errors.push(`${where}: concrete blocks are sized by the friction model from anchor_mass_kg; leave capacity_horizontal_kn and capacity_uplift_kn empty.`);
+  } else {
+    if (p.capacityBasis === 'friction_model') errors.push(`${where}, capacity_basis: only concrete blocks use the friction model; a ${p.anchorKind} needs a published capacity.`);
+    if (hasCapacity && p.capacityBasis !== 'published') errors.push(`${where}, capacity_basis: a capacity needs capacity_basis = published (the supplier's figure).`);
+  }
+  if (p.capacityBasis === 'published' && (!p.sourceUrl || !/^\d{4}-\d{2}-\d{2}$/.test(p.sourceDate))) {
+    errors.push(`${where}: a published capacity needs source_url and source_date (YYYY-MM-DD).`);
+  }
+  return errors;
 }
 
 export function parsePriceListFile(data: Uint8Array, title: string): ParseResult {
@@ -252,6 +368,18 @@ const productCell = (p: Product, key: string): CellValue => {
       return p.massKgPerM;
     case 'anchor_mass_kg':
       return p.anchorMassKg;
+    case 'anchor_type':
+      return p.anchorKind;
+    case 'capacity_horizontal_kn':
+      return p.capacityHorizontalKn;
+    case 'capacity_uplift_kn':
+      return p.capacityUpliftKn;
+    case 'capacity_basis':
+      return p.capacityBasis;
+    case 'seabed':
+      return p.seabeds.length > 0 ? p.seabeds.join(', ') : null;
+    case 'installed_unit_price_eur':
+      return p.installedPrice;
     case 'shackle_mm':
       return p.shackleMm;
     case 'source_url':

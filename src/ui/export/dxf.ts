@@ -8,6 +8,7 @@
  * y north); 1 drawing unit = 1 m. Text outside ASCII is written as \U+XXXX.
  */
 import { anchoringPlan } from '../../engine/anchoring';
+import { waveInput } from '../costModel';
 import { BREAKWATERS, breakwaterModules, breakwaterProductOf, breakwatersOf } from '../../engine/breakwater';
 import { chooseGangway, moduleCombination, pickByLength, seriesOf, type ResolvedChoices } from '../../engine/bom';
 import type { PriceList, Product } from '../../engine/catalog';
@@ -15,6 +16,8 @@ import { add, distance, scale, sub } from '../../engine/geometry';
 import type { Layout, Project, Vec2 } from '../../engine/model';
 import { rowFrame, toLocalRect } from '../../engine/rows';
 import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayLinks, pierShoreLink } from '../../engine/site';
+import { EQUIPMENT_DEFAULTS, equipmentPlan } from '../../engine/equipment';
+import { equipmentSpacing } from '../../engine/bom';
 
 /** Layers: name and AutoCAD colour index. */
 export const DXF_LAYERS = {
@@ -32,6 +35,7 @@ export const DXF_LAYERS = {
   ANCHORS: 34,
   BUOYS: 40,
   BREAKWATERS: 250,
+  EQUIPMENT: 1,
   LIBRARY: 7,
   TEXT: 7,
 } as const;
@@ -295,7 +299,7 @@ export function buildDxf(input: DxfInput): string {
       buoyDepthFactor: project.params.buoyDepthFactor,
       moduleLengths: project.params.pierModuleLengths,
       gangwayReach: reach,
-      compareAnchorTypes: false,
+      waves: waveInput(project, layout),
     });
     const byId = new Map(list.products.map((p) => [p.id, p]));
     for (const l of plan.lines) {
@@ -306,8 +310,24 @@ export function buildDxf(input: DxfInput): string {
         const side = blocks.find((b) => b.name === name)!.length;
         // The symbol centred on the anchor point.
         e.insert('ANCHORS', name, add(l.anchor, { x: -side / 2, y: 0 }), 0);
+      } else if (l.status === 'PILE') {
+        // D64: a pile anchor at the end of the chain.
+        e.text('ANCHORS', l.anchor, 0.8, 'PILE ANCHOR');
       }
     }
+  }
+
+  // --- D65: rescue ladders, safety equipment posts and power and water pedestals (indicative) ---
+  const square = (c: Vec2, side: number): Vec2[] => [
+    { x: c.x - side / 2, y: c.y - side / 2 },
+    { x: c.x + side / 2, y: c.y - side / 2 },
+    { x: c.x + side / 2, y: c.y + side / 2 },
+    { x: c.x - side / 2, y: c.y + side / 2 },
+  ];
+  for (const x of equipmentPlan(layout, site, list ? equipmentSpacing(list) : EQUIPMENT_DEFAULTS).items) {
+    if (x.kind === 'safetyPost') e.circle('EQUIPMENT', x.at, 0.6);
+    else e.polyline('EQUIPMENT', square(x.at, x.kind === 'ladder' ? 0.7 : 0.6), true);
+    e.text('EQUIPMENT', add(x.at, { x: 0.8, y: 0 }), 0.4, x.kind === 'ladder' ? 'LADDER' : x.kind === 'safetyPost' ? 'SAFETY POST' : 'PEDESTAL');
   }
 
   // --- Title ---

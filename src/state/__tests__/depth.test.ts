@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emodnetProfileUrl, lakeMeanDepth, lookupFetchDepths, parseBand, parseZones, rayEnd, seaMeanDepth, sykeZonesUrl, type DepthZone } from '../depth';
+import { emodnetProfileUrl, lakeMeanDepth, lookupFetchDepths, lookupSiteDepth, parseBand, parseZones, rayEnd, seaMeanDepth, SITE_DEPTH_BEARINGS, SITE_DEPTH_RADIUS, sykeZonesUrl, type DepthZone } from '../depth';
 import { toTm35fin } from '../waterLevels';
 
 describe('depth along the fetches (I110)', () => {
@@ -68,5 +68,50 @@ describe('depth along the fetches (I110)', () => {
     expect(out[2]).toBeNull();
     expect(urls.filter((u) => u.includes('emodnet'))).toHaveLength(2);
     expect(urls.filter((u) => u.includes('ymparisto'))).toHaveLength(1);
+  });
+});
+
+describe('mean depth around the site position (I121)', () => {
+  const lat = 60.155;
+  const lon = 24.956;
+  /** EMODnet answers ray by ray (in the order of SITE_DEPTH_BEARINGS); SYKE with `zones`. */
+  const mock = (ray: (k: number) => number[], zones: unknown = { features: [] }) => {
+    const urls: string[] = [];
+    let k = 0;
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.startsWith('https://rest.emodnet-bathymetry.eu/')) return new Response(JSON.stringify(ray(k++)));
+      return new Response(JSON.stringify(zones));
+    }) as typeof fetch;
+    return { urls, fetchImpl };
+  };
+
+  it('sea: eight rays of 200 m (Assumption); the mean, shallowest and deepest of the samples under water', async () => {
+    expect(SITE_DEPTH_BEARINGS).toEqual([0, 45, 90, 135, 180, 225, 270, 315]);
+    expect(SITE_DEPTH_RADIUS).toBe(200);
+    // N … SE: half 2 m, half 6 m deep; S … NW: land. Half of the samples in water.
+    const { urls, fetchImpl } = mock((k) => (k < 4 ? [...new Array(500).fill(-2), ...new Array(500).fill(-6)] : new Array(1000).fill(5)));
+    const r = await lookupSiteDepth(lat, lon, 200, { fetchImpl });
+    expect(r).toEqual({ depth: 4, min: 2, max: 6, source: 'emodnet', coverage: 0.5 });
+    expect(urls).toHaveLength(8);
+    expect(urls[2]).toBe(emodnetProfileUrl({ lat, lon }, rayEnd(lat, lon, 90, 200)));
+  });
+
+  it('lake: EMODnet without water, SYKE’s depth zones in a box of the ray length', async () => {
+    const s = toTm35fin(lat, lon);
+    const zone = { features: [{ properties: { syvyysvali_m: '3-6' }, geometry: { type: 'Polygon', coordinates: [[[s.e - 300, s.n - 300], [s.e + 300, s.n - 300], [s.e + 300, s.n + 300], [s.e - 300, s.n + 300], [s.e - 300, s.n - 300]]] } }] };
+    const { urls, fetchImpl } = mock(() => new Array(1000).fill(12), zone);
+    const r = await lookupSiteDepth(lat, lon, 200, { fetchImpl });
+    expect(r).toEqual({ depth: 4.5, min: 4.5, max: 4.5, source: 'syke', coverage: 1 });
+    expect(urls.at(-1)).toBe(sykeZonesUrl({ minE: s.e - 200, minN: s.n - 200, maxE: s.e + 200, maxN: s.n + 200 }));
+  });
+
+  it('neither covers half: the larger share, shown with it; nothing: null; an error is passed on', async () => {
+    const some = mock(() => [...new Array(300).fill(-3), ...new Array(700).fill(4)]);
+    expect(await lookupSiteDepth(lat, lon, 200, some)).toEqual({ depth: 3, min: 3, max: 3, source: 'emodnet', coverage: 0.3 });
+    expect(await lookupSiteDepth(lat, lon, 200, mock(() => new Array(1000).fill(4)))).toBeNull();
+    const failing = (async () => new Response('', { status: 503 })) as typeof fetch;
+    await expect(lookupSiteDepth(lat, lon, 200, { fetchImpl: failing })).rejects.toThrow('rest.emodnet-bathymetry.eu answered 503');
   });
 });

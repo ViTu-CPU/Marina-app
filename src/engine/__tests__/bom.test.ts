@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AnchoringResult, AnchorLine } from '../anchoring';
-import { costEstimate, moduleCombination, resolveChoices } from '../bom';
+import { costEstimate, excludesNote, moduleCombination, resolveChoices } from '../bom';
 import type { PriceList, PriceParameter, Product } from '../catalog';
 import { DEFAULT_COST, DEFAULT_PARAMS as DEFAULTS } from '../defaults';
 
@@ -26,6 +26,12 @@ const product = (p: Partial<Product> & Pick<Product, 'id' | 'category' | 'price'
   breakingLoadKn: null,
   massKgPerM: null,
   anchorMassKg: null,
+  anchorKind: null,
+  capacityHorizontalKn: null,
+  capacityUpliftKn: null,
+  capacityBasis: null,
+  seabeds: [],
+  installedPrice: null,
   shackleMm: null,
   sourceUrl: 'https://example.org',
   sourceDate: '2026-11-14',
@@ -55,6 +61,7 @@ const LIST: PriceList = {
     product({ id: 'anode16', category: 'anode', price: 50, chainDiameterMm: 16 }),
     product({ id: 'cleat', category: 'cleat', price: 10 }),
     product({ id: 'ladder', category: 'ladder', price: 300 }),
+    product({ id: 'post', category: 'safety_post', price: 1000 }),
     product({ id: 'rate-installer', category: 'labour', unit: 'h', price: 100 }),
     product({ id: 'rate-diving-team', category: 'labour', unit: 'h', price: 200 }),
     product({ id: 'rate-crane', category: 'plant', unit: 'h', price: 100 }),
@@ -68,7 +75,8 @@ const LIST: PriceList = {
     param('range_high_pct', 50),
     param('gangway_length_m', 6),
     param('cleats_per_berth', 2),
-    param('ladders_per_pier', 1),
+    param('ladder_spacing_m', 40),
+    param('safety_post_spacing_m', 80),
     param('berths_per_power_pedestal', 0),
     param('shackles_per_anchor_line', 2),
     param('springs_per_anchor_line', 1),
@@ -79,8 +87,10 @@ const LIST: PriceList = {
     param('crew_h_per_finger', 1.5),
     param('crew_h_per_gangway', 3),
     param('crew_h_per_small_item', 0.25),
-    param('diver_h_per_anchor_line', 1),
-    param('boat_days_per_10_anchor_lines', 1),
+    param('diver_h_per_anchor', 1),
+    param('diver_h_per_tonne', 0),
+    param('anchors_per_boat_day', 10),
+    param('work_boat_max_lift_kg', 3000),
   ],
 };
 const byId = (id: string) => LIST.products.find((p) => p.id === id)!;
@@ -167,12 +177,19 @@ describe('cost estimate, hand-calculated', () => {
     topTensionKn: 5.2,
     upliftKn: 1,
     upliftAngleDeg: 0,
-    anchorType: 'block',
+    dirDeg: 0,
     chainLength: 16.5,
     chainId: 'c13',
+    chainFoS: 5,
+    chainWeightEstimated: false,
     requiredAnchorKg: 900,
     anchorId: 'a1000',
+    anchorKind: 'block',
     anchorCount: 1,
+    status: 'OK',
+    pileReason: null,
+    governing: null,
+    loadCases: [],
   });
   const anchoring: AnchoringResult = { lines: [line('A1'), line('A2')], piles: [], loads: [], issues: [] };
   const choices = resolveChoices(LIST, DEFAULT_COST, DEFAULT_PARAMS);
@@ -247,10 +264,19 @@ describe('cost estimate, hand-calculated', () => {
     expect(four.notes.some((n) => n.startsWith('Gangway widths: the product width is taken as the clear width'))).toBe(true);
     // 2 berths: 0.7 m → the selected 0.8 m series is enough.
     expect(run(2).lines.find((l) => l.productId === 'g8')?.orderQuantity).toBe(1);
-    // 130 berths: 1.8 m → none is wide enough: the selected series and a note.
+    // 130 berths: 1.8 m → none is wide enough: not priced with a narrower one (D62), listed as unpriced.
     const many = run(130);
-    expect(many.lines.find((l) => l.productId === 'g8')?.orderQuantity).toBe(1);
-    expect(many.notes.find((n) => n.startsWith('No gangway in the price list is as wide'))).toContain('P1 (130 berths, 1.8 m)');
+    expect(many.lines.some((l) => l.group === 'gangways')).toBe(false);
+    expect(many.notes.find((n) => n.startsWith('No gangway in the price list is as wide'))).toBe(
+      'No gangway in the price list is as wide as AS 3962 Table 3.3 asks for P1 (130 berths, 1.8 m); it is not priced (see the unpriced items).',
+    );
+    expect(many.unpriced).toContainEqual({
+      name: 'Gangway for P1, at least 1.8 m clear (AS 3962 Table 3.3, 130 berths)',
+      quantity: 1,
+      unit: 'pcs',
+      reason: 'No gangway in the price list is 1.8 m wide or wider (widest 1.5 m); not priced with a narrower one.',
+    });
+    expect(many.byGroup.gangways).toBe(0);
   });
 
   it('anchoring: chain 2 × 16.5 m + 5 % = 34.7 m; anchors, shackles, springs, anodes = 1 223 €', () => {
@@ -264,56 +290,156 @@ describe('cost estimate, hand-calculated', () => {
     expect(estimate.byGroup.anchoring).toBeCloseTo(347 + 600 + 56 + 120 + 100, 9);
   });
 
-  it('fittings: 4 berths × 2 cleats + 1 ladder = 380 € (a removed berth does not count)', () => {
+  it('fittings: 4 berths × 2 cleats + 1 ladder + 1 safety post (30 m pier: one of each, D65) = 1 380 € (a removed berth does not count)', () => {
     expect(lineFor('cleat').orderQuantity).toBe(8);
     expect(lineFor('ladder').orderQuantity).toBe(1);
-    expect(estimate.byGroup.fittings).toBe(380);
+    expect(lineFor('post').orderQuantity).toBe(1);
+    expect(estimate.byGroup.fittings).toBe(1380);
+    expect(estimate.equipment.items.map((x) => [x.id, x.t])).toEqual([
+      ['P1-LAD1', 15],
+      ['P1-SP1', 15],
+    ]);
   });
 
   it('labour and plant from the output rates', () => {
-    // Installer: 3 modules × 4 h + 3 fingers × 1.5 h + 1 gangway × 3 h + 9 small items × 0.25 h
-    // = 21.75 h, ordered as 21.8 h (quantities in units other than pieces round to 0.1).
-    expect(lineFor('rate-installer').quantity).toBeCloseTo(21.75, 9);
-    expect(lineFor('rate-installer').orderQuantity).toBe(21.8);
+    // Installer: 3 modules × 4 h + 3 fingers × 1.5 h + 1 gangway × 3 h + 10 small items (8 cleats, a ladder,
+    // a safety post) × 0.25 h = 22.0 h (quantities in units other than pieces round to 0.1).
+    expect(lineFor('rate-installer').quantity).toBeCloseTo(22, 9);
+    expect(lineFor('rate-installer').orderQuantity).toBe(22);
     expect(lineFor('rate-diving-team').quantity).toBe(2);
-    expect(estimate.labour).toBeCloseTo(2180 + 400, 9);
-    // Crane: 3 h lifting + 6 h transport = 9 h; work boat ⌈2/10 · 1⌉ = 1 day.
+    expect(estimate.labour).toBeCloseTo(2200 + 400, 9);
+    expect(lineFor('rate-diving-team').basis).toBe('2 anchors × 1 h');
+    // Crane: 3 h lifting + 6 h transport = 9 h; work boat ⌈2 anchors / 10 per day⌉ = 1 day.
     expect(lineFor('rate-crane').quantity).toBe(9);
     expect(lineFor('rate-work-boat').orderQuantity).toBe(1);
     expect(estimate.plant).toBeCloseTo(900 + 800, 9);
   });
 
   it('shore chains (D28): one wall fixing each, no anchor, no work-boat time', () => {
-    const wall = (id: string): AnchorLine => ({ ...line(id), fixing: 'wall', role: 'shore', anchorType: null, anchorId: null, anchorCount: 0, requiredAnchorKg: 0, chainLength: 3 });
+    const wall = (id: string): AnchorLine => ({ ...line(id), fixing: 'wall', role: 'shore', anchorKind: null, anchorId: null, anchorCount: 0, requiredAnchorKg: 0, chainLength: 3 });
     const withWall: AnchoringResult = { lines: [line('A1'), wall('S1'), wall('S2')], piles: [], loads: [], issues: [] };
     const list: PriceList = { ...LIST, products: [...LIST.products, product({ id: 'wf', category: 'wall_fixing', price: 18 })] };
     const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: list, choices, anchoring: withWall });
     const of = (id: string) => e.lines.find((l) => l.productId === id)!;
     expect(of('wf').orderQuantity).toBe(2);
     expect(of('a1000').orderQuantity).toBe(1);
-    // Chain 16.5 + 2 × 3 = 22.5 m; divers on all 3 lines; the boat for the 1 seabed line.
+    // Chain 16.5 + 2 × 3 = 22.5 m; divers for the anchor and the 2 wall fixings; the boat for the 1 anchor.
     expect(of('c13').quantity).toBeCloseTo(22.5, 9);
     expect(of('rate-diving-team').quantity).toBe(3);
-    expect(of('rate-work-boat').basis).toBe('1 anchor lines to the seabed');
+    expect(of('rate-diving-team').basis).toBe('1 anchor + 2 wall fixings × 1 h');
+    expect(of('rate-work-boat').basis).toBe('1 anchor ÷ 10 per day');
     const noFixing = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: LIST, choices, anchoring: withWall });
     expect(noFixing.notes).toContain('No wall fixing in the price list: the wall fixings of the shore chains are not priced.');
   });
 
+  it('installation scales with the anchors, not the lines (D62)', () => {
+    const many: AnchoringResult = { lines: Array.from({ length: 23 }, (_, i) => line(`A${i + 1}`)), piles: [], loads: [], issues: [] };
+    const tonnes: PriceList = { ...LIST, parameters: LIST.parameters.map((p) => (p.key === 'diver_h_per_tonne' ? param('diver_h_per_tonne', 0.5) : p)) };
+    const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: tonnes, choices, anchoring: many });
+    const of = (id: string) => e.lines.find((l) => l.productId === id)!;
+    // 23 anchors of 1 t: 23 × 1 h + 23 t × 0.5 h/t = 34.5 h; ⌈23 / 10⌉ = 3 boat days.
+    expect(of('rate-diving-team').quantity).toBeCloseTo(34.5, 9);
+    expect(of('rate-diving-team').basis).toBe('23 anchors × 1 h + 23 t × 0.5 h/t');
+    expect(of('rate-work-boat').quantity).toBe(3);
+    // D64: pile lines (no pile anchor in the list) take no diving or boat time; their piles are not priced.
+    const bad: AnchorLine = { ...line('X1'), anchorId: null, anchorKind: 'pile', anchorCount: 1, status: 'PILE', pileReason: 'block: needs 4 000 kg, max product 1 000 kg', requiredAnchorKg: 4000 };
+    const mixed = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: LIST, choices, anchoring: { ...anchoring, lines: [line('A1'), bad, { ...bad, id: 'X2' }] } });
+    const m = (id: string) => mixed.lines.find((l) => l.productId === id)!;
+    expect(m('rate-diving-team').quantity).toBe(1);
+    expect(m('rate-work-boat').basis).toBe('1 anchor ÷ 10 per day');
+    expect(m('a1000').orderQuantity).toBe(1);
+    // Their chains are priced: 3 × 16.5 m + 5 %.
+    expect(m('c13').quantity).toBeCloseTo(49.5, 9);
+    expect(m('pile-anchor-by-design')).toMatchObject({ name: 'Pile anchor – length and section by geotechnical design', quantity: 2, unitPrice: null, total: null, basis: '2 lines with pile anchors (P1)' });
+    expect(m('pile-anchor-by-design').note).toContain('block: needs 4 000 kg, max product 1 000 kg');
+    // A pile anchor of the price list (supply price only): priced, its driving listed as unpriced.
+    const withPile: PriceList = { ...LIST, products: [...LIST.products, product({ id: 'pile1', category: 'anchor', anchorKind: 'pile', price: 2500 })] };
+    const piled = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: withPile, choices, anchoring: { ...anchoring, lines: [line('A1'), { ...bad, anchorId: 'pile1' }] } });
+    expect(piled.lines.find((l) => l.productId === 'pile1')).toMatchObject({ orderQuantity: 1, unitPrice: 2500 });
+    expect(piled.unpriced).toContainEqual({ name: 'Pile driving', quantity: 1, unit: 'pcs', reason: 'The pile anchors of the price list have a supply price only; driving them needs a contractor’s price.' });
+    expect(piled.lines.find((l) => l.productId === 'rate-diving-team')!.quantity).toBe(1);
+  });
+
+  it('anchors heavier than the work boat lifts are flagged; installed anchors take no diving or boat time (D62)', () => {
+    const heavy: PriceList = { ...LIST, parameters: LIST.parameters.map((p) => (p.key === 'work_boat_max_lift_kg' ? param('work_boat_max_lift_kg', 800) : p)) };
+    const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: heavy, choices, anchoring });
+    expect(e.notes).toContain('2 anchors (up to 1 000 kg) are heavier than the work boat lifts (work_boat_max_lift_kg 800 kg): a heavier crane barge is needed; its cost is not in the estimate.');
+    expect(estimate.notes.some((n) => n.includes('heavier than the work boat'))).toBe(false);
+    const installed: PriceList = { ...LIST, products: LIST.products.map((p) => (p.id === 'a1000' ? { ...p, installedPrice: 900 } : p)) };
+    const i = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: installed, choices, anchoring });
+    const a = i.lines.find((l) => l.productId === 'a1000')!;
+    expect(a).toMatchObject({ name: 'a1000 (installed)', unitPrice: 900, total: 1800 });
+    expect(a.note).toMatch(/^Installed price: supply and installation\./);
+    expect(i.lines.some((l) => l.productId === 'rate-diving-team' || l.productId === 'rate-work-boat')).toBe(false);
+    expect(i.notes).toContain('2 anchors are priced installed (supply and installation); no diving or work-boat time is added for them.');
+  });
+
+  it('older price lists: the per-line installation keys are read per anchor, with a note (D62)', () => {
+    const old: PriceList = {
+      ...LIST,
+      parameters: [
+        ...LIST.parameters.filter((p) => !['diver_h_per_anchor', 'anchors_per_boat_day'].includes(p.key)),
+        param('diver_h_per_anchor_line', 2),
+        param('boat_days_per_10_anchor_lines', 1),
+      ],
+    };
+    const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: old, choices, anchoring });
+    expect(e.lines.find((l) => l.productId === 'rate-diving-team')!.quantity).toBe(4);
+    expect(e.notes.some((n) => n.startsWith('The price list has the older installation keys diver_h_per_anchor_line, boat_days_per_10_anchor_lines'))).toBe(true);
+  });
+
+  it('every unpriced item is listed by name and left out of the totals (D62)', () => {
+    expect(estimate.unpriced).toEqual([]);
+    expect(excludesNote(estimate)).toBe('');
+    // A breakwater (no price), a pile line, a product without a price and products missing from the list.
+    const withBreakwater: Site = { ...site, breakwaters: [{ id: 'breakwater-1', start: { x: -40, y: 55 }, end: { x: 40, y: 55 }, product: '4300K' }] };
+    const bad: AnchorLine = { ...line('X1'), anchorId: null, anchorKind: 'pile', anchorCount: 1, status: 'PILE', pileReason: 'block: needs 4 000 kg, max product 1 000 kg', requiredAnchorKg: 4000 };
+    const thin: PriceList = {
+      ...LIST,
+      products: LIST.products.filter((p) => !['spring14', 'ladder', 'post'].includes(p.id)).map((p) => (p.id === 'anode16' ? { ...p, price: null } : p)),
+    };
+    const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site: withBreakwater, priceList: thin, choices, anchoring: { ...anchoring, lines: [line('A1'), bad] } });
+    const names = e.unpriced.map((u) => u.name);
+    expect(names).toEqual([
+      expect.stringMatching(/^Breakwater breakwater-1: Marinetek K-series Breakwater 4300K, \d+ × \S+/),
+      'Pile anchor – length and section by geotechnical design',
+      'Spring links of the anchor lines',
+      'Chain anodes of the anchor lines',
+      'Rescue ladders',
+      'Safety equipment posts',
+    ]);
+    expect(e.unpriced[0]).toMatchObject({ unit: 'pcs', reason: expect.stringContaining('No breakwater in the price list') });
+    expect(e.unpriced[2]).toEqual({ name: 'Spring links of the anchor lines', quantity: 2, unit: 'pcs', reason: 'No spring with a size and a price in the price list.' });
+    // The anode without a price is a product without a price, not a missing product: no anode line in the BOM.
+    expect(e.lines.some((l) => l.productId === 'anode16')).toBe(false);
+    expect(e.missingPrices).toBe(6);
+    expect(excludesNote(e)).toBe(' (excludes 6 unpriced items, see list)');
+    expect(excludesNote({ unpriced: e.unpriced.slice(0, 1) })).toBe(' (excludes 1 unpriced item, see list)');
+    expect(e.notes).toContain('6 items without a price are not in the totals: see the list of unpriced items.');
+    // Not in the totals: the breakwater and the anchor point add nothing.
+    expect(e.byGroup.pontoons).toBe(estimate.byGroup.pontoons);
+    // A missing rate row is an unpriced item too.
+    const noBoat: PriceList = { ...LIST, products: LIST.products.filter((p) => p.id !== 'rate-work-boat') };
+    expect(costEstimate({ layout: { piers: [pier], fingers, berths }, site, priceList: noBoat, choices, anchoring }).unpriced).toEqual([
+      { name: 'Work-boat days', quantity: 1, unit: 'day', reason: 'The price list has no row "rate-work-boat".' },
+    ]);
+  });
+
   it('totals: overheads 10 %, contingency 15 %, VAT 25.5 %, range −30 … +50 %', () => {
-    // materials 30 000 + 3 600 + 1 200 + 1 223 + 380 = 36 403; labour 2 580; plant 1 700
-    // subtotal 40 683; overheads 4 068.3; contingency 0.15 · 44 751.3 = 6 712.695
-    // total 51 463.995; VAT 0.255 · total = 13 123.318725
-    expect(estimate.materials).toBeCloseTo(36403, 6);
-    expect(estimate.subtotal).toBeCloseTo(40683, 6);
-    expect(estimate.overhead).toBeCloseTo(4068.3, 6);
-    expect(estimate.contingency).toBeCloseTo(6712.695, 6);
-    expect(estimate.totalVat0).toBeCloseTo(51463.995, 6);
-    expect(estimate.vat).toBeCloseTo(13123.318725, 4);
-    expect(estimate.totalWithVat).toBeCloseTo(64587.313725, 4);
-    expect(estimate.range[0]).toBeCloseTo(36024.7965, 3);
-    expect(estimate.range[1]).toBeCloseTo(77195.9925, 3);
-    expect(estimate.perBerth).toBeCloseTo(51463.995 / 4, 6);
-    expect(estimate.perPierMetre).toBeCloseTo(51463.995 / 30, 6);
+    // materials 30 000 + 3 600 + 1 200 + 1 223 + 1 380 = 37 403; labour 2 600; plant 1 700
+    // subtotal 41 703; overheads 4 170.3; contingency 0.15 · 45 873.3 = 6 880.995
+    // total 52 754.295; VAT 0.255 · total = 13 452.345225
+    expect(estimate.materials).toBeCloseTo(37403, 6);
+    expect(estimate.subtotal).toBeCloseTo(41703, 6);
+    expect(estimate.overhead).toBeCloseTo(4170.3, 6);
+    expect(estimate.contingency).toBeCloseTo(6880.995, 6);
+    expect(estimate.totalVat0).toBeCloseTo(52754.295, 6);
+    expect(estimate.vat).toBeCloseTo(13452.345225, 4);
+    expect(estimate.totalWithVat).toBeCloseTo(66206.640225, 4);
+    expect(estimate.range[0]).toBeCloseTo(36928.0065, 3);
+    expect(estimate.range[1]).toBeCloseTo(79131.4425, 3);
+    expect(estimate.perBerth).toBeCloseTo(52754.295 / 4, 6);
+    expect(estimate.perPierMetre).toBeCloseTo(52754.295 / 30, 6);
     expect(estimate.missingPrices).toBe(0);
   });
 

@@ -182,10 +182,32 @@ function AnchorShapes() {
           y={l.anchor.y - 0.6}
           width={1.2}
           height={1.2}
-          fill={l.anchorCount > 1 ? COLORS.issue : COLORS.anchor}
+          fill={l.status === 'PILE' || l.anchorCount > 1 ? COLORS.issue : COLORS.anchor}
           listening={false}
         />
       ))}
+    </>
+  );
+}
+
+/**
+ * D65: rescue ladders (yellow bars at the edge), safety equipment posts (white rings with a red
+ * edge, a life ring) and power and water pedestals (blue squares); positions are indicative.
+ */
+function EquipmentShapes() {
+  const model = useCostModel();
+  if (!model) return null;
+  return (
+    <>
+      {model.estimate.equipment.items.map((x) =>
+        x.kind === 'ladder' ? (
+          <Rect key={x.id} x={x.at.x - 0.5} y={x.at.y - 0.5} width={1} height={1} fill={COLORS.ladder} stroke={COLORS.pier} strokeWidth={1} strokeScaleEnabled={false} listening={false} />
+        ) : x.kind === 'safetyPost' ? (
+          <Circle key={x.id} x={x.at.x} y={x.at.y} radius={0.9} fill="#ffffff" stroke={COLORS.safetyPost} strokeWidth={2.5} strokeScaleEnabled={false} listening={false} />
+        ) : (
+          <Rect key={x.id} x={x.at.x - 0.45} y={x.at.y - 0.45} width={0.9} height={0.9} fill={COLORS.pedestal} stroke="#ffffff" strokeWidth={1} strokeScaleEnabled={false} listening={false} />
+        ),
+      )}
     </>
   );
 }
@@ -707,6 +729,7 @@ export function MarinaCanvas() {
             )}
             {layout && layers.piers && <PierGangways layout={layout} site={project.site} />}
             {layout && layers.anchoring && <AnchorShapes />}
+            {layout && layers.equipment && <EquipmentShapes />}
             {layers.fetch && <FetchRays />}
           </Group>
         </Layer>

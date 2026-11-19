@@ -120,6 +120,11 @@ export interface BoatClass {
    * from the length (Top Marine's table for sailing boats, I79) and flagged.
    */
   weight?: number;
+  /**
+   * Extension (D64): boat type for the windage areas of AS 3962 Table 4.4; missing = 'motor'
+   * (the larger areas).
+   */
+  vesselType?: 'motor' | 'yacht';
 }
 
 /**
@@ -384,6 +389,34 @@ export interface CostSettings {
 
 export const PROJECT_SCHEMA_VERSION = 1;
 
+/**
+ * I121: mean water depth around the site position (the position of the wave screening), looked up
+ * along eight rays from EMODnet Bathymetry (sea) or SYKE's lake depth zones, as the depths along
+ * the fetches (I110). The depths refer to the source's own datum.
+ */
+export interface SiteDepthResult {
+  /** Mean depth of the samples that have one, m. */
+  depth: number;
+  /** Shallowest and deepest sample, m. */
+  min: number;
+  max: number;
+  source: 'emodnet' | 'syke';
+  /** Share of the samples with a depth (0–1). */
+  coverage: number;
+  position: { lat: number; lon: number };
+  /** Length of the rays, m. */
+  radius: number;
+  fetchedOn: string;
+}
+
+export interface SiteDepthSettings {
+  /** Set the anchoring design depth from the lookup whenever the site position is known (a depth typed in turns it off). */
+  auto: boolean;
+  /** Length of the eight rays from the position, m. */
+  radius: number;
+  result: SiteDepthResult | null;
+}
+
 /** The complete saved state of one study: what goes into the JSON project file. */
 export interface Project {
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
@@ -405,6 +438,8 @@ export interface Project {
   waves: WaveSettings;
   /** Extension (D50): characteristic water levels of a gauge near the site, or null. */
   waterLevels: WaterLevelInfo | null;
+  /** Extension (I121): mean depth around the site position for the anchoring design depth. */
+  siteDepth: SiteDepthSettings;
   /**
    * Fingerprint of the inputs (site, boat classes, parameters) the layouts were generated
    * from, or null when there are no generated layouts. Used for the "Regenerate" hint.

@@ -4,6 +4,7 @@ import { LeftSidebar } from './panels/LeftSidebar';
 import { RightSidebar } from './panels/RightSidebar';
 import { Toolbar } from './panels/Toolbar';
 import { WaveTool } from './panels/WaveTool';
+import { useAutoSiteDepth } from './siteDepth';
 import { useT } from './useT';
 
 /** Keyboard shortcuts: undo/redo, and finishing or cancelling the shape being drawn. */
@@ -42,6 +43,7 @@ export function AppShell({ canvas }: { canvas: ReactNode }) {
   const t = useT();
   const notice = useAppStore((s) => s.notice);
   useShortcuts();
+  useAutoSiteDepth();
   return (
     <div className="flex h-full flex-col bg-slate-50 text-slate-900">
       <Toolbar />

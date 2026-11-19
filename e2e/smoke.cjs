@@ -424,6 +424,8 @@ async function waitForServer() {
       await page.getByLabel(`Gangways at (m from its first point) (${pontoon.id})`, { exact: true }).fill('20; 150');
       await page.waitForFunction(() => (window.__marina.getState().project.site.accessPontoons[0].gangways ?? []).length === 2);
       assert.equal(await fixings.locator('xpath=following-sibling::span').textContent(), String(4 + 2 * ownGangways));
+      // I122: the piers starting from it hold it with their chains; it has no chains of its own into the berths.
+      assert.match(await page.getByTestId('anchoring-issues').textContent(), new RegExp(`Access pontoon ${pontoon.id} \\(D28\\): off the wall it is held by two shore chains at each gangway and by the piers attached to it`));
       await page.screenshot({ path: path.join(outDir, 'access-pontoon.png') });
     });
 
@@ -469,7 +471,7 @@ async function waitForServer() {
       await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
       assert.match(await page.getByTestId('as3962').textContent(), /Table 3\.3/);
       await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
-      const total = page.getByText('Total VAT 0 %', { exact: true });
+      const total = page.getByText(/^Total VAT 0 %( \(excludes \d+ unpriced items?, see list\))?$/);
       await total.scrollIntoViewIfNeeded();
       assert.ok(await total.isVisible());
       assert.ok(await page.getByText('Anchor lines', { exact: true }).isVisible());
@@ -478,8 +480,16 @@ async function waitForServer() {
       const legend = page.getByTestId('legend');
       assert.ok(await legend.getByText('Concrete anchor', { exact: true }).isVisible());
       assert.ok(await legend.getByText('Gangway', { exact: true }).isVisible());
+      // D65: rescue ladders, safety equipment posts and pedestals on their own layer, in the bill of materials.
+      for (const label of ['Rescue ladder', 'Safety equipment post', 'Power and water pedestal']) assert.ok(await legend.getByText(label, { exact: true }).isVisible(), label);
       await page.getByRole('button', { name: '▾ Legend', exact: true }).click();
-      // Grouped warnings (U21): one row for the many "several anchors" lines, expandable.
+      const bomText = await page.getByTestId('bom-lines').textContent();
+      for (const name of ['Turvaporras', 'Pelastusvälinepylväs', 'Sähköpylväs RM Platinum 4×16A + vesi']) assert.ok(bomText.includes(name), name);
+      // D64: the spec's required text, the status and the unpriced pile anchors (the demo's lines on clay need more than 5 t).
+      assert.match(await page.getByTestId('mooring-disclaimer').textContent(), /^Preliminary sizing\. Does not replace the designer's calculation/);
+      assert.match(await page.getByTestId('anchoring-status').textContent(), /^Anchoring status\d+ lines with concrete anchors, \d+ with pile anchors$/);
+      assert.match(await page.getByTestId('unpriced-items').textContent(), /Pile anchor – length and section by geotechnical design/);
+      // Grouped warnings (U21): one row for the pile lines of the many piers, expandable.
       const groupToggle = page.getByTestId('anchoring-issues').getByRole('button', { name: /similar – show all$/ }).first();
       await groupToggle.scrollIntoViewIfNeeded();
       await groupToggle.click();
@@ -491,46 +501,52 @@ async function waitForServer() {
       const list = await download('Download price list (.xlsx)');
       assert.ok(fs.statSync(list).size > 10000);
       // Importing the downloaded list keeps the totals.
-      const before = await page.getByText('Total VAT 0 %', { exact: true }).locator('xpath=following-sibling::span').textContent();
+      const before = await page.getByText(/^Total VAT 0 %( \(excludes \d+ unpriced items?, see list\))?$/).locator('xpath=following-sibling::span').textContent();
       await page.getByTestId('import-price-list').setInputFiles(list);
       await page.getByText('(imported)').first().waitFor();
-      const after = await page.getByText('Total VAT 0 %', { exact: true }).locator('xpath=following-sibling::span').textContent();
+      const after = await page.getByText(/^Total VAT 0 %( \(excludes \d+ unpriced items?, see list\))?$/).locator('xpath=following-sibling::span').textContent();
       assert.equal(after, before);
       await page.getByRole('button', { name: 'Use built-in', exact: true }).click();
       await page.screenshot({ path: path.join(outDir, 'cost.png') });
     });
 
-    await step('anchor type: wedge anchors need lighter anchors than blocks, as the comparison row says; splay angle; reset keeps site values and type (I59, I102, U19, D25)', async () => {
-      const largest = async () => {
-        const text = await page.getByText('Largest anchor needed', { exact: true }).locator('xpath=following-sibling::span').textContent();
-        return Number(text.replace(/[^\d]/g, ''));
-      };
-      // I102: the plan also shows the anchors with the other type.
-      const other = page.getByTestId('anchoring-other-type');
-      const otherLargest = async () => Number((await other.textContent()).match(/largest ([\d,]+) kg/)[1].replace(/,/g, ''));
-      assert.match(await other.textContent(), /^With concrete wedges instead/);
-      const predictedWedgeKg = await otherLargest();
-      const blockKg = await largest();
+    await step('mooring sizing of the spec: seabed and loads change the anchors; load and line tables; data package; reset keeps site values (D64, U19, D25)', async () => {
+      const status = async () => (await page.getByTestId('anchoring-status').textContent()).match(/(\d+) lines with concrete anchors, (\d+) with pile anchors/).slice(1).map(Number);
+      const [okClay] = await status();
+      assert.equal(okClay, 0);
       await page.getByText('Anchoring parameters', { exact: true }).click();
-      await page.getByRole('combobox', { name: 'Anchor type' }).selectOption('wedge');
-      await page.waitForFunction(() => window.__marina.getState().project.anchoring.anchorType === 'wedge');
-      const wedgeKg = await largest();
-      assert.ok(wedgeKg > 0 && wedgeKg < blockKg, `wedge ${wedgeKg} kg should be below block ${blockKg} kg`);
-      assert.equal(wedgeKg, predictedWedgeKg);
-      assert.match(await other.textContent(), /^With concrete blocks instead/);
-      assert.equal(await otherLargest(), blockKg);
+      // Gravel, a light design wind and a wave analysis below the minimum: concrete anchors hold some lines.
+      await page.getByTestId('seabed').selectOption('gravelCoarseSand');
+      await page.getByLabel('Design wind, 30 s ULS (m/s)', { exact: true }).fill('12');
+      await page.getByLabel('Minimum wave line load (kN/m)', { exact: true }).fill('0.2');
+      await page.waitForFunction(() => window.__marina.getState().project.anchoring.waveMin === 0.2);
+      const [okGravel] = await status();
+      assert.ok(okGravel > 0, `some lines should hold with concrete anchors, got ${okGravel}`);
+      assert.ok(await page.getByTestId('anchoring-issues').getByText(/Minimum wave line load 0\.2 kN\/m < 2 kN\/m/).first().isVisible());
+      // The load table and the line table with the colours of the spec.
+      await page.getByText('Loads per pontoon (kN)', { exact: true }).click();
+      assert.ok((await page.getByTestId('mooring-loads').locator('tbody tr').count()) >= 4);
+      await page.getByText(/^Lines \(\d+\)$/).click();
+      assert.ok((await page.getByTestId('mooring-lines').locator('.bg-green-100, .bg-yellow-100, .bg-red-100').count()) > 0);
+      // The data package for the manufacturer of an elastic mooring (spec §7).
+      const pkg = await download('Data package for the manufacturer (.json)');
+      const json = JSON.parse(fs.readFileSync(pkg, 'utf8'));
+      assert.equal(json.seabed.type, 'gravelCoarseSand');
+      assert.ok(json.loads_kN.length > 0);
+      // Square chains leave the load along the piers unresisted: an error (spec §4).
       await page.getByLabel('Design water depth (m)', { exact: true }).fill('6');
-      await page.getByLabel('Drag coefficient', { exact: true }).fill('1.2');
-      // Square chains leave the wind along the piers unheld (D25).
       await page.getByLabel('Chain splay from square to the pier (°)', { exact: true }).fill('0');
       await page.waitForFunction(() => window.__marina.getState().project.anchoring.splayAngle === 0);
+      assert.ok(await page.getByTestId('anchoring-issues').getByText(/No anchor leg resists this load direction/).first().isVisible());
       await page.getByRole('button', { name: 'Reset factors to defaults', exact: true }).click();
       const a = await page.evaluate(() => window.__marina.getState().project.anchoring);
       assert.equal(a.depth, 6);
-      assert.equal(a.dragCoefficient, 1.6);
+      assert.equal(a.seabed, 'gravelCoarseSand');
+      assert.equal(a.windSpeed, 12);
       assert.equal(a.splayAngle, 45);
-      assert.equal(a.anchorType, 'wedge');
-      await page.getByRole('combobox', { name: 'Anchor type' }).selectOption('block');
+      assert.equal(a.waveMin, 2);
+      await page.getByTestId('seabed').selectOption('mediumClay');
+      await page.getByLabel('Design wind, 30 s ULS (m/s)', { exact: true }).fill('22');
       await page.getByText('Anchoring parameters', { exact: true }).click();
     });
 
@@ -604,7 +620,17 @@ async function waitForServer() {
         }
         route.fulfill({ json: { latitude: 60.25, longitude: 25.0, hourly: { time, wind_speed_10m: speed, wind_direction_10m: dir } } });
       });
+      // I121: the design depth was typed in (6 m), so the position does not start a depth lookup.
+      const emodnetAsked = [];
+      await page.route('https://rest.emodnet-bathymetry.eu/**', (route) => {
+        emodnetAsked.push(route.request().url());
+        route.fulfill({ json: new Array(1000).fill(-3.64) });
+      });
       await tool.getByLabel('Position').fill('60.15, 24.95');
+      await page.waitForTimeout(1200);
+      const sd = await page.evaluate(() => window.__marina.getState().project);
+      assert.deepEqual([emodnetAsked.length, sd.anchoring.depth, sd.siteDepth.auto], [0, 6, false]);
+      await page.unroute('https://rest.emodnet-bathymetry.eu/**');
       await tool.getByLabel('First year', { exact: true }).fill('2016');
       await tool.getByLabel('Last year', { exact: true }).fill('2024');
       await tool.getByRole('button', { name: 'Fetch wind data', exact: true }).click();
@@ -719,6 +745,15 @@ async function waitForServer() {
       );
       await page.route('https://rajapinnat.ymparisto.fi/**', (route) => route.fulfill({ json: { value: [] } }));
       await page.getByText('Anchoring parameters', { exact: true }).click();
+      // I121: ticked again, the design depth follows the mean depth around the position (EMODnet mocked: 3.64 m).
+      await page.route('https://rest.emodnet-bathymetry.eu/**', (route) => route.fulfill({ json: new Array(1000).fill(-3.64) }));
+      await page.getByTestId('site-depth-auto').check();
+      await page.getByTestId('site-depth-result').waitFor();
+      const sd = await page.evaluate(() => window.__marina.getState().project);
+      assert.equal(sd.anchoring.depth, 3.6);
+      assert.deepEqual([sd.siteDepth.result.source, sd.siteDepth.result.radius, sd.siteDepth.auto], ['emodnet', 200, true]);
+      assert.match(await page.getByTestId('site-depth-result').innerText(), /^Mean depth 3\.6 m \(samples 3\.6–3\.6 m; EMODnet; 100 % of the samples in water; within 200 m of 60\.1500, 24\.9500; \d{4}-\d{2}-\d{2}\) · used as the design depth$/);
+      await page.unroute('https://rest.emodnet-bathymetry.eu/**');
       await page.getByRole('button', { name: 'Find water-level gauges', exact: true }).click();
       const box = page.getByTestId('water-levels');
       await box.getByText(/Helsinki Kaivopuisto/).waitFor();

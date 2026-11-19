@@ -3,16 +3,16 @@
  * the project and the price list. Like fairways and issues, nothing here is stored.
  */
 import { useMemo } from 'react';
-import { anchoringPlan, type AnchoringResult, type AnchorTotals } from '../engine/anchoring';
+import { anchoringPlan, anchoringStatus, type AnchoringResult } from '../engine/anchoring';
 import { costEstimate, resolveChoices, type CostEstimate, type ResolvedChoices } from '../engine/bom';
 import { DEFAULT_VAT_PCT, parameter, type PriceList } from '../engine/catalog';
 import type { Layout, Project } from '../engine/model';
 import { pierAxis } from '../engine/rows';
-import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../engine/waves';
+import { bearingOf, WAVE_SECTORS, waveAssessment } from '../engine/waves';
 import type { Language } from '../i18n';
 import type { StringKey } from '../i18n';
 import { useAppStore } from '../state/store';
-import { formatCount, formatLength } from './format';
+import { formatCount } from './format';
 
 export interface CostModel {
   priceList: PriceList;
@@ -25,19 +25,25 @@ export interface CostModel {
 }
 
 /**
- * D45: wave directions for the anchoring plan from the wave screening (sectors with a fetch), and
- * (I104) the 50-year Hm0 of each, null where the screening has no wind for it.
+ * D45, D64: the sectors of the wave screening whose waves exceed its criteria. Since D64 the wave
+ * load of the anchoring is max(wave line load, 2 kN/m) on every pontoon (spec §3.4); the screening
+ * only tells where the minimum is not enough.
  */
-export function waveInput(project: Project, layout: Layout): { from: number[]; exceeding: string[]; hs50: (number | null)[] } {
+export function waveInput(project: Project, layout: Layout): { exceeding: string[] } {
   const assessment = waveAssessment(project.waves, project.anchoring.depth, layout.piers.map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) })));
-  const sectors = project.waves.sectors.flatMap((x, k) => (x.fetch > 0 ? [k] : []));
-  const hs = (k: number) => assessment?.sectors.find((x) => x.sector === k)?.events.find((e) => e.event === 'fiftyYear')?.waves.hm0 ?? null;
-  return { from: sectors.map(waveSectorBearing), exceeding: (assessment?.bad ?? []).map((k) => WAVE_SECTORS[k]!), hs50: sectors.map(hs) };
+  return { exceeding: (assessment?.bad ?? []).map((k) => WAVE_SECTORS[k]!) };
 }
 
-/** I102: "12 345 kg (largest 3 260 kg, chains up to 47.0 m)" for the other anchor type. */
-export function otherTypeText(o: AnchorTotals, t: (key: StringKey) => string, language: Language): string {
-  return `${formatCount(o.totalKg, language)} kg (${t('anchoring.largest')} ${formatCount(o.maxKg, language)} kg, ${t('anchoring.chainsUpTo')} ${formatLength(o.longestChainM, language)} m)`;
+/** D62: " (excludes 3 unpriced items, see list)" after a total's label, or "". */
+export function excludesLabel(t: (key: StringKey) => string, unpriced: number): string {
+  if (unpriced === 0) return '';
+  return ` ${unpriced === 1 ? t('cost.excludesOne') : t('cost.excludes').replace('{n}', String(unpriced))}`;
+}
+
+/** D64: "12 lines with concrete anchors, 140 with pile anchors" in the language of `t`. */
+export function anchoringStatusLabel(t: (key: StringKey) => string, lines: AnchoringResult['lines'], language: Language): string {
+  const s = anchoringStatus(lines);
+  return t('anchoring.statusValue').replace('{ok}', formatCount(s.ok, language)).replace('{bad}', formatCount(s.piles, language));
 }
 
 /** The price list in use: the project's imported one, else the built-in one. */
@@ -59,7 +65,7 @@ export function computeCostModel(project: Project, layout: Layout, builtIn: Pric
     buoyDepthFactor: project.params.buoyDepthFactor,
     moduleLengths: project.params.pierModuleLengths,
     gangwayReach: project.params.gangwayLength,
-    // D45: the directions with open water, and those whose waves exceed the criteria.
+    // D45: the directions whose waves exceed the criteria (a warning).
     waves: waveInput(project, layout),
   });
   const estimate = costEstimate({ layout, site: project.site, priceList, choices, anchoring });

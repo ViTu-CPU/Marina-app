@@ -87,20 +87,62 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parsed.ok && parsed.project.params.shoreOffset).toBe(0);
   });
 
-  it('files from before the largest anchor piece and anchor type open with their defaults; other anchoring values are kept (I57)', () => {
+  it('files from before D64 open with the new defaults; their seabed is mapped; other stored values are kept (I57)', () => {
     const parsed = parseProject(
       fileWith((p) => {
         const a = p.anchoring as Record<string, unknown>;
         delete a.maxAnchorMass;
-        delete a.anchorType;
+        delete a.waveMin;
+        a.seabed = 'clay';
+        a.anchorType = 'wedge';
         a.profileHeightRatio = 0.25;
+        a.lineSpacing = 9;
       }),
     );
-    expect(parsed.ok && parsed.project.anchoring.maxAnchorMass).toBe(3000);
-    expect(parsed.ok && parsed.project.anchoring.anchorType).toBe('block');
-    const bad = parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).anchorType = 'helix')));
-    expect(bad.ok).toBe(false);
-    expect(parsed.ok && parsed.project.anchoring.profileHeightRatio).toBe(0.25);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.project.anchoring).toMatchObject({ maxAnchorMass: 5000, waveMin: 2, seabed: 'mediumClay', lineSpacing: 9 });
+    // Fields of the old model are dropped.
+    expect('anchorType' in parsed.project.anchoring).toBe(false);
+    expect('profileHeightRatio' in parsed.project.anchoring).toBe(false);
+    const sand = parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).seabed = 'sand')));
+    expect(sand.ok && sand.project.anchoring.seabed).toBe('fineMediumSand');
+    expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).seabed = 'mud'))).ok).toBe(false);
+    // The cohesive model and the capacity factor's basis survive saving.
+    const cohesive = { Su_z: 20, Su_a: 10, A: 3, B: 1.5, z: 0.5, gammaB: 6, massDryKg: 3000 };
+    const withCohesive = parseProject(
+      fileWith((p) => {
+        const a = p.anchoring as Record<string, unknown>;
+        a.cohesive = cohesive;
+        a.capacityFactor = 1.5;
+        a.capacityFactorSource = 'pull test';
+      }),
+    );
+    expect(withCohesive.ok && withCohesive.project.anchoring).toMatchObject({ cohesive, capacityFactor: 1.5, capacityFactorSource: 'pull test' });
+    expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).maxAnchorsPerLine = 3))).ok).toBe(false);
+  });
+
+  it('boat classes keep their vessel type (D64); missing reads as motor', () => {
+    const parsed = parseProject(fileWith((p) => ((p.boatClasses as Record<string, unknown>[])[0]!.vesselType = 'yacht')));
+    expect(parsed.ok && parsed.project.boatClasses[0]!.vesselType).toBe('yacht');
+    expect(parseProject(fileWith((p) => ((p.boatClasses as Record<string, unknown>[])[0]!.vesselType = 'ship'))).ok).toBe(false);
+  });
+
+  it('an imported price list keeps the anchor columns (D62); older files without them read as blocks', () => {
+    const product = {
+      id: 'pile-1', category: 'anchor', supplier: 'x', series: '', name: 'Pile', code: '', unit: 'pcs', price: 100, priceIncludesVat: false, marginPct: 0,
+      lengthM: null, widthM: null, weightKg: null, capacityKg: null, freeboardM: null, chainDiameterMm: null, chainGrade: '', breakingLoadKn: null, massKgPerM: null,
+      anchorMassKg: null, anchorKind: 'pile', capacityHorizontalKn: 50, capacityUpliftKn: null, capacityBasis: 'published', seabeds: ['mediumClay'], installedPrice: 900,
+      shackleMm: null, sourceUrl: 'https://example.com', sourceDate: '2026-11-18', note: '',
+    };
+    const withList = (p: Record<string, unknown>) => parseProject(fileWith((f) => ((f.cost as Record<string, unknown>).priceList = { title: 't', products: [p], parameters: [] })));
+    const parsed = withList(product);
+    expect(parsed.ok && parsed.project.cost.priceList!.products[0]).toEqual(product);
+    const old: Record<string, unknown> = { ...product };
+    for (const k of ['anchorKind', 'capacityHorizontalKn', 'capacityUpliftKn', 'capacityBasis', 'seabeds', 'installedPrice']) delete old[k];
+    const older = withList(old);
+    expect(older.ok && older.project.cost.priceList!.products[0]).toMatchObject({ anchorKind: null, capacityHorizontalKn: null, capacityUpliftKn: null, capacityBasis: null, seabeds: [], installedPrice: null });
+    expect(withList({ ...product, anchorKind: 'helix' }).ok).toBe(false);
+    expect(withList({ ...product, seabeds: ['mud'] }).ok).toBe(false);
   });
 
   it('gangways of an access pontoon (D32): kept when given, missing = none, negative refused', () => {
@@ -179,6 +221,26 @@ describe('project file (SPEC §2: JSON export/import)', () => {
     expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).buoyExposed = 'yes'))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p.boatClasses as Record<string, unknown>[])[0]!.weight = 0))).ok).toBe(false);
     expect(parseProject(fileWith((p) => ((p.anchoring as Record<string, unknown>).buoySinkerMethod = 'guess'))).ok).toBe(false);
+  });
+
+  it('depth lookup around the site (I121): kept; older files follow it only with the default depth; invalid refused', () => {
+    const result = { depth: 3.64, min: 1.2, max: 6.8, source: 'emodnet', coverage: 0.8, position: { lat: 60.15, lon: 24.95 }, radius: 200, fetchedOn: '2026-11-18' };
+    const kept = parseProject(fileWith((p) => (p.siteDepth = { auto: false, radius: 300, result })));
+    expect(kept.ok && kept.project.siteDepth).toEqual({ auto: false, radius: 300, result });
+    const old = (depth: number) =>
+      parseProject(
+        fileWith((p) => {
+          delete p.siteDepth;
+          (p.anchoring as Record<string, unknown>).depth = depth;
+        }),
+      );
+    const fresh = old(4);
+    expect(fresh.ok && fresh.project.siteDepth).toEqual({ auto: true, radius: 200, result: null });
+    const entered = old(6.5);
+    expect(entered.ok && entered.project.siteDepth.auto).toBe(false);
+    expect(entered.ok && entered.project.anchoring.depth).toBe(6.5);
+    expect(parseProject(fileWith((p) => (p.siteDepth = { auto: true, radius: 0, result: null }))).ok).toBe(false);
+    expect(parseProject(fileWith((p) => (p.siteDepth = { auto: true, radius: 200, result: { ...result, source: 'guess' } }))).ok).toBe(false);
   });
 
   it('wave screening inputs (D40): kept, older files have none, invalid values refused', () => {

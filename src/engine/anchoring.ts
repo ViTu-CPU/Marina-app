@@ -1,71 +1,67 @@
 /**
- * Preliminary anchoring plan (DECISIONS D23): chain lines and concrete anchors for the
- * main piers and access pontoons of a layout, for one design water depth (D16).
+ * Preliminary anchoring plan (DECISIONS D23, D64): chain lines and anchors for the main piers,
+ * access pontoons and breakwaters of a layout, stern buoys and finger end piles.
  *
- * This is a QUANTITY ESTIMATE for a feasibility study, not a mooring design. The method
- * and every factor are listed in docs/RESEARCH.md §5; each factor is a parameter. Waves,
- * ice, currents, berthing loads, dynamic effects and the structural capacity of the
- * pontoons and their fixings are not calculated.
+ * Alustava mitoitus. The sizing follows the owner's specification docs/ANKKUROINTI_MITOITUS_SPEC.md
+ * (engine/mooring.ts): loads after AS 3962:2020 for each pontoon in four main directions (across ±,
+ * along ±), shared by the legs anchored opposite the load, a catenary at low and high water for every
+ * leg, and the concrete anchor by friction of its submerged weight less the uplift (μ by seabed,
+ * NAVFAC DM-7.02) or by the optional cohesive model. It does not replace the designer's calculation,
+ * a geotechnical survey or the manufacturer's design; ice loads are not designed (MOORING_DISCLAIMER).
  *
- * Method, per pier (wind loads after UFC 4-152-07 Change 1, 2012, §6-3.4.1 and Fig. 6-5;
- * docs/RESEARCH.md §5, DECISIONS I54):
- *  1. Wind across the pier: q · Cd · (A_windward + leeward factor · A_leeward + A_pontoon),
- *     q = ½ ρ_air v². The boats lie square to the pier, so this wind meets them bow- or
- *     stern-on: area = beam × profile height (profile height = ratio × boat length). The
- *     pier face counts where no boat of the windward row stands in front of it (DBW 2005,
- *     commentary to C2.4.1). The larger of the two directions is used for both sides.
- *  2. Wind along the pier: the boats are hit broadside (length × profile height); per row,
- *     the first boat from the windward end in full and the others with the leeward factor,
- *     plus the pier's end area. Computed for wind from the sea and from the shore.
- *  3. Lines (DECISIONS D25, I60): pairs of chains crossed under the pier at a spacing along
- *     it, each splayed by the angle θ from square to the pier (Chalmers 2026 Fig. 4). The
- *     stations in the shore half are splayed towards the head and hold wind from the sea;
- *     those in the head half towards the shore and hold wind from the shore. Each direction
- *     is checked separately (UFC §6-3.4.1.4): across, the lines of one side share the load,
- *     H = F / pairs / cos θ; along, the lines splayed against it share it,
- *     H = F / lines / sin θ. A line takes the larger.
- *  3b. Access pontoons in front of the shore (D28, I64–I66): square lines on the water side
- *     only (they hold the wind towards the wall). The wind pushing the pontoon off the wall is
- *     shared by tributary length between two shore chains at its gangway (crossed at θ, to
- *     fixings in the wall) and the piers attached to it, which add their share to the load
- *     their shore-ward lines hold. The wind along the wall goes to the shore chains.
- *  4. Each line: chain length L = max(h + 1 m, factor × h), h = depth at high water.
- *     Catenary with a = H / w (w = submerged weight per metre). If L is at least the length
- *     that hangs when the chain touches the bottom tangentially, s = √(h² + 2 h a), the
- *     rest lies on the bottom and the anchor gets no uplift. Otherwise the chain hangs
- *     between both ends: span X = 2a · asinh(√(L² − h²) / 2a), uplift at the anchor
- *     V = H · sinh(atanh(h/L) − X/2a), at the pontoon T = √(H² + (V + wL)²).
- *  5. Chain: the cheapest chain of the price list with a published breaking load such that
- *     MBL · ((d − c)/d)² ≥ SF · T (c = corrosion allowance on the diameter).
- *  6. Anchor: submerged weight ≥ SF_slide · (H / μ + V); mass = that / (g (1 − ρ_w/ρ_c)).
- *     The cheapest concrete anchor of the price list at least that heavy and not heavier
- *     than the largest piece to be handled; otherwise several of the heaviest such piece.
- *     Friction only: the extra holding of an anchor embedded in the seabed is not counted
- *     (it depends on penetration, which is not known at this stage; Chalmers 2026 §7.5).
- *  7. Stern buoys (D36, D37, I79–I85): one line per stern-buoy berth, from the buoy straight
- *     down to its sinker. Sinker, chain size and float from a selection table by boat weight
- *     (default Svenska Båtunionen's Hamnhandboken 2016, Tabell 3; or Top Marine's), one row up
- *     in an exposed harbour; or sinker = factor × boat weight. Chain length = factor × design
- *     depth (1.41: slope 1:1), at least the depth at high water + the lift of the buoy (0.8 m);
- *     the chain is at least the table's size and strong enough for the boat's stern-on wind.
- *     The friction method of step 6 is shown for comparison.
+ * The layout of the legs is the tool's own (D25, D28, D30, D46, D49, D58):
+ *  - main piers and breakwaters: from every module joint, on each side one chain splayed by θ towards
+ *    the head and one towards the shore, crossed under the pontoon; at the shore end towards the head,
+ *    at the head an outward tip pair (a breakwater has outward pairs at both ends); a pier reached by
+ *    a gangway from the shore has two shore chains crossed under the gangway to the wall;
+ *  - access pontoons: square chains on the water side at `lineSpacing` and two shore chains at each
+ *    gangway (in front of a wall), else square chains on both sides;
+ *  - each pontoon is sized on its own (no load shared between pontoons: spec §4).
+ *
+ * Per leg the cheapest chain of the price list with MBL · ((d − c)/d)² / max(T_fair, T_anchor) ≥ the
+ * chain factor of safety at both water levels, length `chainLengthFactor` × the depth at high water.
+ * The anchor (D64, owner): concrete blocks of at most `maxAnchorMass` (5 t), one per line (two only as
+ * the user's tandem choice), heavy enough for the required dry mass of the spec; when none is, a pile
+ * anchor at the end of the chain, its length and section by geotechnical design.
+ *
+ * Stern buoys (D36, D37) keep their selection table for the sinker; the chain is checked with the
+ * catenary of the spec. Fingers longer than `fingerPileMinLength` get an end pile (D31).
  */
-import { unitPriceVat0, type PriceList, type Product } from './catalog';
+import { chooseBlock, groupThousands, installParams, pileProduct, usableBlocks } from './anchorChoice';
+import { unitPriceVat0, type AnchorKind, type PriceList, type Product } from './catalog';
 import { breakwaterJoints, breakwaterProductOf, breakwatersOf } from './breakwater';
 import { add, distance, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
-import type { BoatClass, Finger, Issue, Layout, MainPier, Site, Vec2 } from './model';
+import type { BoatClass, Finger, Issue, Layout, Site, Vec2 } from './model';
 import { jointPositions } from './modules';
+import {
+  anchorCapacityCohesive,
+  anchorCapacityFriction,
+  catenary,
+  chainWeight,
+  distributeToLegs,
+  environmentalLoads,
+  requiredAnchorMassFriction,
+  ruleChecks,
+  SEABED_FRICTION,
+  submergedWeight_kN,
+  vesselWindArea,
+  WIND_CD,
+  windPressure,
+  type CohesiveParams,
+  type LoadCase,
+  type MooringBoat,
+  type MooringLeg,
+  type MooringWarning,
+  type SeabedKey,
+  type VesselType,
+} from './mooring';
 import { pierAxis } from './rows';
 import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierShoreLink, SHORE_TOLERANCE } from './site';
 
-export type Seabed = 'clay' | 'sand' | 'rock';
-
-/**
- * 'block': plain concrete block holding by friction. 'wedge': Pearl Harbor type concrete
- * wedge that digs into soft seabeds, sized from Sound & Sea Technology 2009 Tables 35–36
- * (DECISIONS I59).
- */
-export type AnchorType = 'block' | 'wedge';
+/** D64: seabed types of NAVFAC DM-7.02 (engine/mooring.ts). */
+export type Seabed = SeabedKey;
+/** Seabeds with a friction model (soft clay / mud has none). */
+export type FrictionSeabed = Exclude<SeabedKey, 'softClayMud'>;
 
 /**
  * How stern-buoy sinkers are sized (D36, D37): 'table' = the sinker of the selection table
@@ -79,6 +75,9 @@ export type BuoySinkerMethod = 'table' | 'factor';
  */
 export type BuoyTableId = 'batunionen' | 'topMarine';
 
+/** D64: the cohesive model of the spec (§5.3) with the dry mass of the block it describes. */
+export type CohesiveBlock = CohesiveParams & { massDryKg: number };
+
 export interface AnchoringParams {
   /** Design water depth at the anchors, m (D16). */
   depth: number;
@@ -86,66 +85,64 @@ export interface AnchoringParams {
   highWater: number;
   /** Lowest water level below the design level, m. */
   lowWater: number;
-  /**
-   * D50: normal high and low water (MHW − MW, MW − MNW), m, when known from a gauge; null = the
-   * extremes above stand for them. Used for the stern-buoy range check (Båtunionen's "normal
-   * högvattenyta").
-   */
+  /** D50: normal high and low water (MHW − MW, MW − MNW), m, when known from a gauge; null = not known. */
   normalHighWater: number | null;
   normalLowWater: number | null;
-  /** D52: level of the quay (gangway pivot) above the design water level, m; null = not known (no slope check). */
+  /** D52: level of the quay (gangway pivot) above the design water level, m; null = not known. */
   quayLevel: number | null;
   seabed: Seabed;
-  /** Design (steady) wind speed, m/s. */
+  /** D64: friction coefficient of mass concrete on each seabed (NAVFAC DM-7.02, default the lower end). */
+  friction: Record<FrictionSeabed, number>;
+  /** D64: slope of the seabed down in the direction of the pull, degrees (spec 2.4). */
+  slopeDeg: number;
+  /** D64: optional cohesive model (clay, mud): Fh = Su_z·A + (2·Su_a·z + ½·γb·z²)·B; null = not used. */
+  cohesive: CohesiveBlock | null;
+  /** D64: factor on the anchor capacity: 1 (default); above 1 only with a documented basis. */
+  capacityFactor: number;
+  /** D64: the documented basis of a capacity factor above 1 (pull test, measured embedment). */
+  capacityFactorSource: string;
+  /** D64: 30 s steady ULS design wind, m/s (AS 3962 4.8.3.2–3); entered by the user (spec §9). */
   windSpeed: number;
-  airDensity: number;
-  dragCoefficient: number;
-  /** Wind on the boats of the leeward row (and on shielded boats), as a fraction. */
+  /** Wind on the boats of the leeward row, as a fraction (AS 3962 4.8.3.3: 0.2). */
   leewardFactor: number;
-  /** Boat profile height above water = ratio × boat (berth) length. */
-  profileHeightRatio: number;
-  /** Pontoon height above water used for its wind area when the product gives none, m. */
+  /** D64: wave line load from the user's wave analysis, kN/m; max(this, waveMin) is used. */
+  waveLineLoad: number;
+  /** D64: minimum wave line load, kN/m (AS 3962 4.8.2.3: 2 kN/m; less gives a warning). */
+  waveMin: number;
+  /** D64: current speed, m/s (AS 3962: at least 1.0 m/s in a river or estuary). */
+  currentSpeed: number;
+  /** D64: extra static load per pontoon, kN (e.g. the equivalent static load of berthing). */
+  extraStatic: number;
+  /** D64: ice line load, kN/m: reported only, not designed. */
+  iceLineLoad: number;
+  /** D64: the pontoons stay in the water over winter (D17): a warning. */
+  winterInWater: boolean;
+  /** D64: factor on the load of each leg for uneven sharing (no source; default 1). */
+  unevenFactor: number;
+  /** Pontoon freeboard used for its wind area when the product gives none, m (spec 2.1: 0.5). */
   pontoonFreeboard: number;
-  /** Spacing of crossed line pairs along a pier, m. */
+  /** D64: pontoon draught for the current, m (spec 2.1: 0.5). */
+  pontoonDraft: number;
+  /** Spacing of the lines of an access pontoon (and of a pier without module joints), m. */
   lineSpacing: number;
-  /**
-   * D45: horizontal wave load on the pontoons from directions with open water, kN/m (AS 3962-2001
-   * 4.8.2.3: "a minimum horizontal force of 2 kN/m"); 0 turns it off.
-   */
-  waveLoad: number;
-  /**
-   * D57, I104: the wave load grows with the 50-year significant wave height Hm0 of each direction:
-   * none up to `waveLoadMinHs` (UFC 4-152-07 6-3.4.7.2: above 1 ft the waves "could be a
-   * significant factor in design"), the full `waveLoad` from `waveLoadFullHs` (the largest
-   * criterion of AS 3962 Table 4.2, for which 4.8.2.3 gives 2 kN/m), in proportion to Hm0²
-   * between (Assumption: wave drift forces grow with the square of the wave height). A direction
-   * whose height is not known takes the full load. `waveLoadFullHs` 0 gives the full load always.
-   */
-  waveLoadMinHs: number;
-  waveLoadFullHs: number;
-  /**
-   * Plan angle of the chains of a main pier from square to the pier, degrees (0–80). The
-   * splayed chains also hold the wind along the pier (D25); 0 leaves that load unheld.
-   */
+  /** Plan angle of the chains of a main pier from square to the pier, degrees (0–80, D25). */
   splayAngle: number;
+  /** D64: chain factor of safety on MBL / max(T_fair, T_anchor) (spec: 3.0, a choice). */
   chainSafetyFactor: number;
   /** Loss of chain diameter over the design life (corrosion and wear), mm. */
   corrosionAllowance: number;
+  /** D64: anchor factor of safety (spec: 1.5, a choice; API RP 2SK offshore 1.8 is shown too). */
   slidingSafetyFactor: number;
-  /** Friction coefficient between concrete anchor and seabed. */
-  friction: Record<Seabed, number>;
   /** Chain length as a multiple of the water depth at high water (at least depth + 1 m). */
   chainLengthFactor: number;
-  /** Heaviest single concrete anchor to be handled, kg; heavier needs give several anchors. */
+  /** Heaviest single concrete anchor, kg (D64: 5 000 kg); heavier needs take a pile anchor. */
   maxAnchorMass: number;
-  /**
-   * Main piers at least this long get two crossed tip chains (D30), m. A value longer than
-   * every pier turns them off.
-   */
+  /** D62: at most this many anchors on one line: 1 (default) or 2 (tandem, with a warning). */
+  maxAnchorsPerLine: number;
+  /** Main piers at least this long get two crossed tip chains (D30), m. */
   tipAnchorMinLength: number;
   /** Fingers longer than this get an end pile at the tip (D31), m. */
   fingerPileMinLength: number;
-  anchorType: AnchorType;
   /** Stern buoys (D36): how the sinker is sized. */
   buoySinkerMethod: BuoySinkerMethod;
   /** Stern buoys (D37): the selection table for sinker, chain size and float. */
@@ -158,44 +155,37 @@ export interface AnchoringParams {
   buoyChainFactor: number;
   /** Stern buoys: the chain lets the buoy's centre rise this far above high water, m (D37). */
   buoyLift: number;
+  /** Water density, kg/m³ (spec: 1025, conservative; fresh water 1000). */
   waterDensity: number;
   concreteDensity: number;
   steelDensity: number;
 }
 
+/** NAVFAC DM-7.02 lower ends (spec 5.2). */
+export const DEFAULT_FRICTION: Record<FrictionSeabed, number> = {
+  rock: SEABED_FRICTION.rock.mu!,
+  gravelCoarseSand: SEABED_FRICTION.gravelCoarseSand.mu!,
+  fineMediumSand: SEABED_FRICTION.fineMediumSand.mu!,
+  fineSiltySand: SEABED_FRICTION.fineSiltySand.mu!,
+  silt: SEABED_FRICTION.silt.mu!,
+  stiffClay: SEABED_FRICTION.stiffClay.mu!,
+  mediumClay: SEABED_FRICTION.mediumClay.mu!,
+};
+
 /**
- * Defaults. Sources (docs/RESEARCH.md §5, DECISIONS I47, I54–I57):
- *  - windSpeed 22 m/s: Finnish sea areas v_b,0 (YM 2007, search excerpt), used as the steady
- *    design wind like the 10-minute reference wind in Chalmers 2026 §2.6. To be verified.
- *  - dragCoefficient 1.6: UFC 4-152-07 C1 Fig. 6-4 gives p = V²/240 psf (V in mph), i.e.
- *    1.0 Pa per (m/s)², = ½ · 1.25 · v² · 1.6.
- *  - profileHeightRatio 0.15 and leewardFactor 0.2: UFC 4-152-07 C1 §6-3.4.1.3–4.
- *  - chainLengthFactor 4: "approximately four times the HAT water depth", SF Marina's initial
- *    design assumption (Chalmers 2026 §3.3).
- *  - chainSafetyFactor 3.0 on the new chain's breaking load: UFC 4-159-03 (2020) Table 3-7;
- *    hence no corrosion allowance by default.
- *  - maxAnchorMass 3000 kg: SF Marina prefers anchors of about 3 t or less for smaller
- *    installations (Chalmers 2026 §3.8).
- *  - concreteDensity 2400 kg/m³: "about 150 pounds per cubic foot" (DBW 2005, App. A p. 90).
- *  - friction sand 0.6: smooth concrete on quartz sand (Sound & Sea Technology 2009, Table 33).
- *  - anchorType 'block': the concrete anchors of the price list are plain blocks; kept as the
- *    default by the owner (D26).
- *  - splayAngle 45°: owner's choice (D25). Splayed corner chains are SF Marina's typical layout
- *    (Chalmers 2026 Fig. 4; 12° in its reference case); 45° is from Savorak's instructions for
- *    a cottage-dock kit, "ristiin pohjapainoihin, 45 asteen kulmassa" (savorak.fi, read
- *    2026-11-14) — a light dock, so a weak source for a marina pier.
- *  - tipAnchorMinLength 10 m: owner's choice (D30).
- *  - fingerPileMinLength 12 m: "Longer than 12 m Super Yacht and Concrete Fingers are moored with
- *    end piles" (Marinetek catalogue 2012, p. 27; owner's choice D31).
- *  - Stern buoys (D37, docs/RESEARCH.md §9.14): buoyTable 'batunionen', method 'table' and
- *    buoyExposed false after Svenska Båtunionen, Hamnhandboken (2016) §2.33 Tabell 3 ("Vid utsatt
- *    läge ökas angivna dimensioner ett steg"); buoyChainFactor 1.41 = √2, the chain slope 1:1 of
- *    §2.32 ("kan bojkättingen ges en lutning av 1:1 (= 45°)"), and buoyLift 0.8 m ("bojen kan
- *    lyftas med centrum ca 0,8 meter över normal högvattenyta"). buoySinkerFactor 3 is Top
- *    Marine's "3–5 × veneen paino" (topmarinelaiturit.fi, read 2026-11-15), the owner's first
- *    choice (D36), now an alternative.
- *  - Assumptions without a source: depth and water levels (site data), pontoonFreeboard,
- *    lineSpacing, slidingSafetyFactor, friction for clay and rock.
+ * Defaults (D64, docs/ANKKUROINTI_MITOITUS_SPEC.md §2; earlier sources in docs/RESEARCH.md §5):
+ *  - windSpeed 22 m/s: the 10-min reference wind of Finnish sea areas (YM 2007, search excerpt) kept
+ *    as the starting value; the spec wants the 30 s ULS wind and leaves its conversion open (TODO,
+ *    warned in the plan): enter the site's 30 s wind.
+ *  - waveMin 2 kN/m (AS 3962 4.8.2.3), waveLineLoad 0, currentSpeed 0, extraStatic 0, iceLineLoad 0,
+ *    unevenFactor 1, pontoonFreeboard 0.5, pontoonDraft 0.5, waterDensity 1025, chainSafetyFactor 3.0,
+ *    slidingSafetyFactor 1.5 (anchor), capacityFactor 1: the spec's defaults.
+ *  - winterInWater true: the owner's D17 (pontoons stay in the water over winter).
+ *  - chainLengthFactor 5: the spec's rule "chain ≥ 5 × water depth" (FCG 2022; Top Marine).
+ *  - maxAnchorMass 5 000 kg: the owner's limit (D64); maxAnchorsPerLine 1 (D62).
+ *  - seabed mediumClay (μ 0.30), as the earlier clay default of 0.3.
+ *  - splayAngle 45° (D25), tipAnchorMinLength 10 m (D30), fingerPileMinLength 12 m (D31),
+ *    lineSpacing 12 m (assumption), stern buoys after Båtunionen (D37).
  */
 export const DEFAULT_ANCHORING: AnchoringParams = {
   depth: 4,
@@ -204,42 +194,48 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   normalHighWater: null,
   normalLowWater: null,
   quayLevel: null,
-  seabed: 'clay',
+  seabed: 'mediumClay',
+  friction: { ...DEFAULT_FRICTION },
+  slopeDeg: 0,
+  cohesive: null,
+  capacityFactor: 1,
+  capacityFactorSource: '',
   windSpeed: 22,
-  airDensity: 1.25,
-  dragCoefficient: 1.6,
   leewardFactor: 0.2,
-  profileHeightRatio: 0.15,
+  waveLineLoad: 0,
+  waveMin: 2,
+  currentSpeed: 0,
+  extraStatic: 0,
+  iceLineLoad: 0,
+  winterInWater: true,
+  unevenFactor: 1,
   pontoonFreeboard: 0.5,
+  pontoonDraft: 0.5,
   lineSpacing: 12,
-  waveLoad: 2,
-  waveLoadMinHs: 0.3,
-  waveLoadFullHs: 0.6,
   splayAngle: 45,
   chainSafetyFactor: 3,
   corrosionAllowance: 0,
   slidingSafetyFactor: 1.5,
-  friction: { sand: 0.6, clay: 0.3, rock: 0.5 },
-  chainLengthFactor: 4,
-  maxAnchorMass: 3000,
+  chainLengthFactor: 5,
+  maxAnchorMass: 5000,
+  maxAnchorsPerLine: 1,
   tipAnchorMinLength: 10,
   fingerPileMinLength: 12,
-  anchorType: 'block',
   buoySinkerMethod: 'table',
   buoyTable: 'batunionen',
   buoyExposed: false,
   buoySinkerFactor: 3,
   buoyChainFactor: 1.41,
   buoyLift: 0.8,
-  waterDensity: 1000,
+  waterDensity: 1025,
   concreteDensity: 2400,
   steelDensity: 7850,
 };
 
 /**
- * The method's defaults with the site values and the anchor type of `p` kept (depth, water
- * levels, seabed, design wind), and the stern-buoy sinker method (D36): "Reset factors to
- * defaults" (DECISIONS U19). The stern-buoy table and exposure are kept too (site choices).
+ * The method's defaults with the site values of `p` kept (depth, water levels, seabed, slope,
+ * cohesive soil, design wind, wave line load, current, ice, winter use) and the stern-buoy choices:
+ * "Reset factors to defaults" (U19).
  */
 export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
   ...structuredClone(DEFAULT_ANCHORING),
@@ -250,72 +246,125 @@ export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
   normalLowWater: p.normalLowWater,
   quayLevel: p.quayLevel,
   seabed: p.seabed,
+  slopeDeg: p.slopeDeg,
+  cohesive: p.cohesive ? { ...p.cohesive } : null,
   windSpeed: p.windSpeed,
-  anchorType: p.anchorType,
+  waveLineLoad: p.waveLineLoad,
+  currentSpeed: p.currentSpeed,
+  iceLineLoad: p.iceLineLoad,
+  winterInWater: p.winterInWater,
   buoySinkerMethod: p.buoySinkerMethod,
   buoyTable: p.buoyTable,
   buoyExposed: p.buoyExposed,
 });
 
-const G = 9.81;
-/**
- * I102: blocks needing more than this many times the wedges' anchor mass under the wave load get
- * the WAVE_LOAD_PLAIN_BLOCKS note (Assumption: twice is where the choice of anchor type matters more
- * than the other uncertain factors).
- */
-export const WAVE_BLOCK_RATIO = 2;
 /** Largest splay angle accepted, degrees. */
 export const MAX_SPLAY_ANGLE = 80;
 
+/** D64: the text the spec requires in the result view (in English; the Finnish in the UI translation). */
+export const MOORING_DISCLAIMER =
+  "Preliminary sizing. Does not replace the designer's calculation, a geotechnical survey or the manufacturer's (e.g. Seaflex/JFlex) design. Ice loads are not designed.";
+
+/** D64: the notes of the spec (§5.5 required texts, §3.7, §6, §7, §9 and Appendix B), shown with the results. */
+export const MOORING_NOTES: readonly { code: string; text: string }[] = [
+  {
+    code: 'FRICTION_LOWER_BOUND',
+    text: '"The friction model is a lower-bound estimate: embedment and suction add capacity, but embedment is not usually measured." Chalmers 2026: SF Marina estimates the embedment at about 1/3 of the anchor height; in its example the factor of safety of a 3 t anchor rose from 1.00 to 2.00 when the embedment grew from 0.17 m to 0.40 m.',
+  },
+  { code: 'CAPACITY_MAY_BE_HIGHER', text: '"The calculated holding may be larger than the real one." In US Navy pull tests the real holding of concrete anchors was 20–30 % of the prediction (OTC 6033).' },
+  { code: 'SEVERAL_SMALL_ANCHORS', text: 'Chalmers: several small anchors on one chain do not necessarily equal one large anchor of the same total mass.' },
+  { code: 'TEN_TONNE_NOTE', text: 'With 10 t anchors the anchor factor of safety stays below 1 by friction alone with the AS 3962 minimum wave load (2 kN/m). Real projects (e.g. Parainen) use 10 t anchors relying on embedment and local experience. The tool does not hide this difference: a capacity factor above 1 needs a documented basis.' },
+  { code: 'WIND_30S_TODO', text: 'V is the 30 s steady ULS design wind of AS 3962 4.8.3.2–3. Converting the Eurocode (SFS-EN 1991-1-4 and its national annex) or FMI wind to a 30 s mean is not implemented (TODO): enter V yourself.' },
+  { code: 'ROW_SHIELDING', text: 'Along the pontoon the boats in a row are shielded 100 / 50 / 30 % (Tobiasson & Kollmeyer); AS 3962 gives no rule for this case.' },
+  {
+    code: 'NOT_IMPLEMENTED',
+    text: 'Not implemented (TODO): berthing impact energy (AS 3962 4.9, at least 0.3 m/s; give an equivalent static load instead), oblique winds (about 15–25° off beam may give the largest force, Tobiasson & Kollmeyer, so the main directions can underestimate the load), dynamics, fatigue and corrosion (quasi-static model), moment balance and stiffness sharing between the legs.',
+  },
+  { code: 'CHAIN_VS_ELASTIC', text: 'A chain mooring holds by the weight of its hanging chain, so shallow water and a large water-level range weaken it; an elastic mooring keeps an even pull (Marine Construction Magazine). Seaflex and other elastic moorings are not sized here: the manufacturer sizes them (JFlex); export the data package for the manufacturer.' },
+  { code: 'FCG_INSTALLATION', text: 'Installation (FCG 2022): weights and chains below the dredging level, weights dug into the seabed where needed, chains tensioned so that the weights do not move.' },
+  {
+    code: 'REFERENCE_PROJECTS',
+    text: 'For comparison, not rules: Parainen, A-Laiturit 2021: 10 000 kg concrete anchors, DIN 763 22 mm / 30 m Grade 40, shore chains about 13 m, rubber dampers. Chalmers / SF Marina ferry pier: 200 kN berthing load, 30 mm R3 chain, 3 t anchor, largest tension 108.7 kN, chain factor of safety about 7.7.',
+  },
+  { code: 'RIL_NOT_USED', text: 'RIL 201-3-2013 (Vesirakenteet) was not available and is not used; ice and wave loads are to be checked against it when it is.' },
+];
+
+/** The case a line is sized by (spec §8): smallest anchor factor of safety (wall lines: largest tension). */
+export interface GoverningCase {
+  case: LoadCase['id'] | 'stern';
+  waterLevel: 'LW' | 'HW';
+  /** Horizontal tension, kN. */
+  Th: number;
+  Tfair: number;
+  Tanchor: number;
+  /** Uplift at the anchor, kN. */
+  Fv: number;
+  upliftDeg: number;
+  chainFoS: number;
+  /** Capacity of the line's anchor (for a pile line: of the heaviest blocks allowed), kN; null for wall lines. */
+  anchorCapacity: number | null;
+  anchorFoS: number | null;
+}
+
+/** One load case of a leg at one water level (kN). */
+export interface LegLoadCase {
+  case: LoadCase['id'] | 'stern';
+  waterLevel: 'LW' | 'HW';
+  Th: number;
+  Tfair: number;
+  Tanchor: number;
+  Fv: number;
+}
+
 export interface AnchorLine {
   id: string;
-  /** Pier or access pontoon the line holds. */
+  /** Pier, access pontoon or breakwater the line holds (a berth for a stern buoy). */
   holdsId: string;
-  /**
-   * Which end of the pier the anchor lies towards: 'head' lines hold wind from the sea,
-   * 'shore' lines wind from the shore; 'none' for square lines (access pontoons, θ = 0).
-   */
+  /** Which end of the pontoon the anchor lies towards ('none' for square and buoy lines). */
   splay: 'head' | 'shore' | 'none';
-  /** Which wind direction sizes the line: across or along the pier. */
+  /** Whether the governing case is across or along the pontoon. */
   governs: 'across' | 'along';
-  /**
-   * 'seabed': chain to a concrete anchor. 'wall': shore chain from an access pontoon to a
-   * fixing in the quay wall at its gangway (D28); no anchor.
-   */
+  /** 'seabed': chain to an anchor. 'wall': shore chain to a fixing in the quay wall (D28). */
   fixing: 'seabed' | 'wall';
-  /**
-   * 'side': a chain of the stations along a pier or access pontoon; 'tip': one of the two
-   * crossed chains at a pier head (D30); 'shore': a shore chain (D28); 'buoy': the chain from
-   * a stern buoy to its sinker (D36; `holdsId` is the berth, fix and anchor the buoy).
-   */
   role: 'side' | 'tip' | 'shore' | 'buoy';
   /** Where the chain is fixed to the pontoon. */
   fix: Vec2;
   /** Position of the anchor on the seabed, or of the wall fixing (plan view). */
   anchor: Vec2;
-  /** Design horizontal load of the line, kN. */
+  /** D64: direction of the leg towards its anchor in the pontoon's frame, degrees (0 = towards its end, 90 = its left side). */
+  dirDeg: number;
+  /** Largest horizontal tension of the leg, kN. */
   horizontalKn: number;
-  /** Tension at the pontoon at high water, kN. */
+  /** Largest chain tension, kN. */
   topTensionKn: number;
   /** Chain length to order (before margin), m. */
   chainLength: number;
   chainId: string | null;
-  /** Uplift at the anchor at the design load, kN (0 when chain lies on the bottom). */
+  /** D64: smallest chain factor of safety over the cases; null without a chain. */
+  chainFoS: number | null;
+  /** D64: the chain's kg/m was estimated as 0.0219·d² (no manufacturer value). */
+  chainWeightEstimated: boolean;
+  /** Uplift at the anchor in the governing case, kN. */
   upliftKn: number;
-  /** Angle of the chain at the anchor above the horizontal, degrees. */
   upliftAngleDeg: number;
-  /** How the anchor was sized: 'wedge' only where the wedge tables apply (not on rock); null for wall lines. */
-  anchorType: AnchorType | null;
-  /** Required anchor mass in air, kg. */
+  /** Required dry mass of a concrete anchor (spec 5.4), kg; NaN where the friction model does not apply. */
   requiredAnchorKg: number;
   anchorId: string | null;
-  /** Number of anchors (more than 1 only when no single anchor is heavy enough). */
+  /** Kind of the anchor: 'block' or 'pile' (D64); null for wall lines. */
+  anchorKind: AnchorKind | null;
+  /** Number of anchors: at most `maxAnchorsPerLine` blocks, or one pile; 0 for wall lines. */
   anchorCount: number;
+  /** 'OK': concrete anchors hold the line; 'PILE': no block of at most `maxAnchorMass` does, a pile anchor (D64). */
+  status: 'OK' | 'PILE';
+  /** Why the line takes a pile anchor, e.g. "block: needs 32 604 kg, max product 5 000 kg"; null otherwise. */
+  pileReason: string | null;
+  governing: GoverningCase | null;
+  /** Every case with a load on the leg, at both water levels. */
+  loadCases: LegLoadCase[];
   /** Stern buoys only (D36). */
   buoy?: BuoyDetails;
 }
 
-/** What sized a stern buoy (D36, D37). */
 export interface BuoyDetails {
   /** Boat weight used, t. */
   boatWeightT: number;
@@ -325,7 +374,7 @@ export interface BuoyDetails {
   floatCapacityKg: number;
   /** Chain size of the selection table, mm. */
   tableChainMm: number;
-  /** Sinker mass the friction method of the piers would need for the stern-on wind, kg. */
+  /** Sinker mass the friction sizing of the spec would need for the stern-on wind, kg; NaN on soft clay / mud. */
   windAnchorKg: number;
 }
 
@@ -440,42 +489,60 @@ export interface FingerPile {
   guide: PileGuideId | null;
 }
 
-/**
- * I102: the seabed anchors of a plan in one figure: required mass in air of the anchors of piers
- * and access pontoons (stern-buoy sinkers excluded; they do not depend on the anchor type).
- */
-export interface AnchorTotals {
-  anchorType: AnchorType;
-  /** Sum of the required anchor masses, kg. */
-  totalKg: number;
-  /** Largest required anchor mass of one line, kg. */
-  maxKg: number;
-  /** Longest chain of those lines, m. */
-  longestChainM: number;
+
+/** D64: loads on one pontoon, per main direction (spec §3, kN). */
+export interface PontoonLoads {
+  id: string;
+  kind: 'pier' | 'access' | 'breakwater';
+  /** Wind pressure, kPa. */
+  q: number;
+  cases: LoadCase[];
+  /** Ice load reported only (kN), when an ice line load is given. */
+  ice: { F_perp: number; F_par: number } | null;
+  /**
+   * D28, I122: an access pontoon's load passed to the piers attached to it (by tributary length);
+   * its own legs hold the rest. Each entry: its case, the pier and the pier's case that carries it.
+   */
+  transfers: { case: LoadCase['id']; to: string; toCase: LoadCase['id']; kN: number }[];
 }
 
-export function anchorTotals(lines: readonly AnchorLine[], anchorType: AnchorType): AnchorTotals {
-  const own = lines.filter((l) => l.fixing === 'seabed' && l.role !== 'buoy');
-  return {
-    anchorType,
-    totalKg: own.reduce((s, l) => s + l.requiredAnchorKg, 0),
-    maxKg: own.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0),
-    longestChainM: own.reduce((m, l) => Math.max(m, l.chainLength), 0),
-  };
+/** I122: what each pontoon carries for an access pontoon in each of its cases, kN. */
+export function carriedForAccess(loads: readonly PontoonLoads[]): Map<string, Map<LoadCase['id'], number>> {
+  const out = new Map<string, Map<LoadCase['id'], number>>();
+  for (const l of loads) {
+    for (const t of l.transfers) {
+      const m = out.get(t.to) ?? new Map<LoadCase['id'], number>();
+      m.set(t.toCase, (m.get(t.toCase) ?? 0) + t.kN);
+      out.set(t.to, m);
+    }
+  }
+  return out;
+}
+
+/**
+ * I122: tributary length of each restraint at `positions` (m along a member of length `length`):
+ * from half-way to its neighbours, the ends to the member's ends; restraints at the same position
+ * share theirs equally.
+ */
+export function tributaryLengths(positions: readonly number[], length: number): number[] {
+  const unique = [...new Set(positions.map((t) => Math.min(length, Math.max(0, t))))].sort((a, b) => a - b);
+  const share = new Map<number, number>();
+  unique.forEach((t, i) => {
+    const lo = i === 0 ? 0 : (unique[i - 1]! + t) / 2;
+    const hi = i === unique.length - 1 ? length : (t + unique[i + 1]!) / 2;
+    share.set(t, hi - lo);
+  });
+  const clamped = positions.map((t) => Math.min(length, Math.max(0, t)));
+  return clamped.map((t) => share.get(t)! / clamped.filter((x) => x === t).length);
 }
 
 export interface AnchoringResult {
   lines: AnchorLine[];
   /** End piles of fingers longer than `fingerPileMinLength` (D31); not priced. */
   piles: FingerPile[];
-  /** Per pier / access pontoon: design wind loads across (larger side) and along the pier, kN. */
-  loads: { id: string; lateralKn: number; axialFromSeaKn: number; axialFromShoreKn: number }[];
+  /** D64: the load table of every pontoon. */
+  loads: PontoonLoads[];
   issues: Issue[];
-  /**
-   * I102: the same plan's anchors with the other anchor type (block ↔ wedge), for comparison;
-   * missing on rock (no wedge tables), without seabed anchors, or when not asked for.
-   */
-  comparison?: { current: AnchorTotals; other: AnchorTotals };
 }
 
 export interface AnchoringInput {
@@ -489,259 +556,79 @@ export interface AnchoringInput {
   pierFreeboard?: number | null;
   /** Stern buoys: distance factor of the layout (`Params.buoyDepthFactor`), for the 1.4 L check. */
   buoyDepthFactor?: number;
-  /** D46: module lengths of the piers (`Params.pierModuleLengths`); empty or missing = joints every `lineSpacing`. */
+  /** D46: module lengths of the piers; empty or missing = joints every `lineSpacing`. */
   moduleLengths?: readonly number[];
   /** D49: longest gap a pier's shore gangway spans (`Params.gangwayLength`), m. */
   gangwayReach?: number;
-  /**
-   * D45: the wave screening: bearings the waves come from (sectors with a fetch) and the sectors
-   * whose waves exceed the criteria. Missing = no waves.
-   */
-  waves?: {
-    from: readonly number[];
-    exceeding: readonly string[];
-    /** I104: 50-year Hm0 of each direction of `from` (same order), m; null or missing = not known. */
-    hs50?: readonly (number | null)[];
-  };
-  /** I102: also size the anchors with the other anchor type for comparison (default true). */
-  compareAnchorTypes?: boolean;
+  /** D45: the sectors of the wave screening whose waves exceed its criteria (names, e.g. 'E'). */
+  waves?: { exceeding: readonly string[] };
+}
+
+/** D64: seabed anchor lines (stern buoys included) by anchor: concrete anchors that hold, pile anchors. */
+export function anchoringStatus(lines: readonly AnchorLine[]): { ok: number; piles: number } {
+  const seabed = lines.filter((l) => l.fixing === 'seabed');
+  const piles = seabed.filter((l) => l.status === 'PILE').length;
+  return { ok: seabed.length - piles, piles };
+}
+
+/** D64: "12 lines with concrete anchors, 140 lines with pile anchors". */
+export const anchoringStatusText = (s: { ok: number; piles: number }): string => `${s.ok} lines with concrete anchors, ${s.piles} lines with pile anchors`;
+
+/** D62: friction coefficients of the sensitivity table. */
+export const SENSITIVITY_FRICTION = [0.2, 0.3, 0.5] as const;
+
+/** D62: the note under the sensitivity table (spec item 6 of D62). */
+export const SOFT_CLAY_NOTE = 'Gravity block capacity in soft clay is highly uncertain; requires geotechnical data.';
+
+export interface FrictionSensitivityRow {
+  friction: number;
+  /** Whether this is the coefficient in use. */
+  current: boolean;
+  /** Largest block mass one line needs, kg. */
+  maxKg: number;
+  /** Block mass of all the lines, kg. */
+  totalKg: number;
+  /** Lines that `maxAnchorsPerLine` blocks of the price list (no heavier than `maxAnchorMass`) hold. */
+  feasible: number;
+}
+
+export interface FrictionSensitivity {
+  seabed: Seabed;
+  /** Seabed lines of piers, access pontoons and breakwaters (stern buoys are sized by their table). */
+  lines: number;
+  heaviestBlockKg: number;
+  maxPerLine: number;
+  rows: FrictionSensitivityRow[];
 }
 
 /**
- * I104: share of the full wave load for waves of 50-year height `hs` (m): 0 up to `waveLoadMinHs`,
- * 1 from `waveLoadFullHs`, in proportion to Hm0² between; 1 when the height is not known or
- * `waveLoadFullHs` is 0.
+ * D62, D64: the dry mass concrete blocks would need on the seabed lines for friction 0.2 / 0.3 / 0.5
+ * (and the value in use), with the spec's formula (5.4) over every load case of each line.
  */
-export function waveLoadFactor(hs: number | null | undefined, p: Pick<AnchoringParams, 'waveLoadMinHs' | 'waveLoadFullHs'>): number {
-  if (hs === null || hs === undefined || !Number.isFinite(hs) || !(p.waveLoadFullHs > 0)) return 1;
-  const lo = Math.max(0, Math.min(p.waveLoadMinHs, p.waveLoadFullHs));
-  if (hs >= p.waveLoadFullHs - 1e-12) return 1;
-  if (hs <= lo + 1e-12) return 0;
-  return (hs * hs - lo * lo) / (p.waveLoadFullHs ** 2 - lo * lo);
+export function frictionSensitivity(lines: readonly AnchorLine[], p: AnchoringParams, priceList: PriceList): FrictionSensitivity {
+  const own = lines.filter((l) => l.fixing === 'seabed' && l.role !== 'buoy');
+  const maxPerLine = Math.min(2, Math.max(1, Math.round(p.maxAnchorsPerLine)));
+  const heaviestBlockKg = usableBlocks(priceList, p.maxAnchorMass, p.seabed)
+    .filter((x) => unitPriceVat0(x, 0) !== null || x.installedPrice !== null)
+    .reduce((m, x) => Math.max(m, x.anchorMassKg!), 0);
+  const inUse = p.seabed === 'softClayMud' ? null : p.friction[p.seabed];
+  const values = [...new Set([...SENSITIVITY_FRICTION, ...(inUse === null ? [] : [inUse])])].sort((a, b) => a - b);
+  const cf = p.capacityFactor > 0 ? p.capacityFactor : 1;
+  const rows = values.map((mu) => {
+    const masses = own.map((l) => l.loadCases.reduce((m, c) => Math.max(m, requiredAnchorMassFriction(c.Th, c.Fv, mu, p.slidingSafetyFactor / cf, p.concreteDensity, p.waterDensity, p.slopeDeg)), 0));
+    return {
+      friction: mu,
+      current: inUse !== null && Math.abs(mu - inUse) < 1e-9,
+      maxKg: masses.reduce((m, x) => Math.max(m, x), 0),
+      totalKg: masses.reduce((t, x) => t + x, 0),
+      feasible: masses.filter((x) => heaviestBlockKg > 0 && x <= maxPerLine * heaviestBlockKg + 1e-9).length,
+    };
+  });
+  return { seabed: p.seabed, lines: own.length, heaviestBlockKg, maxPerLine, rows };
 }
 
-/** Compass bearing of a direction in plan (x east, y north), degrees. */
-const bearingOfVec = (v: Vec2): number => ((Math.atan2(v.x, v.y) * 180) / Math.PI + 360) % 360;
-
-/**
- * D45, I99: which way waves from `fromBearing` load a pontoon whose axis (start → end) has bearing
- * `axisBearing`: 'across' when they travel within 45° of square to it (the wave front within 45° of
- * the axis, AS 3962 4.8.2.4), else along it — 'fromSea' when they travel from the head towards the
- * start (pushing the pier shorewards), 'fromShore' the other way.
- */
-export function waveAction(axisBearing: number, fromBearing: number): 'across' | 'fromSea' | 'fromShore' {
-  const travel = (fromBearing + 180) % 360;
-  const delta = Math.abs((((travel - axisBearing) % 360) + 540) % 360 - 180); // 0–180°
-  if (delta > 45 + 1e-9 && delta < 135 - 1e-9) return 'across';
-  return delta <= 45 + 1e-9 ? 'fromShore' : 'fromSea';
-}
-
-export interface ChainLine {
-  /** Horizontal distance from the fixing point to the anchor at the design load, m. */
-  span: number;
-  /** Tension at the pontoon, N. */
-  topTension: number;
-  /** Upward pull at the anchor, N. */
-  uplift: number;
-  /** Whether part of the chain lies on the bottom. */
-  touchesBottom: boolean;
-}
-
-/**
- * Chain of length L (m) from a fixing point h (m) above the bottom, horizontal load H (N),
- * submerged weight w (N/m). See step 4 of the module comment.
- */
-export function chainLine(h: number, L: number, H: number, w: number): ChainLine {
-  if (H <= 0) return { span: Math.max(0, L - h), topTension: w * h, uplift: 0, touchesBottom: true };
-  const a = H / w;
-  const touching = Math.sqrt(h * h + 2 * h * a);
-  if (L >= touching) {
-    return { span: a * Math.acosh(1 + h / a) + (L - touching), topTension: H + w * h, uplift: 0, touchesBottom: true };
-  }
-  const span = 2 * a * Math.asinh(Math.sqrt(L * L - h * h) / (2 * a));
-  const uplift = H * Math.sinh(Math.atanh(h / L) - span / (2 * a));
-  return { span, topTension: Math.hypot(H, uplift + w * L), uplift, touchesBottom: false };
-}
-
-/** Chain length for water `h` deep (m). */
+/** Chain length for water `h` deep at high water (m): factor × h, at least h + 1 m. */
 export const chainLengthFor = (h: number, p: AnchoringParams): number => Math.max(h + 1, p.chainLengthFactor * h);
-
-/** Submerged weight per metre of a chain of the given mass per metre, N/m. */
-const submergedWeight = (kgPerM: number, p: AnchoringParams): number => kgPerM * G * (1 - p.waterDensity / p.steelDensity);
-
-interface ChainChoice extends ChainLine {
-  product: Product;
-  length: number;
-}
-
-/** Angle of the chain at the anchor above the horizontal, degrees. */
-export const upliftAngle = (H: number, V: number): number => (H > 0 ? (Math.atan2(Math.max(0, V), H) * 180) / Math.PI : 0);
-
-// ---------------------------------------------------------------------------
-// Wedge (Pearl Harbor type) anchors: Sound & Sea Technology, Advanced Anchoring and Mooring
-// Study (2009), Appendix A-1, Tables 35 and 36, "Enhanced Pearl Harbor Anchor". Working
-// capacities include FS = 1.5. docs/RESEARCH.md §9.5, DECISIONS I59.
-// ---------------------------------------------------------------------------
-
-const US_TON_KG = 907.18474;
-const KIP_N = 4448.2216;
-/** Table 35, soft clay/mud: working horizontal capacity 2.0 kips per US ton in air, every size. */
-const WEDGE_CLAY_KIPS_PER_TON = 2.0;
-/** Table 36, sand: [in-air weight US tons, working holding kips at 0° up angle, at 6°]. */
-const WEDGE_SAND: readonly (readonly [number, number, number])[] = [
-  [1, 3.87, 2.65],
-  [2, 9.35, 6.3],
-  [5, 23.8, 15.8],
-  [7.5, 33.3, 22.0],
-  [10, 49.5, 32.5],
-  [12.5, 59.3, 38.9],
-  [15, 77.1, 50.4],
-  [20, 102, 66],
-  [30, 163, 106],
-  [45, 236, 151],
-  [60, 331, 211],
-];
-/** The working capacity of the tables includes this factor of safety. */
-const WEDGE_TABLE_FS = 1.5;
-/**
- * Largest chain angle at the anchor for which the tables apply, degrees: Table 35 "Keep chain
- * angle less than 5 to 6 degrees" (the lower value is used); Table 36 gives 0° and 6°.
- */
-export const WEDGE_ANGLE_LIMIT: Record<'clay' | 'sand', number> = { clay: 5, sand: 6 };
-
-/** Table points (mass in kg, working capacity in N) of a wedge anchor at an up angle. */
-function wedgePoints(seabed: 'clay' | 'sand', angleDeg: number): [number, number][] {
-  if (seabed === 'clay') return [[US_TON_KG, WEDGE_CLAY_KIPS_PER_TON * KIP_N]];
-  const t = Math.min(1, Math.max(0, angleDeg / 6));
-  return WEDGE_SAND.map(([tons, at0, at6]) => [tons * US_TON_KG, (at0 + (at6 - at0) * t) * KIP_N]);
-}
-
-/**
- * Working horizontal capacity (FS 1.5 included) of a wedge anchor of `massKg` in air, N;
- * null on rock or above the angle limit. Between table rows linear; below the first and
- * above the last row in proportion to the mass of that row.
- */
-export function wedgeWorkingCapacity(massKg: number, seabed: Seabed, angleDeg: number): number | null {
-  if (seabed === 'rock' || angleDeg > WEDGE_ANGLE_LIMIT[seabed] + 1e-9) return null;
-  const pts = wedgePoints(seabed, angleDeg);
-  const [m0, c0] = pts[0]!;
-  if (massKg <= m0) return (c0 * massKg) / m0;
-  for (let i = 1; i < pts.length; i++) {
-    const [m1, c1] = pts[i]!;
-    const [ma, ca] = pts[i - 1]!;
-    if (massKg <= m1) return ca + ((c1 - ca) * (massKg - ma)) / (m1 - ma);
-  }
-  const [mn, cn] = pts[pts.length - 1]!;
-  return (cn * massKg) / mn;
-}
-
-/**
- * In-air mass of a wedge anchor that holds H (N) with the anchor safety factor, kg; null on
- * rock or above the angle limit. SF_slide · H ≤ working capacity · 1.5 (the tables' FS).
- */
-export function requiredWedgeMass(H: number, angleDeg: number, p: AnchoringParams): number | null {
-  if (p.seabed === 'rock' || angleDeg > WEDGE_ANGLE_LIMIT[p.seabed] + 1e-9) return null;
-  const needed = (p.slidingSafetyFactor * H) / WEDGE_TABLE_FS;
-  const pts = wedgePoints(p.seabed, angleDeg);
-  const [m0, c0] = pts[0]!;
-  if (needed <= c0) return (needed / c0) * m0;
-  for (let i = 1; i < pts.length; i++) {
-    const [m1, c1] = pts[i]!;
-    const [ma, ca] = pts[i - 1]!;
-    if (needed <= c1) return ma + ((m1 - ma) * (needed - ca)) / (c1 - ca);
-  }
-  const [mn, cn] = pts[pts.length - 1]!;
-  return (needed / cn) * mn;
-}
-
-/** Whether the anchors of this plan are sized as wedges (not on rock: no table). */
-const usesWedge = (p: AnchoringParams): p is AnchoringParams & { seabed: 'clay' | 'sand' } =>
-  p.anchorType === 'wedge' && p.seabed !== 'rock';
-
-/**
- * Chain length for a wedge anchor: the rule length, or longer until the angle at the anchor
- * is within the tables' limit (0.1 m steps; at the touching length the angle is 0).
- */
-function wedgeChainLength(h: number, H: number, w: number, base: number, limitDeg: number): number {
-  const angleAt = (L: number) => {
-    const line = chainLine(h, L, H, w);
-    return upliftAngle(H, line.uplift);
-  };
-  if (angleAt(base) <= limitDeg) return base;
-  let lo = base;
-  let hi = Math.sqrt(h * h + (2 * h * H) / w);
-  for (let i = 0; i < 60 && hi - lo > 0.01; i++) {
-    const mid = (lo + hi) / 2;
-    if (angleAt(mid) <= limitDeg) hi = mid;
-    else lo = mid;
-  }
-  return Math.ceil(hi * 10 - 1e-9) / 10;
-}
-
-/**
- * The cheapest chain of the list that holds `H` (N) in water `h` deep (m), or null. With wedge
- * anchors each chain is made long enough for the wedge tables' angle limit. `fixed` gives a
- * set length (no wedge sizing) and a smallest diameter, for stern buoys (D36).
- */
-export function chooseChain(
-  H: number,
-  h: number,
-  p: AnchoringParams,
-  list: PriceList,
-  vatPct: number,
-  fixed?: { length: number; minDiameterMm: number },
-): ChainChoice | null {
-  let best: { choice: ChainChoice; cost: number } | null = null;
-  for (const product of list.products) {
-    if (product.category !== 'chain' || product.breakingLoadKn === null || product.massKgPerM === null) continue;
-    const price = unitPriceVat0(product, vatPct);
-    const d = product.chainDiameterMm;
-    if (price === null || d === null || d <= p.corrosionAllowance) continue;
-    if (fixed && d < fixed.minDiameterMm - 1e-9) continue;
-    const w = submergedWeight(product.massKgPerM, p);
-    const length = fixed
-      ? fixed.length
-      : usesWedge(p)
-        ? wedgeChainLength(h, H, w, chainLengthFor(h, p), WEDGE_ANGLE_LIMIT[p.seabed])
-        : chainLengthFor(h, p);
-    const line = chainLine(h, length, H, w);
-    const remaining = ((d - p.corrosionAllowance) / d) ** 2;
-    if (product.breakingLoadKn * 1000 * remaining < p.chainSafetyFactor * line.topTension) continue;
-    const cost = price * length;
-    if (!best || cost < best.cost - 1e-9 || (Math.abs(cost - best.cost) < 1e-9 && d < (best.choice.product.chainDiameterMm ?? Infinity))) {
-      best = { choice: { ...line, product, length }, cost };
-    }
-  }
-  return best?.choice ?? null;
-}
-
-/** Required anchor mass in air for horizontal load H and uplift V (N), kg. */
-export function requiredAnchorMass(H: number, V: number, p: AnchoringParams): number {
-  const submerged = p.slidingSafetyFactor * (H / p.friction[p.seabed] + Math.max(0, V));
-  return submerged / (G * (1 - p.waterDensity / p.concreteDensity));
-}
-
-/**
- * The cheapest single anchor of at least `mass` kg, else the heaviest one several times.
- * Only anchors up to `maxPiece` kg are considered (all when none is that light).
- */
-export function chooseAnchor(mass: number, list: PriceList, vatPct: number, maxPiece = Infinity): { product: Product; count: number } | null {
-  const priced = list.products.filter(
-    (x) => x.category === 'anchor' && x.anchorMassKg !== null && x.anchorMassKg > 0 && unitPriceVat0(x, vatPct) !== null,
-  );
-  const handleable = priced.filter((x) => x.anchorMassKg! <= maxPiece);
-  const anchors = handleable.length > 0 ? handleable : priced;
-  if (anchors.length === 0) return null;
-  const heavyEnough = anchors.filter((x) => x.anchorMassKg! >= mass);
-  if (heavyEnough.length > 0) {
-    heavyEnough.sort(
-      (x, y) => unitPriceVat0(x, vatPct)! - unitPriceVat0(y, vatPct)! || x.anchorMassKg! - y.anchorMassKg! || (x.id < y.id ? -1 : 1),
-    );
-    return { product: heavyEnough[0]!, count: 1 };
-  }
-  const heaviest = anchors.reduce((a, b) => (b.anchorMassKg! > a.anchorMassKg! ? b : a));
-  return { product: heaviest, count: Math.ceil(mass / heaviest.anchorMassKg!) };
-}
 
 /** Stations at the ends of a pontoon lie this far in from them, m. */
 const STATION_INSET = 0.5;
@@ -757,119 +644,42 @@ export function evenJoints(length: number, spacing: number): number[] {
   return out;
 }
 
-/** A straight floating pontoon to be held: a main pier or an access pontoon. */
+/** A straight floating pontoon to be held: a main pier, an access pontoon or a breakwater. */
 interface Held {
   id: string;
+  kind: PontoonLoads['kind'];
   start: Vec2;
   end: Vec2;
   width: number;
-  /** Lateral wind load (larger of the two sides), N. */
-  lateral: number;
-  /** Wind load along the axis from the sea (towards the shore) and from the shore, N. */
-  axialFromSea: number;
-  axialFromShore: number;
-  /** Main piers are splayed; access pontoons keep square lines (load along them: the wall). */
+  freeboard: number;
+  draft: number;
+  /** Boats on its left (+y, spec side A) and right (side B), in order from its start. */
+  sideA: MooringBoat[];
+  sideB: MooringBoat[];
+  /** Main piers and breakwaters are splayed; access pontoons keep square lines. */
   splayed: boolean;
-  /**
-   * Access pontoon in front of the shore: the side facing it. Its lines are only those
-   * anchored on the water side; shore chains and attached piers hold it off the wall (D28).
-   */
+  /** Access pontoon in front of the shore: the side facing it (chains on the water side only, D28). */
   wallSide?: 'left' | 'right';
-  /**
-   * D58: a floating breakwater: no shore end (outward chains at both ends, no shore chains) and
-   * joints from its own product's modules.
-   */
+  /** D28, I122: access pontoon: its gangways and the piers starting from its water-side edge (m along it). */
+  restraints?: { gangways: number[]; piers: { id: string; t: number }[] };
+  /** D58: a breakwater: outward chains at both ends and joints from its own modules. */
   free?: { joints: readonly number[] };
 }
 
-/** Where an access pontoon is held off the wall: its gangway or a pier attached to it. */
-interface Restraint {
-  /** 'gangway' or the id of the attached pier. */
+/** A leg before sizing: geometry only. */
+interface LegSpec {
   id: string;
-  /** Position along the access pontoon's axis, m. */
-  t: number;
-}
-
-/**
- * Tributary length of each restraint along a pontoon `length` m long: from half-way to the
- * previous one to half-way to the next (the ends of the pontoon at the ends), m. Same order
- * as `points`.
- */
-export function tributaryLengths(points: readonly number[], length: number): number[] {
-  const order = points.map((t, i) => ({ t: Math.min(length, Math.max(0, t)), i })).sort((a, b) => a.t - b.t || a.i - b.i);
-  const result = new Array<number>(points.length).fill(0);
-  order.forEach((o, k) => {
-    const lo = k === 0 ? 0 : (order[k - 1]!.t + o.t) / 2;
-    const hi = k === order.length - 1 ? length : (o.t + order[k + 1]!.t) / 2;
-    result[o.i] = hi - lo;
-  });
-  return result;
-}
-
-/**
- * A shore chain (D28): from the access pontoon to a fixing in the wall at the design water
- * level, `plan` m apart in plan. Its length leaves slack for the water-level range
- * (`plan` + high water + low water, assumption). Under load it straightens; at the extreme
- * water level the slope gives the tension T = H · L / √(L² − Δz²), Δz = the larger of high
- * and low water. The cheapest chain of the list with MBL · ((d − c)/d)² ≥ SF · T.
- */
-export function chooseShoreChain(H: number, plan: number, p: AnchoringParams, list: PriceList, vatPct: number): { product: Product | null; length: number; tension: number } {
-  const length = plan + p.highWater + p.lowWater;
-  const dz = Math.max(p.highWater, p.lowWater);
-  const tension = length > dz ? (H * length) / Math.sqrt(length * length - dz * dz) : H;
-  let best: { product: Product; cost: number } | null = null;
-  for (const product of list.products) {
-    if (product.category !== 'chain' || product.breakingLoadKn === null) continue;
-    const price = unitPriceVat0(product, vatPct);
-    const d = product.chainDiameterMm;
-    if (price === null || d === null || d <= p.corrosionAllowance) continue;
-    if (product.breakingLoadKn * 1000 * ((d - p.corrosionAllowance) / d) ** 2 < p.chainSafetyFactor * tension) continue;
-    const cost = price * length;
-    if (!best || cost < best.cost - 1e-9 || (Math.abs(cost - best.cost) < 1e-9 && d < (best.product.chainDiameterMm ?? Infinity))) best = { product, cost };
-  }
-  return { product: best?.product ?? null, length, tension };
-}
-
-/**
- * Wind loads on a main pier and its boats, N (UFC 4-152-07 C1 §6-3.4.1.4 and Fig. 6-5).
- * The boats lie square to the pier: wind across the pier meets them bow-on (beam ×
- * profile height), wind along the pier broadside (length × profile height). Along the pier,
- * per row the first boat from the windward end takes the full load and the others the
- * leeward factor; computed for wind from the sea (first boat at the head) and from the shore.
- */
-function pierLoads(pier: MainPier, layout: AnchoringInput['layout'], classes: BoatClass[], p: AnchoringParams, freeboard: number) {
-  const q = 0.5 * p.airDensity * p.windSpeed ** 2;
-  const byId = new Map(classes.map((c) => [c.id, c]));
-  const { length, along } = pierAxis(pier);
-  /** Per side: bow areas and sum of beams (the pier face they hide). */
-  const bow = { left: 0, right: 0 };
-  const beams = { left: 0, right: 0 };
-  const endArea = pier.width * freeboard;
-  let fromSea = endArea;
-  let fromShore = endArea;
-  for (const side of ['left', 'right'] as const) {
-    const boats = layout.berths
-      .filter((b) => b.pierId === pier.id && b.side === side && !b.removed)
-      .map((b) => ({ b, c: byId.get(b.boatClassId) }))
-      .filter((x): x is { b: (typeof x)['b']; c: BoatClass } => x.c !== undefined)
-      .map(({ b, c }) => ({ c, s: (b.slot[0]!.x - pier.start.x) * along.x + (b.slot[0]!.y - pier.start.y) * along.y }))
-      // Ordered from the head towards the shore (ties by class id, for determinism).
-      .sort((x, y) => y.s - x.s || (x.c.id < y.c.id ? -1 : x.c.id > y.c.id ? 1 : 0));
-    const broadside = boats.map(({ c }) => c.length * p.profileHeightRatio * c.length);
-    boats.forEach(({ c }) => {
-      bow[side] += c.beam * p.profileHeightRatio * c.length;
-      beams[side] += c.beam;
-    });
-    broadside.forEach((a, i) => {
-      fromSea += (i === 0 ? 1 : p.leewardFactor) * a;
-      fromShore += (i === broadside.length - 1 ? 1 : p.leewardFactor) * a;
-    });
-  }
-  const across = (windward: 'left' | 'right', leeward: 'left' | 'right') =>
-    bow[windward] + p.leewardFactor * bow[leeward] + Math.max(0, length - beams[windward]) * freeboard;
-  const lateralArea = Math.max(across('left', 'right'), across('right', 'left'));
-  const k = q * p.dragCoefficient;
-  return { lateral: k * lateralArea, axialFromSea: k * fromSea, axialFromShore: k * fromShore };
+  holdsId: string;
+  role: AnchorLine['role'];
+  splay: AnchorLine['splay'];
+  fixing: AnchorLine['fixing'];
+  fix: Vec2;
+  /** Unit vector from the fixing towards the anchor. */
+  direction: Vec2;
+  /** Seabed legs: shortest plan distance to the anchor (beyond the pontoon), m. */
+  minSpan: number;
+  /** Wall legs: plan distance to the wall fixing, m. */
+  plan?: number;
 }
 
 /** Anchoring plan of a layout. Deterministic; positions in plan view. */
@@ -878,373 +688,504 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   const moduleLengths = input.moduleLengths ?? [];
   const reach = input.gangwayReach ?? DEFAULT_GANGWAY_LENGTH;
   const freeboard = input.pierFreeboard ?? p.pontoonFreeboard;
-  const q = 0.5 * p.airDensity * p.windSpeed ** 2;
   const issues: Issue[] = [];
-  const warn = (code: string, message: string, elementId?: string) =>
-    issues.push({ severity: 'warning', code, message, ...(elementId ? { elementId } : {}) });
-
-  const k = q * p.dragCoefficient;
-  const hHigh = p.depth + p.highWater;
-  const theta = (Math.min(MAX_SPLAY_ANGLE, Math.max(0, p.splayAngle)) * Math.PI) / 180;
-  const lines: AnchorLine[] = [];
-  const loads: AnchoringResult['loads'] = [];
-  const unheld: string[] = [];
-
-  const piers: Held[] = layout.piers.map((pier) => ({
-    id: pier.id,
-    start: pier.start,
-    end: pier.end,
-    width: pier.width,
-    splayed: true,
-    ...pierLoads(pier, layout, classes, p, freeboard),
-  }));
-  // D45, I99: the AS 3962 minimum wave load from the directions that have open water: across the
-  // pier on its whole length, along it on its end; added to the wind of the same direction.
-  // D57, I104: each direction's load in proportion to its waves (waveLoadFactor).
-  const waveFrom = (input.waves?.from ?? []).map((bearing, i) => {
-    const hs = input.waves?.hs50?.[i] ?? null;
-    return { bearing, hs, q: Math.max(0, p.waveLoad) * 1000 * waveLoadFactor(hs, p) };
-  });
-  const smallWaves = waveFrom.filter((w) => w.q <= 0 && w.hs !== null);
-  const waveNotes: string[] = [];
-  const addWaves = (item: Held) => {
-    const loading = waveFrom.filter((w) => w.q > 0);
-    if (loading.length === 0) return;
-    const { length, along } = pierAxis({ id: item.id, start: item.start, end: item.end, width: item.width, locked: false, origin: 'manual' });
-    if (!(length > 0)) return;
-    // The largest load of each kind (the directions do not act at the same time).
-    const q = { across: 0, fromSea: 0, fromShore: 0 };
-    for (const w of loading) {
-      const a = waveAction(bearingOfVec(along), w.bearing);
-      q[a] = Math.max(q[a], w.q);
-    }
-    const kn = (x: number) => `${(x / 1000).toFixed(1)}`;
-    const parts: string[] = [];
-    if (q.across > 0) {
-      item.lateral += q.across * length;
-      parts.push(`across ${kn(q.across * length)} kN (${kn(q.across)} kN/m)`);
-    }
-    if (q.fromSea > 0) {
-      item.axialFromSea += q.fromSea * item.width;
-      parts.push(`from the sea ${kn(q.fromSea * item.width)} kN`);
-    }
-    if (q.fromShore > 0) {
-      item.axialFromShore += q.fromShore * item.width;
-      parts.push(`from the shore ${kn(q.fromShore * item.width)} kN`);
-    }
-    if (parts.length > 0) waveNotes.push(`${item.id} ${parts.join(', ')}`);
+  const warn = (code: string, message: string, elementId?: string, severity: Issue['severity'] = 'warning') =>
+    issues.push({ severity, code, message, ...(elementId ? { elementId } : {}) });
+  const seen = new Set<string>();
+  /** Warnings of the mooring module, each text once. */
+  const warnOnce = (w: MooringWarning, elementId?: string) => {
+    const key = `${w.code}|${w.message}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    warn(w.code, w.message, elementId);
   };
-  piers.forEach(addWaves);
 
-  // Access pontoons (D28). In front of the shore, chains only on the water side; the wind
-  // pushing the pontoon off the wall is shared by tributary length between the shore chains
-  // at its gangway (assumed at its middle) and the piers attached to its water-side edge,
-  // whose lines splayed towards the shore take their share. The wind along the wall (the
-  // pontoon's end) goes to the shore chains.
-  const accessItems: Held[] = [];
-  const shoreSets: { item: Held; at: number; plan: number; offshore: number; alongWall: number }[] = [];
-  for (const a of accessPontoonsOf(site)) {
-    const { length, along, left } = pierAxis({ id: a.id, start: a.start, end: a.end, width: a.width, locked: false, origin: 'manual' });
-    const across = k * length * freeboard;
-    const item: Held = { id: a.id, start: a.start, end: a.end, width: a.width, lateral: across, axialFromSea: 0, axialFromShore: 0, splayed: false };
-    addWaves(item);
-    accessItems.push(item);
-    if (site.shoreline.length < 2) continue;
-    const mid = add(a.start, scale(along, length / 2));
-    const toLeft = distancePointToPolyline(add(mid, scale(left, a.width / 2)), site.shoreline);
-    const toRight = distancePointToPolyline(add(mid, scale(left, -a.width / 2)), site.shoreline);
-    item.wallSide = toLeft <= toRight ? 'left' : 'right';
-    const waterSign = item.wallSide === 'left' ? -1 : 1;
-    const edge = [add(a.start, scale(left, (waterSign * a.width) / 2)), add(a.end, scale(left, (waterSign * a.width) / 2))];
-    // Gangways (D32): where the user put them, else one at the middle.
-    const gangways = gangwayPositions(a);
-    const placed = (a.gangways ?? []).length > 0;
-    const restraints: Restraint[] = gangways.map((t, i) => ({ id: `gangway-${i + 1}`, t }));
-    for (const pier of piers) {
-      const t = dot(sub(pier.start, a.start), along);
-      if (t >= -SHORE_TOLERANCE && t <= length + SHORE_TOLERANCE && distancePointToPolyline(pier.start, edge) <= SHORE_TOLERANCE) {
-        restraints.push({ id: pier.id, t });
-      }
-    }
-    const shares = tributaryLengths(
-      restraints.map((r) => r.t),
-      length,
-    ).map((l) => (across * l) / length);
-    restraints.forEach((r, i) => {
-      const pier = piers.find((x) => x.id === r.id);
-      if (pier) pier.axialFromShore += shares[i]!;
-    });
-    gangways.forEach((t, i) => {
-      // Gap from the wall-side edge at the gangway to the shoreline.
-      const gap = distancePointToPolyline(add(add(a.start, scale(along, t)), scale(left, (-waterSign * a.width) / 2)), site.shoreline);
-      // The wind along the wall (the pontoon's end) is shared equally by the gangways (I73).
-      shoreSets.push({ item, at: t, plan: gap / Math.cos(theta), offshore: shares[i]!, alongWall: (k * a.width * freeboard) / gangways.length });
-    });
-    const where = placed
-      ? `2 shore chains at each of its ${gangways.length === 1 ? 'gangway' : `${gangways.length} gangways`} (at ${gangways.map((t) => `${t.toFixed(1)} m`).join(', ')} from its first point)`
-      : '2 shore chains at its gangway (assumed at its middle)';
-    const label = (r: Restraint) => (!r.id.startsWith('gangway-') ? r.id : placed ? `shore chains at ${r.t.toFixed(1)} m` : 'shore chains');
-    warn(
-      'ACCESS_PONTOON_SHORE_CHAINS',
-      `Access pontoon ${a.id}: chains on the water side only. Off the wall it is held by ${where} and by the piers attached to it, each for the wind on its share of the pontoon's length: ${restraints
-        .map((r, i) => ({ r, share: shares[i]! }))
-        .sort((x, y) => x.r.t - y.r.t)
-        .map(({ r, share }) => `${label(r)} ${(share / 1000).toFixed(1)} kN`)
-        .join(', ')}. The fixings in the wall and the joints between the pontoons are not checked.`,
-      a.id,
-    );
-  }
-  // D58, I106: floating breakwaters: wind on their freeboard and the wave load of I104, chains at
-  // their module joints in the X pattern and outward pairs at both ends.
+  const hHigh = p.depth + p.highWater;
+  const hLow = Math.max(0.1, p.depth - p.lowWater);
+  const theta = (Math.min(MAX_SPLAY_ANGLE, Math.max(0, p.splayAngle)) * Math.PI) / 180;
+  const maxPerLine = Math.min(2, Math.max(1, Math.round(p.maxAnchorsPerLine)));
+  const mu = p.seabed === 'softClayMud' ? null : p.friction[p.seabed];
+  const cf = p.capacityFactor > 0 ? p.capacityFactor : 1;
+  const cohesiveCap = p.cohesive ? anchorCapacityCohesive(p.cohesive) * cf : null;
+  const install = installParams(priceList);
+  const pile = pileProduct(priceList, vatPct);
+  const env = {
+    windSpeed: p.windSpeed,
+    waveLineLoad: p.waveLineLoad,
+    currentSpeed: p.currentSpeed,
+    waterDensity: p.waterDensity,
+    iceLineLoad: p.iceLineLoad,
+    extraStatic_kN: p.extraStatic,
+    winterInWater: p.winterInWater,
+  };
+  const loadOpts = { leewardFactor: p.leewardFactor, waveMin: p.waveMin };
+  const q = windPressure(p.windSpeed);
+  const lines: AnchorLine[] = [];
+  const loads: PontoonLoads[] = [];
+  let chainEstimated = false;
+
+  // --- Pontoons -------------------------------------------------------------------------
+  const classById = new Map(classes.map((c) => [c.id, c]));
+  const vesselType = (c: BoatClass): VesselType => c.vesselType ?? 'motor';
+  const sides = (pierId: string, start: Vec2, along: Vec2) => {
+    const boats = (side: 'left' | 'right') =>
+      layout.berths
+        .filter((b) => b.pierId === pierId && b.side === side && !b.removed && classById.has(b.boatClassId))
+        .map((b) => ({ c: classById.get(b.boatClassId)!, s: dot(sub(b.slot[0]!, start), along), id: b.id }))
+        .sort((x, y) => x.s - y.s || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
+        .map((x) => ({ loa: x.c.length, type: vesselType(x.c) }));
+    return { sideA: boats('left'), sideB: boats('right') };
+  };
+  const held: Held[] = layout.piers.map((pier) => {
+    const { along } = pierAxis(pier);
+    return { id: pier.id, kind: 'pier' as const, start: pier.start, end: pier.end, width: pier.width, freeboard, draft: p.pontoonDraft, splayed: true, ...sides(pier.id, pier.start, along) };
+  });
+  const accessItems: Held[] = accessPontoonsOf(site).map((a) => ({ id: a.id, kind: 'access' as const, start: a.start, end: a.end, width: a.width, freeboard, draft: p.pontoonDraft, splayed: false, sideA: [], sideB: [] }));
   const breakwaterItems: Held[] = breakwatersOf(site).map((b) => {
     const product = breakwaterProductOf(b);
-    const length = distance(b.start, b.end);
-    const item: Held = {
+    return {
       id: b.id,
+      kind: 'breakwater' as const,
       start: b.start,
       end: b.end,
       width: product.width,
-      lateral: k * length * product.freeboard,
-      axialFromSea: k * product.width * product.freeboard,
-      axialFromShore: k * product.width * product.freeboard,
+      freeboard: product.freeboard,
+      draft: Math.max(0, product.height - product.freeboard),
       splayed: true,
-      free: { joints: breakwaterJoints(length, product) },
+      sideA: [],
+      sideB: [],
+      free: { joints: breakwaterJoints(distance(b.start, b.end), product) },
     };
-    addWaves(item);
-    return item;
   });
   if (breakwaterItems.length > 0) {
     warn(
       'BREAKWATER_ANCHORING',
-      `Breakwaters ${breakwaterItems.map((b) => b.id).join(', ')}: anchored like piers from their module joints, for the wind on their freeboard and the wave load above. A breakwater reflects and dissipates waves, so its real wave loads can be well above this; its length, layout and mooring need the supplier's design (AS 3962-2001 5.1.1).`,
+      `Breakwaters ${breakwaterItems.map((b) => b.id).join(', ')}: anchored like piers from their module joints, sized as wave attenuators with the FCG 2022 minimum rules. A breakwater reflects and dissipates waves, so its real wave loads can be well above the minimum; its length, layout and mooring need the supplier's design (AS 3962-2001 5.1.1).`,
     );
   }
-  const held: Held[] = [...piers, ...accessItems, ...breakwaterItems];
 
-  /** A chain to a concrete anchor `span` from `fix` along `direction` (at least `minSpan`). */
-  const seabedLine = (l: {
-    id: string;
-    holdsId: string;
-    role: AnchorLine['role'];
-    splay: AnchorLine['splay'];
-    governs: AnchorLine['governs'];
-    fix: Vec2;
-    direction: Vec2;
-    H: number;
-    minSpan: number;
-  }) => {
-    const { H } = l;
-    const chain = chooseChain(H, hHigh, p, priceList, vatPct);
-    // Without a chain the uplift is not known; it is left out and the line is flagged.
-    const uplift = chain?.uplift ?? 0;
-    const upAngle = upliftAngle(H, uplift);
-    const wedgeMass = usesWedge(p) && chain ? requiredWedgeMass(H, upAngle, p) : null;
-    const mass = wedgeMass ?? requiredAnchorMass(H, uplift, p);
-    const anchor = chooseAnchor(mass, priceList, vatPct, p.maxAnchorMass);
-    const length = chain?.length ?? chainLengthFor(hHigh, p);
-    const span = chain ? chain.span : Math.sqrt(length * length - hHigh * hHigh);
-    lines.push({
-      id: l.id,
-      holdsId: l.holdsId,
-      splay: l.splay,
-      governs: l.governs,
-      fixing: 'seabed',
-      role: l.role,
-      fix: l.fix,
-      // A crossed chain passes under the pontoon: the anchor is `span` from the fixing
-      // point, on the far side.
-      anchor: add(l.fix, scale(l.direction, Math.max(span, l.minSpan))),
-      horizontalKn: H / 1000,
-      topTensionKn: (chain?.topTension ?? H) / 1000,
-      upliftKn: uplift / 1000,
-      upliftAngleDeg: upAngle,
-      anchorType: wedgeMass === null ? 'block' : 'wedge',
-      chainLength: length,
-      chainId: chain?.product.id ?? null,
-      requiredAnchorKg: mass,
-      anchorId: anchor?.product.id ?? null,
-      anchorCount: anchor?.count ?? 0,
-    });
-    if (!chain) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(H / 1000).toFixed(1)} kN with the safety factor; line ${l.id} has no chain.`, l.holdsId);
-    if (anchor && anchor.count > 1) {
-      warn(
-        'SEVERAL_ANCHORS',
-        `Line ${l.id} needs ${Math.round(mass)} kg: ${anchor.count} anchors of ${anchor.product.anchorMassKg} kg. Several anchors on one line do not necessarily hold as much as one anchor of the same total mass.`,
-        l.holdsId,
-      );
-    }
-  };
-
-  for (const item of held) {
-    const { length, along: pierAlong, left } = pierAxis({ ...item, locked: false, origin: 'manual' });
-    const along = pierAlong;
+  // --- Legs of each pontoon (geometry) ---------------------------------------------------
+  const legsOf = new Map<string, LegSpec[]>();
+  for (const item of [...held, ...accessItems, ...breakwaterItems]) {
+    const { length, along, left } = pierAxis({ id: item.id, start: item.start, end: item.end, width: item.width, locked: false, origin: 'manual' });
     if (!(length > 0)) continue;
-    loads.push({ id: item.id, lateralKn: item.lateral / 1000, axialFromSeaKn: item.axialFromSea / 1000, axialFromShoreKn: item.axialFromShore / 1000 });
+    const legs: LegSpec[] = [];
     const minSpan = (angle: number) => (item.width + 1) / Math.cos(angle);
-    const at = (t: number, lateral: number) => add(add(item.start, scale(pierAlong, t)), scale(left, lateral));
+    const at = (t: number, lateral: number) => add(add(item.start, scale(along, t)), scale(left, lateral));
     if (item.splayed) {
-      // D46: chains from every module joint (and the ends), as in the owner's reference drawing:
-      // at a joint, on each side one chain splayed towards the head and one towards the shore, so
-      // that the chains of neighbouring joints cross; at the shore end only towards the head (the
-      // shore lies behind it); at the head the tip pair (D30), outwards. Each chain is fixed on one
-      // edge and anchored beyond the other (crossed under the pier).
-      const angle = theta;
+      // D46: chains from every module joint: on each side one splayed towards the head and one towards
+      // the shore (X pattern); at the shore end towards the head; at the head the tip pair (D30).
       const joints = item.free ? [...item.free.joints] : moduleLengths.length > 0 ? jointPositions(length, moduleLengths) : evenJoints(length, p.lineSpacing);
-      interface Spec {
-        t: number;
-        splay: 'head' | 'shore';
-        anchoredOn: 'left' | 'right';
-        role: 'side' | 'tip';
-      }
-      const specs: Spec[] = [];
-      const both = (t: number, splay: Spec['splay'], role: Spec['role']) => specs.push({ t, splay, anchoredOn: 'right', role }, { t, splay, anchoredOn: 'left', role });
+      const specs: { t: number; splay: 'head' | 'shore'; anchoredOn: 'left' | 'right'; role: 'side' | 'tip' }[] = [];
+      const both = (t: number, splay: 'head' | 'shore', role: 'side' | 'tip') => specs.push({ t, splay, anchoredOn: 'right', role }, { t, splay, anchoredOn: 'left', role });
       both(Math.min(STATION_INSET, length / 2), 'head', 'side');
-      // D58: a breakwater has no shore behind its first end: an outward pair there too.
       if (item.free) both(0, 'shore', 'tip');
-      // Square chains (θ = 0) would double up at a joint: one per side there.
       for (const j of joints) {
         both(j, 'head', 'side');
-        if (angle > 0) both(j, 'shore', 'side');
+        if (theta > 0) both(j, 'shore', 'side');
       }
-      const tip = item.free !== undefined || length >= p.tipAnchorMinLength - 1e-9;
-      if (tip) both(length, 'head', 'tip');
-      const perSide = specs.filter((x) => x.anchoredOn === 'right').length;
-      // D49: a pier reached by a gangway from the shore has two shore chains under it, crossed at
-      // θ from the pier's axis; they hold the pier against wind from the shore with the shore-ward
-      // seabed chains (each line the same share of the force along the pier, I97).
-      const link = item.free ? null : pierShoreLink(item, site, reach);
-      const shoreChains = link?.kind === 'gangway' ? 2 : 0;
-      const count = { head: specs.filter((x) => x.splay === 'head').length, shore: specs.filter((x) => x.splay === 'shore').length + shoreChains };
-      // Across: the lines anchored on the windward side share the load. Along: the lines splayed
-      // against the wind share it (wind from the sea pushes the pier shorewards: 'head' lines hold).
-      const acrossH = item.lateral / perSide / Math.cos(angle);
-      const alongShare = (splay: Spec['splay']): number => {
-        const force = splay === 'head' ? item.axialFromSea : item.axialFromShore;
-        return force > 0 && count[splay] > 0 ? force / count[splay] : 0;
-      };
-      const alongH = (splay: Spec['splay']): number => (angle > 0 ? alongShare(splay) / Math.sin(angle) : 0);
-      if (
-        Math.max(item.axialFromSea, item.axialFromShore) > 0 &&
-        ((angle === 0 && !(shoreChains > 0 && item.axialFromSea === 0)) || (item.axialFromSea > 0 && count.head === 0) || (item.axialFromShore > 0 && count.shore === 0))
-      ) {
-        unheld.push(item.id);
-      }
-      if (link?.kind === 'gangway') {
-        // From the pier's shore-end corners to the wall, each crossing to the other side under the
-        // gangway: plan length gap / cos θ, at least 0.5 m (a pier touching the shore).
-        const plan = Math.max(link.gap, 0.5) / Math.cos(angle);
-        const H = alongShare('shore') / Math.cos(angle);
-        const shore = chooseShoreChain(H, plan, p, priceList, vatPct);
-        [1, -1].forEach((sign, i) => {
-          const fix = at(0, (sign * item.width) / 2);
-          const dir = add(scale(pierAlong, -Math.cos(angle)), scale(left, -sign * Math.sin(angle)));
-          const id = `${item.id}-S${i + 1}`;
-          lines.push({
-            id,
-            holdsId: item.id,
-            splay: 'none',
-            governs: 'along',
-            fixing: 'wall',
-            role: 'shore',
-            fix,
-            anchor: add(fix, scale(dir, plan)),
-            horizontalKn: H / 1000,
-            topTensionKn: shore.tension / 1000,
-            upliftKn: 0,
-            upliftAngleDeg: 0,
-            anchorType: null,
-            chainLength: shore.length,
-            chainId: shore.product?.id ?? null,
-            requiredAnchorKg: 0,
-            anchorId: null,
-            anchorCount: 0,
-          });
-          if (!shore.product) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(shore.tension / 1000).toFixed(1)} kN with the safety factor; shore chain ${id} has no chain.`, item.id);
-        });
-      }
+      if (item.free !== undefined || length >= p.tipAnchorMinLength - 1e-9) both(length, 'head', 'tip');
       let n = 0;
       let k = 0;
       for (const x of specs) {
-        const along = alongH(x.splay);
-        const towards = scale(pierAlong, x.splay === 'shore' ? -Math.sin(angle) : Math.sin(angle));
+        const towards = scale(along, x.splay === 'shore' ? -Math.sin(theta) : Math.sin(theta));
         const fixSign = x.anchoredOn === 'right' ? 1 : -1;
-        seabedLine({
+        legs.push({
           id: x.role === 'tip' ? `${item.id}-T${++k}` : `${item.id}-A${++n}`,
           holdsId: item.id,
           role: x.role,
-          splay: angle === 0 ? 'none' : x.splay,
-          governs: along > acrossH ? 'along' : 'across',
+          splay: theta === 0 ? 'none' : x.splay,
+          fixing: 'seabed',
           fix: at(x.t, (fixSign * item.width) / 2),
-          direction: add(scale(left, -fixSign * Math.cos(angle)), towards),
-          H: Math.max(acrossH, along),
-          minSpan: minSpan(angle),
+          direction: add(scale(left, -fixSign * Math.cos(theta)), towards),
+          minSpan: minSpan(theta),
+        });
+      }
+      // D49: a pier reached by a gangway from the shore: two shore chains crossed under the gangway.
+      const link = item.free || item.kind !== 'pier' ? null : pierShoreLink(item, site, reach);
+      if (link?.kind === 'gangway') {
+        const plan = Math.max(link.gap, 0.5) / Math.cos(theta);
+        [1, -1].forEach((sign, i) => {
+          legs.push({
+            id: `${item.id}-S${i + 1}`,
+            holdsId: item.id,
+            role: 'shore',
+            splay: 'none',
+            fixing: 'wall',
+            fix: at(0, (sign * item.width) / 2),
+            direction: add(scale(along, -Math.cos(theta)), scale(left, -sign * Math.sin(theta))),
+            minSpan: 0,
+            plan,
+          });
         });
       }
     } else {
-      // Access pontoons (I64): square lines, one per station on each side, at `lineSpacing`; in
-      // front of a wall only the line anchored on the water side (D28).
-      const pairs = Math.max(2, Math.ceil(length / p.lineSpacing) + 1);
-      const stations = Array.from({ length: pairs }, (_, i) => Math.min(length - STATION_INSET, Math.max(STATION_INSET, (i * length) / (pairs - 1))));
-      const acrossH = item.lateral / pairs;
+      // Access pontoons (I64): square lines at `lineSpacing`; in front of a wall on the water side only
+      // (D28) and two shore chains at each gangway, crossed at θ to fixings in the wall.
+      let wallSide: 'left' | 'right' | undefined;
+      if (site.shoreline.length >= 2) {
+        const mid = add(item.start, scale(along, length / 2));
+        const toLeft = distancePointToPolyline(add(mid, scale(left, item.width / 2)), site.shoreline);
+        const toRight = distancePointToPolyline(add(mid, scale(left, -item.width / 2)), site.shoreline);
+        wallSide = toLeft <= toRight ? 'left' : 'right';
+        item.wallSide = wallSide;
+      }
+      const a = accessPontoonsOf(site).find((x) => x.id === item.id);
+      // D28, I122: the piers starting from the water-side edge hold the pontoon with their own chains.
+      const attached: { id: string; t: number }[] = [];
+      if (wallSide && a) {
+        const waterSign = wallSide === 'left' ? -1 : 1;
+        const edge: [Vec2, Vec2] = [at(0, (waterSign * item.width) / 2), at(length, (waterSign * item.width) / 2)];
+        for (const pier of layout.piers) {
+          const { left: pl } = pierAxis(pier);
+          const corners = [0, pier.width / 2, -pier.width / 2].map((l) => add(pier.start, scale(pl, l)));
+          if (corners.some((c) => distancePointToPolyline(c, edge) <= SHORE_TOLERANCE)) attached.push({ id: pier.id, t: Math.min(length, Math.max(0, dot(sub(pier.start, item.start), along))) });
+        }
+        item.restraints = { gangways: gangwayPositions(a), piers: attached };
+      }
+      const pairs = attached.length > 0 ? 0 : Math.max(2, Math.ceil(length / p.lineSpacing) + 1);
       let n = 0;
-      for (const t of stations) {
-        const line = (fixSign: 1 | -1) =>
-          seabedLine({ id: `${item.id}-A${++n}`, holdsId: item.id, role: 'side', splay: 'none', governs: 'across', fix: at(t, (fixSign * item.width) / 2), direction: scale(left, -fixSign), H: acrossH, minSpan: minSpan(0) });
-        if (item.wallSide !== 'right') line(1);
-        if (item.wallSide !== 'left') line(-1);
+      for (let i = 0; i < pairs; i++) {
+        const t = Math.min(length - STATION_INSET, Math.max(STATION_INSET, (i * length) / (pairs - 1)));
+        for (const fixSign of [1, -1] as const) {
+          if ((fixSign === 1 && wallSide === 'right') || (fixSign === -1 && wallSide === 'left')) continue;
+          legs.push({ id: `${item.id}-A${++n}`, holdsId: item.id, role: 'side', splay: 'none', fixing: 'seabed', fix: at(t, (fixSign * item.width) / 2), direction: scale(left, -fixSign), minSpan: minSpan(0) });
+        }
+      }
+      if (wallSide && a) {
+        const wallSign = wallSide === 'left' ? 1 : -1;
+        gangwayPositions(a).forEach((tg, g) => {
+          const gap = distancePointToPolyline(add(add(item.start, scale(along, tg)), scale(left, (wallSign * item.width) / 2)), site.shoreline);
+          const plan = Math.max(gap, 0.5) / Math.cos(theta);
+          const half = (plan * Math.sin(theta)) / 2;
+          for (const sign of [-1, 1]) {
+            legs.push({
+              id: `${item.id}-S${2 * g + (sign < 0 ? 1 : 2)}`,
+              holdsId: item.id,
+              role: 'shore',
+              splay: 'none',
+              fixing: 'wall',
+              fix: at(tg + sign * half, (wallSign * item.width) / 2),
+              direction: add(scale(left, wallSign * Math.cos(theta)), scale(along, -sign * Math.sin(theta))),
+              minSpan: 0,
+              plan,
+            });
+          }
+        });
+        const gangwayText = `two shore chains at each gangway${(a.gangways ?? []).length > 0 ? '' : ' (assumed at its middle)'}`;
+        const piersText = attached.map((x) => x.id).join(', ');
+        warn(
+          'ACCESS_PONTOON_SHORE_CHAINS',
+          attached.length > 0
+            ? `Access pontoon ${item.id} (D28): off the wall it is held by ${gangwayText} and by the piers attached to it (${piersText}), towards the wall by those piers, each by its tributary length; along the wall by the shore chains. It has no chains of its own to the seabed. The piers' chains carry its load with their own (see the load table). The fixings in the wall and the joints between the pontoons are not checked; equal sharing by tributary length is an assumption.`
+            : `Access pontoon ${item.id} (D28): no pier starts from it, so it has square chains of its own on the water side (towards the wall); off the wall and along it ${gangwayText} hold it. The fixings in the wall are not checked.`,
+          item.id,
+        );
+      } else if (!wallSide) {
+        warn('ACCESS_PONTOON_NO_SHORE', `Access pontoon ${item.id}: the site has no shoreline, so it has no shore chains and is anchored on both sides.`, item.id);
       }
     }
-
-    // Shore chains at the gangway: two, crossed at the splay angle, from the wall-side edge
-    // to the wall. Off the wall they share the load (÷ 2 cos θ); along the wall one holds
-    // each direction (÷ sin θ).
-    shoreSets
-      .filter((x) => x.item === item)
-      .forEach((set, g) => {
-      const wallSign = item.wallSide === 'left' ? 1 : -1;
-      const offshoreH = set.offshore / 2 / Math.cos(theta);
-      const alongH = theta > 0 ? set.alongWall / Math.sin(theta) : 0;
-      if (theta === 0 && set.alongWall > 0 && !unheld.includes(item.id)) unheld.push(item.id);
-      const H = Math.max(offshoreH, alongH);
-      const shore = chooseShoreChain(H, set.plan, p, priceList, vatPct);
-      const half = (set.plan * Math.sin(theta)) / 2;
-      for (const sign of [-1, 1]) {
-        const fix = at(set.at + sign * half, (wallSign * item.width) / 2);
-        const dir = add(scale(left, wallSign * Math.cos(theta)), scale(along, -sign * Math.sin(theta)));
-        const id = `${item.id}-S${2 * g + (sign < 0 ? 1 : 2)}`;
-        lines.push({
-          id,
-          holdsId: item.id,
-          splay: 'none',
-          governs: alongH > offshoreH ? 'along' : 'across',
-          fixing: 'wall',
-          role: 'shore',
-          fix,
-          anchor: add(fix, scale(dir, set.plan)),
-          horizontalKn: H / 1000,
-          topTensionKn: shore.tension / 1000,
-          upliftKn: 0,
-          upliftAngleDeg: 0,
-          anchorType: null,
-          chainLength: shore.length,
-          chainId: shore.product?.id ?? null,
-          requiredAnchorKg: 0,
-          anchorId: null,
-          anchorCount: 0,
-        });
-        if (!shore.product) warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds ${(shore.tension / 1000).toFixed(1)} kN with the safety factor; shore chain ${id} has no chain.`, item.id);
-      }
-      });
+    legsOf.set(item.id, legs);
   }
 
-  // D36, D37: stern buoys. One line per berth from the buoy straight down to its sinker.
-  const classById = new Map(classes.map((c) => [c.id, c]));
+  // --- Loads and sizing of each pontoon's legs --------------------------------------------
+  const strongest = priceList.products
+    .filter((x) => x.category === 'chain' && x.breakingLoadKn !== null && x.chainDiameterMm !== null)
+    .reduce<Product | null>((a, b) => (!a || b.breakingLoadKn! > a.breakingLoadKn! ? b : a), null);
+  /** The cheapest chain holding every case at both levels (MBL·((d−c)/d)² / max T ≥ SF), with its catenaries. */
+  const sizeChain = (cases: { case: LegLoadCase['case']; Th: number }[], levels: readonly (readonly ['LW' | 'HW', number])[], length: number) => {
+    const evaluate = (product: Product) => {
+      const cw = chainWeight({ d_mm: product.chainDiameterMm!, kgPerM: product.massKgPerM }, p.waterDensity);
+      const d = product.chainDiameterMm!;
+      const mbl = product.breakingLoadKn! * ((d - p.corrosionAllowance) / d) ** 2;
+      const results: (LegLoadCase & { upliftDeg: number; X: number; chainFoS: number })[] = [];
+      for (const c of cases) {
+        for (const [level, h] of levels) {
+          const cat = catenary(c.Th, cw.w_kNperM, h, length);
+          if (!cat.ok) return null;
+          results.push({ case: c.case, waterLevel: level, Th: c.Th, Tfair: cat.Tfair, Tanchor: cat.Tanchor, Fv: cat.Vanchor, upliftDeg: cat.upliftDeg, X: cat.X, chainFoS: mbl / Math.max(cat.Tfair, cat.Tanchor, 1e-9) });
+        }
+      }
+      return { product, estimated: cw.estimated, results, minFoS: results.reduce((m, r) => Math.min(m, r.chainFoS), Infinity), w: cw.w_kNperM };
+    };
+    let best: { choice: NonNullable<ReturnType<typeof evaluate>>; cost: number } | null = null;
+    for (const product of priceList.products) {
+      if (product.category !== 'chain' || product.breakingLoadKn === null || product.chainDiameterMm === null || product.chainDiameterMm <= p.corrosionAllowance) continue;
+      const price = unitPriceVat0(product, vatPct);
+      if (price === null) continue;
+      const e = evaluate(product);
+      if (!e || e.minFoS < p.chainSafetyFactor - 1e-9) continue;
+      const cost = price * length;
+      if (!best || cost < best.cost - 1e-9 || (Math.abs(cost - best.cost) < 1e-9 && product.chainDiameterMm < best.choice.product.chainDiameterMm!)) best = { choice: e, cost };
+    }
+    if (best) return { ...best.choice, holds: true };
+    const fallback = strongest ? evaluate(strongest) : null;
+    return fallback ? { ...fallback, holds: false } : null;
+  };
+
+  const pileLines = new Map<string, AnchorLine[]>();
+  const alongGovernsBy = new Map<string, number>();
+  const items = [...held, ...accessItems, ...breakwaterItems];
+  const axisOf = (item: Held) => pierAxis({ id: item.id, start: item.start, end: item.end, width: item.width, locked: false, origin: 'manual' });
+  const loadsOf = new Map(
+    items.map((item) => {
+      const pontoon = { length: axisOf(item).length, width: item.width, freeboard: item.freeboard, draft: item.draft, type: item.kind === 'breakwater' ? ('wave_attenuator' as const) : ('walkway' as const) };
+      return [item.id, environmentalLoads(pontoon, { sideA: item.sideA, sideB: item.sideB }, env, loadOpts)] as const;
+    }),
+  );
+  // D28, I122: an access pontoon passes its load across to the piers attached to it, by tributary
+  // length: off the wall shared with its gangways' shore chains, towards the wall to the piers alone.
+  // A pier carries it in its own case of the same direction.
+  const ownShare = new Map<string, Map<LoadCase['id'], number>>();
+  const received = new Map<string, Map<LoadCase['id'], number>>();
+  const transfersOf = new Map<string, PontoonLoads['transfers']>();
+  for (const item of accessItems) {
+    const r = item.restraints;
+    const el = loadsOf.get(item.id);
+    if (!r || r.piers.length === 0 || !el || !item.wallSide) continue;
+    const { length, along, left } = axisOf(item);
+    const toWall = scale(left, item.wallSide === 'left' ? 1 : -1);
+    const shares = new Map<LoadCase['id'], number>();
+    const transfers: PontoonLoads['transfers'] = [];
+    for (const c of el.cases) {
+      const g = add(scale(along, c.dir[0]), scale(left, c.dir[1]));
+      const towards = dot(g, toWall);
+      if (Math.abs(towards) < 0.5) continue;
+      // Off the wall: the gangways and the piers; towards it: the piers only.
+      const restraints = [...(towards < 0 ? r.gangways.map((t) => ({ id: null as string | null, t })) : []), ...r.piers.map((x) => ({ id: x.id as string | null, t: x.t }))];
+      const trib = tributaryLengths(restraints.map((x) => x.t), length);
+      let own = 0;
+      restraints.forEach((x, i) => {
+        const part = trib[i]! / length;
+        if (x.id === null) {
+          own += part;
+          return;
+        }
+        const pier = layout.piers.find((q) => q.id === x.id)!;
+        const pa = pierAxis(pier);
+        const comps: [LoadCase['id'], number][] = [
+          [dot(g, pa.along) >= 0 ? 'par+' : 'par-', Math.abs(dot(g, pa.along))],
+          [dot(g, pa.left) >= 0 ? 'perp+' : 'perp-', Math.abs(dot(g, pa.left))],
+        ];
+        for (const [toCase, k] of comps) {
+          if (k < 1e-6) continue;
+          const kN = c.F_uls * part * k;
+          const m = received.get(pier.id) ?? new Map<LoadCase['id'], number>();
+          m.set(toCase, (m.get(toCase) ?? 0) + kN);
+          received.set(pier.id, m);
+          transfers.push({ case: c.id, to: pier.id, toCase, kN });
+        }
+      });
+      shares.set(c.id, own);
+    }
+    ownShare.set(item.id, shares);
+    transfersOf.set(item.id, transfers);
+  }
+  for (const item of items) {
+    const legs = legsOf.get(item.id);
+    if (!legs) continue;
+    const { along: axis, left } = axisOf(item);
+    const el = loadsOf.get(item.id)!;
+    loads.push({ id: item.id, kind: item.kind, q: el.q, cases: el.cases, ice: el.ice, transfers: transfersOf.get(item.id) ?? [] });
+    for (const w of el.warnings) warnOnce(w);
+    const dirDeg = (l: LegSpec) => (Math.atan2(dot(l.direction, left), dot(l.direction, axis)) * 180) / Math.PI;
+    const legDirs = legs.map((l) => ({ dirDeg: dirDeg(l) }));
+    const perLeg = legs.map(() => [] as { case: LoadCase['id']; Th: number }[]);
+    for (const c of el.cases) {
+      // The load the pontoon's own legs hold: less what it passes to attached piers, plus what it carries for an access pontoon.
+      const F = c.F_uls * (ownShare.get(item.id)?.get(c.id) ?? 1) + (received.get(item.id)?.get(c.id) ?? 0);
+      if (F <= 1e-9) continue;
+      const dist = distributeToLegs(F, c.dir, legDirs, p.unevenFactor);
+      if (!dist.ok) {
+        warn('NO_LEG_FOR_DIRECTION', `${item.id} ${c.id}: ${dist.error} The pontoon is not anchored in this direction (e.g. splay angle 0°): add legs.`, item.id, 'error');
+        continue;
+      }
+      dist.Th.forEach((Th, i) => {
+        if (Th > 0) perLeg[i]!.push({ case: c.id, Th });
+      });
+    }
+    let alongGoverns = 0;
+    legs.forEach((leg, i) => {
+      const cases = perLeg[i]!;
+      const wall = leg.fixing === 'wall';
+      const length = wall ? leg.plan! + p.highWater + p.lowWater : chainLengthFor(hHigh, p);
+      const levels = wall
+        ? ([
+            ['LW', p.lowWater],
+            ['HW', p.highWater],
+          ] as const)
+        : ([
+            ['LW', hLow],
+            ['HW', hHigh],
+          ] as const);
+      const chain = sizeChain(cases, levels, length);
+      if (chain && !chain.holds) {
+        const hint = wall && item.kind === 'access' ? ' More gangways (each with two shore chains, D32) or more piers attached to the access pontoon share its load.' : '';
+        warn('NO_CHAIN_STRONG_ENOUGH', `No chain in the price list holds leg ${leg.id} with the factor of safety ${p.chainSafetyFactor.toFixed(1)}; it has no chain.${hint}`, item.id);
+      }
+      if (chain?.estimated && chain.holds) chainEstimated = true;
+      const results = chain?.results ?? [];
+      const maxTh = cases.reduce((m, c) => Math.max(m, c.Th), 0);
+      const topT = results.reduce((m, r) => Math.max(m, r.Tfair, r.Tanchor), 0);
+      const loadCases: LegLoadCase[] = results.map((r) => ({ case: r.case, waterLevel: r.waterLevel, Th: r.Th, Tfair: r.Tfair, Tanchor: r.Tanchor, Fv: r.Fv }));
+      // The anchor lies `X` from the fixing at the largest load at high water, on the far side.
+      const atHw = results.filter((r) => r.waterLevel === 'HW').reduce<(typeof results)[number] | null>((a, r) => (!a || r.Th > a.Th ? r : a), null);
+      const span = wall ? leg.plan! : Math.max(atHw?.X ?? Math.sqrt(Math.max(0, length * length - hHigh * hHigh)), leg.minSpan);
+      const base = {
+        id: leg.id,
+        holdsId: leg.holdsId,
+        splay: leg.splay,
+        fixing: leg.fixing,
+        role: leg.role,
+        fix: leg.fix,
+        anchor: add(leg.fix, scale(leg.direction, span)),
+        dirDeg: legDirs[i]!.dirDeg,
+        horizontalKn: maxTh,
+        topTensionKn: topT,
+        chainLength: length,
+        chainId: chain?.holds ? chain.product.id : null,
+        chainFoS: chain?.holds ? chain.minFoS : null,
+        chainWeightEstimated: chain?.estimated ?? false,
+        loadCases,
+      };
+      if (wall) {
+        const g = results.reduce<(typeof results)[number] | null>((a, r) => (!a || Math.max(r.Tfair, r.Tanchor) > Math.max(a.Tfair, a.Tanchor) ? r : a), null);
+        lines.push({
+          ...base,
+          governs: g && g.case.startsWith('par') ? 'along' : 'across',
+          upliftKn: 0,
+          upliftAngleDeg: 0,
+          requiredAnchorKg: 0,
+          anchorId: null,
+          anchorKind: null,
+          anchorCount: 0,
+          status: 'OK',
+          pileReason: null,
+          governing: g ? { case: g.case, waterLevel: g.waterLevel, Th: g.Th, Tfair: g.Tfair, Tanchor: g.Tanchor, Fv: 0, upliftDeg: 0, chainFoS: g.chainFoS, anchorCapacity: null, anchorFoS: null } : null,
+        });
+        return;
+      }
+      // Anchor (spec 5.2–5.4): the required dry mass over every case at both levels.
+      const massReq = cohesiveCap !== null ? NaN : mu === null ? NaN : results.reduce((m, r) => Math.max(m, requiredAnchorMassFriction(r.Th, r.Fv, mu, p.slidingSafetyFactor / cf, p.concreteDensity, p.waterDensity, p.slopeDeg)), 0);
+      let pick: ReturnType<typeof chooseBlock>['pick'] = null;
+      let pileReason: string | null = null;
+      let heaviest = 0;
+      if (cohesiveCap !== null) {
+        const holds = results.every((r) => cohesiveCap / r.Th >= p.slidingSafetyFactor - 1e-9);
+        const choice = chooseBlock(p.cohesive!.massDryKg, { maxPerLine: 1, maxBlockMassKg: p.maxAnchorMass, seabed: p.seabed }, priceList, vatPct, install);
+        heaviest = choice.heaviestKg;
+        if (holds && choice.pick) pick = choice.pick;
+        else pileReason = holds ? (choice.reason ?? 'block: none') : `block (cohesive model): capacity ${cohesiveCap.toFixed(1)} kN < ${p.slidingSafetyFactor.toFixed(1)} × ${maxTh.toFixed(1)} kN`;
+      } else if (mu === null) {
+        pileReason = 'soft clay / mud: no friction model (NAVFAC); give the cohesive parameters or have an expert size the anchor';
+        heaviest = usableBlocks(priceList, p.maxAnchorMass, p.seabed).reduce((m, x) => Math.max(m, x.anchorMassKg!), 0);
+      } else {
+        const choice = chooseBlock(massReq, { maxPerLine, maxBlockMassKg: p.maxAnchorMass, seabed: p.seabed }, priceList, vatPct, install);
+        heaviest = choice.heaviestKg;
+        pick = choice.pick;
+        pileReason = choice.reason;
+      }
+      // Capacity and factor of safety per case: of the chosen blocks, or of the heaviest allowed for a pile line.
+      const blockMass = pick ? pick.product.anchorMassKg! * pick.count : heaviest * maxPerLine;
+      const capacity = (r: (typeof results)[number]) =>
+        cohesiveCap !== null ? (pick ? cohesiveCap : 0) : mu === null ? 0 : anchorCapacityFriction(submergedWeight_kN(blockMass, p.concreteDensity, p.waterDensity), r.Fv, mu, p.slopeDeg) * cf;
+      const g = results.reduce<{ r: (typeof results)[number]; cap: number; fos: number } | null>((a, r) => {
+        const cap = capacity(r);
+        const fos = cap / r.Th;
+        return !a || fos < a.fos ? { r, cap, fos } : a;
+      }, null);
+      if (g && g.r.case.startsWith('par')) alongGoverns++;
+      const line: AnchorLine = {
+        ...base,
+        governs: g && g.r.case.startsWith('par') ? 'along' : 'across',
+        upliftKn: g?.r.Fv ?? 0,
+        upliftAngleDeg: g?.r.upliftDeg ?? 0,
+        requiredAnchorKg: massReq,
+        anchorId: pick ? pick.product.id : (pile?.id ?? null),
+        anchorKind: pick ? 'block' : 'pile',
+        anchorCount: pick ? pick.count : 1,
+        status: pick ? 'OK' : 'PILE',
+        pileReason: pick ? null : pileReason,
+        governing: g ? { case: g.r.case, waterLevel: g.r.waterLevel, Th: g.r.Th, Tfair: g.r.Tfair, Tanchor: g.r.Tanchor, Fv: g.r.Fv, upliftDeg: g.r.upliftDeg, chainFoS: g.r.chainFoS, anchorCapacity: g.cap, anchorFoS: g.fos } : null,
+      };
+      lines.push(line);
+      if (!pick) pileLines.set(item.id, [...(pileLines.get(item.id) ?? []), line]);
+    });
+    alongGovernsBy.set(item.id, alongGoverns);
+    // Practical rules of the spec (§6), per pontoon.
+    const mooringLegs: MooringLeg[] = legs.map((leg) => {
+      const l = lines.find((x) => x.id === leg.id)!;
+      const product = priceList.products.find((x) => x.id === l.chainId);
+      return {
+        id: leg.id,
+        dirDeg: l.dirDeg,
+        chain: { d_mm: product?.chainDiameterMm ?? 0, kgPerM: product?.massKgPerM ?? null, MBL_kN: product?.breakingLoadKn ?? 0, length_m: l.chainLength },
+        anchor: { massDryKg: l.anchorKind === 'block' ? (priceList.products.find((x) => x.id === l.anchorId)?.anchorMassKg ?? 0) * l.anchorCount : 0, seabed: p.seabed },
+        h_LW: leg.fixing === 'wall' ? p.lowWater : hLow,
+        h_HW: leg.fixing === 'wall' ? Math.max(p.highWater, 0.1) : hHigh,
+      };
+    });
+    // The chain-length rules concern chains to the seabed; every leg (shore chains too) counts as an anchor point.
+    const seabedLegs = mooringLegs.filter((_, i) => legs[i]!.fixing === 'seabed');
+    const pontoon = { length: axisOf(item).length, width: item.width, freeboard: item.freeboard, draft: item.draft, type: item.kind === 'breakwater' ? ('wave_attenuator' as const) : ('walkway' as const) };
+    const attachedPiers = item.restraints?.piers.map((x) => x.id) ?? [];
+    const rules = ruleChecks({ legs: seabedLegs, pontoon, env, ...(item.kind === 'breakwater' ? { opts: { preset: 'FCG_wave_attenuator' as const } } : {}) }).filter(
+      (w) => w.code !== 'FEWER_THAN_4_ANCHOR_POINTS' || mooringLegs.length < 4,
+    );
+    for (const w of rules) {
+      if (w.code === 'CHAIN_BELOW_4_DEPTHS' || w.code === 'CHAIN_BELOW_5_DEPTHS') warnOnce({ code: w.code, message: `${item.id}: ${w.message.replace(/^[^:]+: /, 'chains ')}` }, item.id);
+      else if (w.code === 'FCG_CHAIN') warnOnce({ code: w.code, message: `${item.id}: ${w.message.replace(/^[^:]+: /, '')}` }, item.id);
+      else if (w.code === 'WINTER_IN_WATER') warnOnce(w);
+      else if (w.code === 'FEWER_THAN_4_ANCHOR_POINTS')
+        warnOnce({ code: w.code, message: `${item.id}: ${mooringLegs.length} anchor points < 4 per pontoon (FCG 2022)${attachedPiers.length > 0 ? `; it is also held by the piers attached to it (${attachedPiers.join(', ')})` : ''}.` }, item.id);
+      else warnOnce({ code: w.code, message: `${item.id}: ${w.message}` }, item.id);
+    }
+  }
+
+  // D64: lines that no block of at most maxAnchorMass holds take a pile anchor.
+  for (const [id, ls] of pileLines) {
+    const total = lines.filter((l) => l.holdsId === id && l.fixing === 'seabed').length;
+    const worst = ls.reduce((a, l) => ((l.requiredAnchorKg || 0) > (a.requiredAnchorKg || 0) ? l : a));
+    warn(
+      'PILE_ANCHORS',
+      `${id}: ${ls.length} of ${total} anchor lines take a pile anchor at the end of the chain: no concrete anchor of at most ${groupThousands(p.maxAnchorMass)} kg holds them (worst ${worst.id}: ${worst.pileReason}). Pile length and section by geotechnical design.`,
+      id,
+    );
+  }
+  for (const [id, n] of alongGovernsBy) {
+    if (n > 0) {
+      warn('ALONG_LOAD_GOVERNS', `${id}: the load along the pontoon governs ${n} legs: consider longitudinal legs or cross-chaining (spec §4).`, id);
+    }
+  }
+  const tandem = lines.filter((l) => l.anchorKind === 'block' && l.anchorCount > 1);
+  if (tandem.length > 0) {
+    warn(
+      'TANDEM_ANCHORS',
+      `${tandem.length} lines have 2 anchors in tandem (maxAnchorsPerLine = 2, the user's choice; ${tandem
+        .slice(0, 5)
+        .map((l) => l.id)
+        .join(', ')}${tandem.length > 5 ? ', …' : ''}). Several anchors on one chain do not necessarily equal one anchor of the same total mass (Chalmers 2026); the arrangement needs the mooring designer's approval.`,
+    );
+  }
+  if (chainEstimated) warn('CHAIN_WEIGHT_ESTIMATED', 'A chain without the manufacturer’s kg/m is weighed as 0.0219·d² kg/m (studless link chain, approximate); long-link chain (DIN 763) weighs differently.');
+  if (mu === null && cohesiveCap === null) warn('NO_FRICTION_MODEL', 'Soft clay / mud: no friction model (NAVFAC DM-7.02). Give the cohesive parameters (spec 5.3) or have an expert size the anchors; until then the lines take pile anchors.');
+  if (p.capacityFactor !== 1 && !p.capacityFactorSource.trim()) warn('CAPACITY_FACTOR_WITHOUT_SOURCE', `Capacity factor ${p.capacityFactor} without a documented basis (pull test, measured embedment).`);
+  if (classes.some((c) => c.length > 25)) warn('VESSEL_OVER_25M_TODO', 'AS 3962 advises a calculation height z > 3 m for boats over 25 m: not implemented (TODO).');
+  if ((input.waves?.exceeding ?? []).length > 0) {
+    warn(
+      'WAVE_LOAD_ABOVE_CRITERIA',
+      `The waves from ${input.waves!.exceeding.join(', ')} exceed the wave climate criteria of the screening; AS 3962's 2 kN/m is a minimum "for the wave criteria given in Table 4.2". Larger waves need a wave analysis: enter its wave line load.`,
+    );
+  }
+
+  // --- Stern buoys (D36, D37): one line per berth from the buoy straight down to its sinker -----
   const table = buoyTable(p.buoyTable, p);
   const tableName = p.buoyTable === 'topMarine' ? 'Top Marine’s table' : 'Båtunionen’s table (Hamnhandboken 2016)';
   const buoyLines: AnchorLine[] = [];
   const estimated = new Map<string, number>();
   let beyondTable = 0;
   const farClasses = new Set<string>();
+  const cdHead = Math.max(WIND_CD.vesselBow, WIND_CD.vesselStern);
   for (const b of layout.berths) {
     const c = classById.get(b.boatClassId);
     if (!b.buoy || b.removed || !c) continue;
@@ -1253,16 +1194,45 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     if (weightEstimated) estimated.set(c.id, weight);
     const { row, beyond } = buoyTableRow(table, weight, p.buoyExposed);
     if (beyond) beyondTable++;
-    // Båtunionen §2.32: the boat–buoy distance should not exceed 1.4 × the boat length.
     if (input.buoyDepthFactor !== undefined && input.buoyDepthFactor * p.depth > 1.4 * c.length + 1e-9) farClasses.add(c.name);
-    // The buoy holds the boat against wind from the sea, which meets it stern-on (full load).
-    const H = k * c.beam * p.profileHeightRatio * c.length;
+    // The buoy holds the boat stern-on against the wind (AS 3962 Table 4.4 head area, Table 4.3).
+    const H = q * cdHead * vesselWindArea(vesselType(c), c.length).head;
     const length = buoyChainLength(p.depth, hHigh, p);
-    const chain = chooseChain(H, hHigh, p, priceList, vatPct, { length, minDiameterMm: row.chainMm });
-    const uplift = chain?.uplift ?? 0;
+    const levels = [
+      ['LW', hLow],
+      ['HW', hHigh],
+    ] as const;
+    // The table's chain size at least; then the cheapest that holds.
+    const evaluateBuoyChain = () => {
+      let best: { product: Product; results: { r: LegLoadCase; upliftDeg: number; chainFoS: number }[]; cost: number } | null = null;
+      for (const product of priceList.products) {
+        const d = product.chainDiameterMm;
+        if (product.category !== 'chain' || product.breakingLoadKn === null || d === null || d < row.chainMm - 1e-9 || d <= p.corrosionAllowance) continue;
+        const price = unitPriceVat0(product, vatPct);
+        if (price === null) continue;
+        const cw = chainWeight({ d_mm: d, kgPerM: product.massKgPerM }, p.waterDensity);
+        const mbl = product.breakingLoadKn * ((d - p.corrosionAllowance) / d) ** 2;
+        const results: { r: LegLoadCase; upliftDeg: number; chainFoS: number }[] = [];
+        let ok = true;
+        for (const [level, h] of levels) {
+          const cat = catenary(H, cw.w_kNperM, h, length);
+          if (!cat.ok) {
+            ok = false;
+            break;
+          }
+          results.push({ r: { case: 'stern', waterLevel: level, Th: H, Tfair: cat.Tfair, Tanchor: cat.Tanchor, Fv: cat.Vanchor }, upliftDeg: cat.upliftDeg, chainFoS: mbl / Math.max(cat.Tfair, cat.Tanchor) });
+        }
+        if (!ok || results.some((x) => x.chainFoS < p.chainSafetyFactor - 1e-9)) continue;
+        const cost = price * length;
+        if (!best || cost < best.cost - 1e-9) best = { product, results, cost };
+      }
+      return best;
+    };
+    const chain = evaluateBuoyChain();
     const mass = p.buoySinkerMethod === 'table' ? row.sinkerKg : p.buoySinkerFactor * weight * 1000;
-    const anchor = chooseAnchor(mass, priceList, vatPct, p.maxAnchorMass);
-    const chainMass = chain ? chain.product.massKgPerM! * length * (1 - p.waterDensity / p.steelDensity) : 0;
+    const choice = chooseBlock(mass, { maxPerLine, maxBlockMassKg: p.maxAnchorMass, seabed: p.seabed }, priceList, vatPct, install);
+    const worst = chain?.results.reduce((a, x) => (x.r.Fv > a.r.Fv ? x : a)) ?? null;
+    const chainMass = chain ? (chain.product.massKgPerM ?? 0.0219 * chain.product.chainDiameterMm! ** 2) * length * (1 - p.waterDensity / p.steelDensity) : 0;
     const line: AnchorLine = {
       id: `${b.id}-B`,
       holdsId: b.id,
@@ -1272,48 +1242,54 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       role: 'buoy',
       fix: b.buoy,
       anchor: b.buoy,
-      horizontalKn: H / 1000,
-      topTensionKn: (chain?.topTension ?? H) / 1000,
+      dirDeg: 0,
+      horizontalKn: H,
+      topTensionKn: chain ? chain.results.reduce((m, x) => Math.max(m, x.r.Tfair, x.r.Tanchor), 0) : H,
       chainLength: length,
       chainId: chain?.product.id ?? null,
-      upliftKn: uplift / 1000,
-      upliftAngleDeg: upliftAngle(H, uplift),
-      anchorType: 'block',
+      chainFoS: chain ? chain.results.reduce((m, x) => Math.min(m, x.chainFoS), Infinity) : null,
+      chainWeightEstimated: chain ? chain.product.massKgPerM === null : false,
+      upliftKn: worst?.r.Fv ?? 0,
+      upliftAngleDeg: worst?.upliftDeg ?? 0,
       requiredAnchorKg: mass,
-      anchorId: anchor?.product.id ?? null,
-      anchorCount: anchor?.count ?? 0,
+      anchorId: choice.pick ? choice.pick.product.id : (pile?.id ?? null),
+      anchorKind: choice.pick ? 'block' : 'pile',
+      anchorCount: choice.pick ? choice.pick.count : 1,
+      status: choice.pick ? 'OK' : 'PILE',
+      pileReason: choice.pick ? null : choice.reason,
+      governing: worst ? { case: 'stern', waterLevel: worst.r.waterLevel, Th: H, Tfair: worst.r.Tfair, Tanchor: worst.r.Tanchor, Fv: worst.r.Fv, upliftDeg: worst.upliftDeg, chainFoS: worst.chainFoS, anchorCapacity: null, anchorFoS: null } : null,
+      loadCases: chain ? chain.results.map((x) => x.r) : [],
       buoy: {
         boatWeightT: weight,
         weightEstimated,
         // Båtunionen: the buoy "skall gott och väl bära kättingtyngden".
         floatCapacityKg: Math.max(row.floatCapacityKg, chainMass),
         tableChainMm: row.chainMm,
-        windAnchorKg: requiredAnchorMass(H, uplift, p),
+        windAnchorKg: mu === null || !worst ? NaN : requiredAnchorMassFriction(H, worst.r.Fv, mu, p.slidingSafetyFactor / cf, p.concreteDensity, p.waterDensity, p.slopeDeg),
       },
     };
     buoyLines.push(line);
-    if (!chain) {
-      warn('NO_CHAIN_STRONG_ENOUGH', `No chain of at least ${row.chainMm} mm in the price list holds ${(H / 1000).toFixed(1)} kN with the safety factor; stern buoy ${line.id} has no chain.`, b.id);
-    }
+    if (!chain) warn('NO_CHAIN_STRONG_ENOUGH', `No chain of at least ${row.chainMm} mm in the price list holds ${H.toFixed(1)} kN with the factor of safety; stern buoy ${line.id} has no chain.`, b.id);
   }
   lines.push(...buoyLines);
   if (buoyLines.length > 0) {
-    const heaviest = buoyLines.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
-    const several = buoyLines.filter((l) => l.anchorCount > 1).length;
+    const heaviestSinker = buoyLines.reduce((m, l) => Math.max(m, l.requiredAnchorKg), 0);
     const sinker =
       p.buoySinkerMethod === 'table'
         ? `the sinker of ${tableName}${p.buoyTable === 'batunionen' ? ' (its weight in water as concrete in air)' : ''}`
         : `${p.buoySinkerFactor.toFixed(1)} × the boat’s weight (Top Marine’s rule of thumb, 3–5 × in sheltered waters; no other source found supports it)`;
     warn(
       'STERN_BUOYS',
-      `${buoyLines.length} stern buoys, each on its own sinker: ${sinker}${p.buoyExposed ? ', one row up for an exposed harbour' : ''}, heaviest ${Math.round(heaviest)} kg${several > 0 ? ` (${several} buoys need several anchors of at most ${Math.round(p.maxAnchorMass)} kg)` : ''}. Chain ${buoyLines[0]!.chainLength.toFixed(1)} m = the larger of ${p.buoyChainFactor.toFixed(2)} × the design depth and the depth at high water + ${p.buoyLift.toFixed(1)} m, at least the size of ${tableName} and strong enough for the boat’s stern-on wind; float of at least the table’s buoyancy and the chain’s weight in water. The wind on the boats broadside is left to the piers.`,
+      `${buoyLines.length} stern buoys, each on its own sinker: ${sinker}${p.buoyExposed ? ', one row up for an exposed harbour' : ''}, heaviest ${Math.round(heaviestSinker)} kg. Chain ${buoyLines[0]!.chainLength.toFixed(1)} m = the larger of ${p.buoyChainFactor.toFixed(2)} × the design depth and the depth at high water + ${p.buoyLift.toFixed(1)} m, at least the size of ${tableName} and strong enough for the boat’s stern-on wind (AS 3962) at both water levels; float of at least the table’s buoyancy and the chain’s weight in water. The wind on the boats broadside is left to the piers.`,
     );
-    const light = buoyLines.filter((l) => l.buoy!.windAnchorKg > l.requiredAnchorKg + 1e-6);
+    const piled = buoyLines.filter((l) => l.status === 'PILE');
+    if (piled.length > 0) warn('PILE_ANCHORS', `stern buoys: ${piled.length} of ${buoyLines.length} sinkers take a pile anchor: ${piled[0]!.pileReason}.`);
+    const light = buoyLines.filter((l) => Number.isFinite(l.buoy!.windAnchorKg) && l.buoy!.windAnchorKg > l.requiredAnchorKg + 1e-6);
     if (light.length > 0) {
       const worst = light.reduce((a, l) => (l.buoy!.windAnchorKg - l.requiredAnchorKg > a.buoy!.windAnchorKg - a.requiredAnchorKg ? l : a));
       warn(
         'BUOY_SINKER_BELOW_WIND_METHOD',
-        `${light.length} stern-buoy sinkers are lighter than the friction method of the pier anchors needs for the boat’s stern-on wind (e.g. ${worst.id}: ${Math.round(worst.requiredAnchorKg)} kg, the method gives ${Math.round(worst.buoy!.windAnchorKg)} kg). That method counts friction only; a sinker embedded in the seabed holds much more (OCEL 2014: a 2 t block in soft silt about 34.5 kN against 2.3 kN by friction).`,
+        `${light.length} stern-buoy sinkers are lighter than the friction sizing of the spec needs for the boat’s stern-on wind (e.g. ${worst.id}: ${Math.round(worst.requiredAnchorKg)} kg, the sizing gives ${Math.round(worst.buoy!.windAnchorKg)} kg). The friction model is a lower bound: a sinker embedded in the seabed holds more.`,
       );
     }
     if (estimated.size > 0) {
@@ -1327,11 +1303,9 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     if (beyondTable > 0) {
       warn('BOAT_ABOVE_BUOY_TABLE', `${beyondTable} stern buoys run past the end of ${tableName} (boats heavier than ${table[table.length - 1]!.weightT.toFixed(1)} t${p.buoyExposed ? ', or one row up for exposure' : ''}); its largest row is used.`);
     }
-    // Båtunionen, Hamnhandboken 2016, §2.31–2.32.
     if (p.depth > 5 + 1e-9) {
       warn('BUOY_DEEP_WATER', `Design depth ${p.depth.toFixed(1)} m: mooring between pier and buoy "bör undvikas om vattendjupet är större än 5-6 meter" (Båtunionen): the long buoy chains let the boats swing sideways; at larger depths each buoy is anchored to two sinkers.`);
     }
-    // D50: the normal range when a gauge gave it, else the extremes.
     const normal = p.normalHighWater !== null && p.normalLowWater !== null;
     const range = normal ? p.normalHighWater! + p.normalLowWater! : p.highWater + p.lowWater;
     if (range > 1.3 + 1e-9) {
@@ -1347,16 +1321,15 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     }
   }
 
-  // D31: fingers longer than `fingerPileMinLength` are moored with an end pile (Marinetek).
-  // The finger carries the full broadside wind of the boats beside it (UFC 4-152-07 C1
-  // §6-3.4.1.4: individual fingers take the full load, no shielding); as a beam held at the
-  // pier and at the pile, the pile takes half (assumption).
+  // --- D31: fingers longer than fingerPileMinLength get an end pile ------------------------------
+  // The finger carries the full broadside wind of the boats beside it (AS 3962 Table 4.4 beam area,
+  // no shielding); as a beam held at the pier and at the pile, the pile takes half (assumption).
   const piles: FingerPile[] = [];
   for (const finger of layout.fingers ?? []) {
     const pier = layout.piers.find((x) => x.id === finger.pierId);
     if (!pier || finger.shape.length < 3) continue;
-    const { along, left } = pierAxis(pier);
-    const local = finger.shape.map((v) => ({ s: dot(sub(v, pier.start), along), d: dot(sub(v, pier.start), left) }));
+    const { along: ax, left } = pierAxis(pier);
+    const local = finger.shape.map((v) => ({ s: dot(sub(v, pier.start), ax), d: dot(sub(v, pier.start), left) }));
     const sign = local.reduce((a, v) => a + v.d, 0) >= 0 ? 1 : -1;
     const side: 'left' | 'right' = sign > 0 ? 'left' : 'right';
     const s0 = Math.min(...local.map((v) => v.s));
@@ -1364,49 +1337,29 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
     const dIn = Math.min(...local.map((v) => sign * v.d));
     const dOut = Math.max(...local.map((v) => sign * v.d));
     if (dOut - dIn <= p.fingerPileMinLength + 1e-9) continue;
-    const byId = new Map(classes.map((c) => [c.id, c]));
-    let area = 0;
+    let F = 0;
     for (const b of layout.berths) {
       if (b.pierId !== pier.id || b.side !== side || b.removed) continue;
-      const c = byId.get(b.boatClassId);
+      const c = classById.get(b.boatClassId);
       if (!c) continue;
-      const bs = b.slot.map((v) => dot(sub(v, pier.start), along));
-      if (Math.abs(Math.max(...bs) - s0) < 0.05 || Math.abs(Math.min(...bs) - s1) < 0.05) area += c.length * p.profileHeightRatio * c.length;
+      const bs = b.slot.map((v) => dot(sub(v, pier.start), ax));
+      if (Math.abs(Math.max(...bs) - s0) < 0.05 || Math.abs(Math.min(...bs) - s1) < 0.05) F += q * WIND_CD.vesselBeam * vesselWindArea(vesselType(c), c.length).beam;
     }
-    const F = k * area;
-    loads.push({ id: finger.id, lateralKn: F / 1000, axialFromSeaKn: 0, axialFromShoreKn: 0 });
-    const loadKn = F / 2 / 1000;
-    piles.push({
-      id: `${finger.id}-pile`,
-      holdsId: finger.id,
-      at: add(add(pier.start, scale(along, (s0 + s1) / 2)), scale(left, sign * dOut)),
-      loadKn,
-      guide: choosePileGuide(loadKn),
-    });
+    const loadKn = F / 2;
+    piles.push({ id: `${finger.id}-pile`, holdsId: finger.id, at: add(add(pier.start, scale(ax, (s0 + s1) / 2)), scale(left, sign * dOut)), loadKn, guide: choosePileGuide(loadKn) });
   }
   if (piles.length > 0) {
     const max = piles.reduce((m, x) => Math.max(m, x.loadKn), 0);
     warn(
       'FINGER_END_PILES',
-      `${piles.length} fingers longer than ${p.fingerPileMinLength.toFixed(1)} m are moored with an end pile at the tip (Marinetek: "Longer than 12 m … Fingers are moored with end piles"), each for half the full broadside wind of the boats beside it (UFC 4-152-07); largest ${max.toFixed(1)} kN${choosePileGuide(max) ? ` → pile guide ${choosePileGuide(max)}` : ''}. Piles and guides are not priced and not designed here.`,
+      `${piles.length} fingers longer than ${p.fingerPileMinLength.toFixed(1)} m are moored with an end pile at the tip (Marinetek: "Longer than 12 m … Fingers are moored with end piles"), each for half the full broadside wind of the boats beside it (AS 3962); largest ${max.toFixed(1)} kN${choosePileGuide(max) ? ` → pile guide ${choosePileGuide(max)}` : ''}. Piles and guides are not priced and not designed here.`,
     );
-    if (piles.some((x) => x.guide === null)) {
-      warn('PILE_LOAD_ABOVE_STANDARD_GUIDES', `${piles.filter((x) => x.guide === null).length} end piles need more than the 70 kN of Marinetek's strongest standard guide (G700).`);
-    }
-  }
-
-  if (unheld.length > 0) {
-    warn(
-      'ALONG_PIER_LOAD_NOT_HELD',
-      `The wind along ${unheld.join(', ')} is not held by any chain (splay angle 0° or too few chain pairs); it needs other restraint.`,
-    );
+    if (piles.some((x) => x.guide === null)) warn('PILE_LOAD_ABOVE_STANDARD_GUIDES', `${piles.filter((x) => x.guide === null).length} end piles need more than the 70 kN of Marinetek's strongest standard guide (G700).`);
   }
 
   // Anchors must lie in the water area (and not under an obstacle).
   if (site.water.length >= 3) {
-    const outside = lines.filter(
-      (l) => l.fixing === 'seabed' && (!pointInRing(l.anchor, site.water) || site.obstacles.some((o) => pointInRing(l.anchor, o.shape))),
-    );
+    const outside = lines.filter((l) => l.fixing === 'seabed' && (!pointInRing(l.anchor, site.water) || site.obstacles.some((o) => pointInRing(l.anchor, o.shape))));
     if (outside.length > 0) {
       warn(
         'ANCHOR_OUTSIDE_WATER',
@@ -1417,64 +1370,5 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       );
     }
   }
-
-  if (p.anchorType === 'wedge') {
-    if (p.seabed === 'rock') {
-      warn('WEDGE_NOT_ON_ROCK', 'The wedge anchor tables cover soft clay and sand only; on rock the anchors are sized as plain blocks.');
-    } else {
-      warn(
-        'WEDGE_ANCHORS',
-        `Wedge (Pearl Harbor type) anchors sized from published working capacities (Sound & Sea Technology 2009, Tables 35–36), with chains long enough to keep the angle at the anchor within ${WEDGE_ANGLE_LIMIT[p.seabed]}°. They hold only when placed the right way round and dug in; they are not in the price list and are priced as concrete anchors of the same mass.`,
-      );
-    }
-  }
-
-  for (const item of accessItems.filter((x) => x.wallSide === undefined)) {
-    warn(
-      'ACCESS_PONTOON_NO_SHORE',
-      `Access pontoon ${item.id}: the site has no shoreline, so it has no shore chains and is anchored on both sides like a pier, by its own wind area only.`,
-      item.id,
-    );
-  }
-  // I102: the other anchor type, for comparison (not on rock: the wedge tables cover clay and sand).
-  let comparison: AnchoringResult['comparison'];
-  const current = anchorTotals(lines, usesWedge(p) ? 'wedge' : 'block');
-  if (input.compareAnchorTypes !== false && p.seabed !== 'rock' && current.totalKg > 0) {
-    const otherType: AnchorType = p.anchorType === 'wedge' ? 'block' : 'wedge';
-    const alt = anchoringPlan({ ...input, params: { ...p, anchorType: otherType }, compareAnchorTypes: false });
-    comparison = { current, other: anchorTotals(alt.lines, otherType) };
-  }
-
-  if (smallWaves.length > 0) {
-    warn(
-      'WAVE_LOAD_SMALL_WAVES',
-      `No wave load from ${smallWaves.length} direction${smallWaves.length > 1 ? 's' : ''} with open water: their 50-year Hm0 (${smallWaves.map((w) => `${w.hs!.toFixed(2)} m`).join(', ')}) is at most ${p.waveLoadMinHs.toFixed(2)} m (UFC 4-152-07 6-3.4.7.2: above 1 ft the waves "could be a significant factor in design").`,
-    );
-  }
-  if (waveNotes.length > 0) {
-    warn(
-      'WAVE_LOAD',
-      `Wave load from the directions with open water, up to ${p.waveLoad.toFixed(1)} kN/m (AS 3962-2001 4.8.2.3, minimum without a specific analysis, for the waves of its Table 4.2): the full load for a 50-year Hm0 of ${p.waveLoadFullHs.toFixed(2)} m or more, none up to ${p.waveLoadMinHs.toFixed(2)} m, in proportion to Hm0² between (assumption); a direction without a wave estimate takes the full load. Added to the wind: ${waveNotes.join('; ')}. Across a pontoon on its whole length (the wave front along it, 4.8.2.4), along it on its end; the fingers' share is not added (not at the same time).`,
-    );
-    if ((input.waves?.exceeding ?? []).length > 0) {
-      warn(
-        'WAVE_LOAD_ABOVE_CRITERIA',
-        `The waves from ${input.waves!.exceeding.join(', ')} exceed the wave climate criteria; AS 3962's 2 kN/m is a minimum "for the wave criteria given in Table 4.2". Larger waves need a specific wave load analysis (and probably wave protection).`,
-      );
-    }
-    // I102: with the wave load, plain blocks holding by friction become several times heavier
-    // than shaped anchors that dig in.
-    if (comparison && comparison.current.anchorType === 'block' && comparison.current.totalKg > WAVE_BLOCK_RATIO * comparison.other.totalKg) {
-      const t = (kg: number) => (kg / 1000).toFixed(1);
-      warn(
-        'WAVE_LOAD_PLAIN_BLOCKS',
-        `With the wave load, plain concrete blocks holding by friction need ${t(comparison.current.totalKg)} t of anchors (largest ${t(comparison.current.maxKg)} t); concrete wedges (Pearl Harbor type, Sound & Sea Technology 2009 Tables 35–36) would need ${t(comparison.other.totalKg)} t (largest ${t(comparison.other.maxKg)} t) with chains up to ${comparison.other.longestChainM.toFixed(1)} m. Shaped or embedded anchors that dig into the seabed hold several times their friction; choose the anchor type with the designer and the installer.`,
-      );
-    }
-  }
-  warn(
-    'ANCHORING_NOT_A_DESIGN',
-    `Preliminary quantity estimate from wind${waveNotes.length > 0 ? ' and the AS 3962 minimum wave load' : ' only'}. ${waveNotes.length > 0 ? 'Wave dynamics' : 'Waves'}, ice, currents, berthing loads and the capacity of the pontoon fixings are not calculated. Requires design by a qualified engineer (e.g. RIL 201-3-2013, AS 3962).`,
-  );
-  return { lines, piles, loads, issues, ...(comparison ? { comparison } : {}) };
+  return { lines, piles, loads, issues };
 }

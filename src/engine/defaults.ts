@@ -1,4 +1,4 @@
-import type { BoatClass, CostSettings, ObjectiveSettings, Params } from './model';
+import type { BoatClass, CostSettings, ObjectiveSettings, Params, SiteDepthSettings } from './model';
 
 /**
  * Default dock and fairway parameters (SPEC §4).
@@ -70,4 +70,10 @@ export const DEFAULT_OBJECTIVE: ObjectiveSettings = {
 export const DEFAULT_TOP_N = 5;
 
 /** Default product choices (D24): everything chosen automatically from the built-in price list. */
+/**
+ * I121: the anchoring design depth follows the depth lookup around the site position; the rays are
+ * 200 m long (Assumption, about the extent of a small marina).
+ */
+export const DEFAULT_SITE_DEPTH: SiteDepthSettings = { auto: true, radius: 200, result: null };
+
 export const DEFAULT_COST: CostSettings = { priceList: null, pontoonSeries: '', fingerSeries: '', boomSeries: '', gangwaySeries: '' };

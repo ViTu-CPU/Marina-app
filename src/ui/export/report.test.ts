@@ -7,6 +7,7 @@ import { translate } from '../../i18n';
 import { computeCostModel, waveInput } from '../costModel';
 import { formatEuro } from '../format';
 import { bomWorkbook } from './bomXlsx';
+import { mooringPackage } from './mooringPackage';
 import { buildReportHtml } from './report';
 
 const parsed = parsePriceListFile(readFileSync('data/hinnasto.xlsx'), 'hinnasto.xlsx');
@@ -42,6 +43,27 @@ describe('printable report (U24)', () => {
     }
     expect(html).toContain(`${formatEuro(model.estimate.totalVat0, 'en')} €`);
     expect(html).toContain('2026-11-15');
+  });
+
+  it('anchoring status, unpriced items, the excludes note on the totals and the friction sensitivity (D62)', () => {
+    expect(html).toContain(translate('en', 'anchoring.status'));
+    expect(html).toMatch(/\d+ lines with concrete anchors, \d+ with pile anchors/);
+    expect(model.estimate.unpriced.length).toBeGreaterThan(0);
+    expect(html).toContain(`${translate('en', 'cost.unpriced')}: ${model.estimate.unpriced.length}`);
+    expect(html).toMatch(/Total VAT 0 % \(excludes \d+ unpriced items?, see list\)/);
+    expect(html).toContain(translate('en', 'sensitivity.title'));
+    expect(html).toContain(translate('en', 'anchoring.maxAnchorsPerLine'));
+    expect(html).toContain(translate('en', 'anchoring.capacityFactor'));
+    // D64: the spec's required text, the load table, the governing cases and the notes.
+    expect(html).toContain(translate('en', 'mooring.disclaimer').replace(/'/g, '&#39;'));
+    expect(html).toContain(translate('en', 'mooring.loads'));
+    expect(html).toContain(translate('en', 'mooring.governing'));
+    expect(html).toContain('OTC 6033');
+    expect(html).toContain('Gravity block capacity in soft clay is highly uncertain; requires geotechnical data.');
+    const fi = buildReportHtml({ project, layout, model, image: null, language: 'fi', date: '2026-11-15' });
+    expect(fi).toMatch(/Yhteensä ALV 0 % \(ei sisällä \d+ hinnoittelematonta erää, ks\. luettelo\)/);
+    expect(fi).toContain(translate('fi', 'sensitivity.note'));
+    expect(fi).toContain('Alustava mitoitus. Ei korvaa suunnittelijan laskelmaa, pohjatutkimusta eikä valmistajan (esim. Seaflex/JFlex) mitoitusta. Jääkuormia ei mitoiteta.');
   });
 
   it('has the AS 3962-2001 advisory checks (D52)', () => {
@@ -122,22 +144,31 @@ describe('breakwaters in the cost model (D58, I106)', () => {
   });
 });
 
-describe('wave directions for the anchoring plan (D45)', () => {
-  it('the sectors with a fetch, and those whose waves exceed the criteria', () => {
-    expect(waveInput(project, layout)).toEqual({ from: [], exceeding: [], hs50: [] });
+describe('wave screening and the anchoring plan (D45, D64)', () => {
+  it('the minimum wave line load acts on every pontoon; the screening warns where its waves exceed the criteria', () => {
+    expect(waveInput(project, layout)).toEqual({ exceeding: [] });
     const withFetch = { ...project, waves: { ...project.waves, wind1: 15, wind50: 22, sectors: project.waves.sectors.map((x, k) => ({ ...x, fetch: k === 2 ? 3000 : k === 4 ? 200 : 0 })) } };
-    const w = waveInput(withFetch, layout);
-    expect(w.from).toEqual([90, 180]);
-    expect(w.exceeding).toContain('E');
-    // I104: the 50-year Hm0 of each direction: 3 km from the east is above the 0.6 m of the full
-    // wave load, 200 m from the south below the 0.3 m of none.
-    expect(w.hs50).toHaveLength(2);
-    expect(w.hs50[0]!).toBeGreaterThan(0.6);
-    expect(w.hs50[1]!).toBeLessThan(0.3);
-    // The cost model passes them on: the plan carries the wave load warning.
+    expect(waveInput(withFetch, layout).exceeding).toContain('E');
     const m = computeCostModel(withFetch, layout, parsed.priceList)!;
-    expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD')).toBe(true);
     expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD_ABOVE_CRITERIA')).toBe(true);
-    expect(m.anchoring.issues.some((i) => i.code === 'WAVE_LOAD_SMALL_WAVES')).toBe(true);
+    // 2 kN/m across every pier, with or without a fetch (spec §3.4).
+    const plain = computeCostModel(project, layout, parsed.priceList)!;
+    for (const l of plain.anchoring.loads) {
+      const pier = layout.piers.find((p) => p.id === l.id)!;
+      expect(l.cases.find((c) => c.id === 'perp+')!.wave).toBeCloseTo(2 * Math.hypot(pier.end.x - pier.start.x, pier.end.y - pier.start.y), 6);
+    }
+  });
+});
+
+describe('data package for the manufacturer (D64, spec §7)', () => {
+  it('holds the water levels, wind, waves, current, seabed, pontoons with their berths and the loads', () => {
+    const json = JSON.parse(mooringPackage(project, layout, model.anchoring, '2026-11-18', 0.56));
+    expect(json.waterLevels).toMatchObject({ designDepth_m: project.anchoring.depth, range_m: project.anchoring.highWater + project.anchoring.lowWater });
+    expect(json.wind.designWind30s_ms).toBe(project.anchoring.windSpeed);
+    expect(json.seabed.type).toBe(project.anchoring.seabed);
+    expect(json.pontoons).toHaveLength(layout.piers.length);
+    expect(json.pontoons[0].berths.reduce((n: number, b: { count: number }) => n + b.count, 0)).toBe(layout.berths.filter((b) => b.pierId === layout.piers[0]!.id && !b.removed).length);
+    expect(json.loads_kN).toHaveLength(layout.piers.length);
+    expect(json.sizingNote).toContain('Seaflex/JFlex');
   });
 });
