@@ -61,6 +61,7 @@ const LIST: PriceList = {
     product({ id: 'anode16', category: 'anode', price: 50, chainDiameterMm: 16 }),
     product({ id: 'cleat', category: 'cleat', price: 10 }),
     product({ id: 'ladder', category: 'ladder', price: 300 }),
+    product({ id: 'post', category: 'safety_post', price: 1000 }),
     product({ id: 'rate-installer', category: 'labour', unit: 'h', price: 100 }),
     product({ id: 'rate-diving-team', category: 'labour', unit: 'h', price: 200 }),
     product({ id: 'rate-crane', category: 'plant', unit: 'h', price: 100 }),
@@ -74,7 +75,8 @@ const LIST: PriceList = {
     param('range_high_pct', 50),
     param('gangway_length_m', 6),
     param('cleats_per_berth', 2),
-    param('ladders_per_pier', 1),
+    param('ladder_spacing_m', 40),
+    param('safety_post_spacing_m', 80),
     param('berths_per_power_pedestal', 0),
     param('shackles_per_anchor_line', 2),
     param('springs_per_anchor_line', 1),
@@ -288,19 +290,24 @@ describe('cost estimate, hand-calculated', () => {
     expect(estimate.byGroup.anchoring).toBeCloseTo(347 + 600 + 56 + 120 + 100, 9);
   });
 
-  it('fittings: 4 berths × 2 cleats + 1 ladder = 380 € (a removed berth does not count)', () => {
+  it('fittings: 4 berths × 2 cleats + 1 ladder + 1 safety post (30 m pier: one of each, D65) = 1 380 € (a removed berth does not count)', () => {
     expect(lineFor('cleat').orderQuantity).toBe(8);
     expect(lineFor('ladder').orderQuantity).toBe(1);
-    expect(estimate.byGroup.fittings).toBe(380);
+    expect(lineFor('post').orderQuantity).toBe(1);
+    expect(estimate.byGroup.fittings).toBe(1380);
+    expect(estimate.equipment.items.map((x) => [x.id, x.t])).toEqual([
+      ['P1-LAD1', 15],
+      ['P1-SP1', 15],
+    ]);
   });
 
   it('labour and plant from the output rates', () => {
-    // Installer: 3 modules × 4 h + 3 fingers × 1.5 h + 1 gangway × 3 h + 9 small items × 0.25 h
-    // = 21.75 h, ordered as 21.8 h (quantities in units other than pieces round to 0.1).
-    expect(lineFor('rate-installer').quantity).toBeCloseTo(21.75, 9);
-    expect(lineFor('rate-installer').orderQuantity).toBe(21.8);
+    // Installer: 3 modules × 4 h + 3 fingers × 1.5 h + 1 gangway × 3 h + 10 small items (8 cleats, a ladder,
+    // a safety post) × 0.25 h = 22.0 h (quantities in units other than pieces round to 0.1).
+    expect(lineFor('rate-installer').quantity).toBeCloseTo(22, 9);
+    expect(lineFor('rate-installer').orderQuantity).toBe(22);
     expect(lineFor('rate-diving-team').quantity).toBe(2);
-    expect(estimate.labour).toBeCloseTo(2180 + 400, 9);
+    expect(estimate.labour).toBeCloseTo(2200 + 400, 9);
     expect(lineFor('rate-diving-team').basis).toBe('2 anchors × 1 h');
     // Crane: 3 h lifting + 6 h transport = 9 h; work boat ⌈2 anchors / 10 per day⌉ = 1 day.
     expect(lineFor('rate-crane').quantity).toBe(9);
@@ -389,7 +396,7 @@ describe('cost estimate, hand-calculated', () => {
     const bad: AnchorLine = { ...line('X1'), anchorId: null, anchorKind: 'pile', anchorCount: 1, status: 'PILE', pileReason: 'block: needs 4 000 kg, max product 1 000 kg', requiredAnchorKg: 4000 };
     const thin: PriceList = {
       ...LIST,
-      products: LIST.products.filter((p) => !['spring14', 'ladder'].includes(p.id)).map((p) => (p.id === 'anode16' ? { ...p, price: null } : p)),
+      products: LIST.products.filter((p) => !['spring14', 'ladder', 'post'].includes(p.id)).map((p) => (p.id === 'anode16' ? { ...p, price: null } : p)),
     };
     const e = costEstimate({ layout: { piers: [pier], fingers, berths }, site: withBreakwater, priceList: thin, choices, anchoring: { ...anchoring, lines: [line('A1'), bad] } });
     const names = e.unpriced.map((u) => u.name);
@@ -398,16 +405,17 @@ describe('cost estimate, hand-calculated', () => {
       'Pile anchor – length and section by geotechnical design',
       'Spring links of the anchor lines',
       'Chain anodes of the anchor lines',
-      'Safety ladders',
+      'Rescue ladders',
+      'Safety equipment posts',
     ]);
     expect(e.unpriced[0]).toMatchObject({ unit: 'pcs', reason: expect.stringContaining('No breakwater in the price list') });
     expect(e.unpriced[2]).toEqual({ name: 'Spring links of the anchor lines', quantity: 2, unit: 'pcs', reason: 'No spring with a size and a price in the price list.' });
     // The anode without a price is a product without a price, not a missing product: no anode line in the BOM.
     expect(e.lines.some((l) => l.productId === 'anode16')).toBe(false);
-    expect(e.missingPrices).toBe(5);
-    expect(excludesNote(e)).toBe(' (excludes 5 unpriced items, see list)');
+    expect(e.missingPrices).toBe(6);
+    expect(excludesNote(e)).toBe(' (excludes 6 unpriced items, see list)');
     expect(excludesNote({ unpriced: e.unpriced.slice(0, 1) })).toBe(' (excludes 1 unpriced item, see list)');
-    expect(e.notes).toContain('5 items without a price are not in the totals: see the list of unpriced items.');
+    expect(e.notes).toContain('6 items without a price are not in the totals: see the list of unpriced items.');
     // Not in the totals: the breakwater and the anchor point add nothing.
     expect(e.byGroup.pontoons).toBe(estimate.byGroup.pontoons);
     // A missing rate row is an unpriced item too.
@@ -418,20 +426,20 @@ describe('cost estimate, hand-calculated', () => {
   });
 
   it('totals: overheads 10 %, contingency 15 %, VAT 25.5 %, range −30 … +50 %', () => {
-    // materials 30 000 + 3 600 + 1 200 + 1 223 + 380 = 36 403; labour 2 580; plant 1 700
-    // subtotal 40 683; overheads 4 068.3; contingency 0.15 · 44 751.3 = 6 712.695
-    // total 51 463.995; VAT 0.255 · total = 13 123.318725
-    expect(estimate.materials).toBeCloseTo(36403, 6);
-    expect(estimate.subtotal).toBeCloseTo(40683, 6);
-    expect(estimate.overhead).toBeCloseTo(4068.3, 6);
-    expect(estimate.contingency).toBeCloseTo(6712.695, 6);
-    expect(estimate.totalVat0).toBeCloseTo(51463.995, 6);
-    expect(estimate.vat).toBeCloseTo(13123.318725, 4);
-    expect(estimate.totalWithVat).toBeCloseTo(64587.313725, 4);
-    expect(estimate.range[0]).toBeCloseTo(36024.7965, 3);
-    expect(estimate.range[1]).toBeCloseTo(77195.9925, 3);
-    expect(estimate.perBerth).toBeCloseTo(51463.995 / 4, 6);
-    expect(estimate.perPierMetre).toBeCloseTo(51463.995 / 30, 6);
+    // materials 30 000 + 3 600 + 1 200 + 1 223 + 1 380 = 37 403; labour 2 600; plant 1 700
+    // subtotal 41 703; overheads 4 170.3; contingency 0.15 · 45 873.3 = 6 880.995
+    // total 52 754.295; VAT 0.255 · total = 13 452.345225
+    expect(estimate.materials).toBeCloseTo(37403, 6);
+    expect(estimate.subtotal).toBeCloseTo(41703, 6);
+    expect(estimate.overhead).toBeCloseTo(4170.3, 6);
+    expect(estimate.contingency).toBeCloseTo(6880.995, 6);
+    expect(estimate.totalVat0).toBeCloseTo(52754.295, 6);
+    expect(estimate.vat).toBeCloseTo(13452.345225, 4);
+    expect(estimate.totalWithVat).toBeCloseTo(66206.640225, 4);
+    expect(estimate.range[0]).toBeCloseTo(36928.0065, 3);
+    expect(estimate.range[1]).toBeCloseTo(79131.4425, 3);
+    expect(estimate.perBerth).toBeCloseTo(52754.295 / 4, 6);
+    expect(estimate.perPierMetre).toBeCloseTo(52754.295 / 30, 6);
     expect(estimate.missingPrices).toBe(0);
   });
 

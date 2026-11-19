@@ -783,6 +783,14 @@ export function CostSection({ layout, model }: { layout: Layout; model: CostMode
           </ul>
         </div>
       )}
+      {/* D65: what the plan places on the piers. */}
+      {estimate.equipment.items.length > 0 && (
+        <p className="text-xs text-slate-600" data-testid="equipment-summary" title={t('equipment.note')}>
+          {t('legend.ladder')} {formatCount(estimate.equipment.items.filter((x) => x.kind === 'ladder').length, language)} · {t('legend.safetyPost')}{' '}
+          {formatCount(estimate.equipment.items.filter((x) => x.kind === 'safetyPost').length, language)} · {t('legend.pedestal')}{' '}
+          {formatCount(estimate.equipment.items.filter((x) => x.kind === 'pedestal').length, language)}
+        </p>
+      )}
       <p className="text-xs text-slate-500">{t('cost.benchmark')}</p>
       {estimate.notes.length > 0 && (
         <ul className="list-disc space-y-0.5 pl-4 text-xs text-amber-800">
@@ -793,7 +801,7 @@ export function CostSection({ layout, model }: { layout: Layout; model: CostMode
       )}
       <details>
         <summary className="cursor-pointer text-sm text-slate-700">{t('cost.bom')} ({formatCount(estimate.lines.length, language)})</summary>
-        <table className="mt-1 w-full text-xs">
+        <table className="mt-1 w-full text-xs" data-testid="bom-lines">
           <thead>
             <tr className="text-left text-slate-500">
               <th className="font-medium">{t('cost.product')}</th>

@@ -473,6 +473,18 @@ export function buildReportHtml(input: ReportInput): string {
         ),
       );
     }
+    // D65: rescue ladders, safety equipment posts and power and water pedestals.
+    const eq = estimate.equipment.items;
+    const nOf = (k: string) => formatCount(eq.filter((x) => x.kind === k).length, language);
+    parts.push(`<h3>${esc(t('equipment.title'))}</h3>`);
+    parts.push(
+      kv([
+        [t('legend.ladder'), nOf('ladder')],
+        [t('legend.safetyPost'), nOf('safetyPost')],
+        [t('legend.pedestal'), `${nOf('pedestal')} (${formatCount(estimate.equipment.berths, language)} ${t('equipment.berths')})`],
+      ]),
+    );
+    parts.push(`<p class="small">${esc(t('equipment.note'))}</p>`);
     parts.push(`<p class="small">${esc(t('cost.note'))} ${esc(t('cost.benchmark'))}</p>`);
     if (estimate.notes.length > 0) parts.push(`<ul class="small">${estimate.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>`);
     parts.push(`<h3>${esc(t('cost.bom'))}</h3>`);

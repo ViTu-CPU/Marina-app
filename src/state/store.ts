@@ -85,6 +85,7 @@ export const LAYER_IDS = [
   'slots',
   'boats',
   'anchoring',
+  'equipment',
   'fetch',
   'issues',
 ] as const;

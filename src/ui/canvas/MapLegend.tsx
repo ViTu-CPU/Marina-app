@@ -53,6 +53,9 @@ const ENTRIES: { layer: LayerId; label: StringKey; swatch: ReactNode }[] = [
   { layer: 'anchoring', label: 'legend.anchorProblem', swatch: swatch(<rect x={W / 2 - 4} y={H / 2 - 4} width={8} height={8} fill={COLORS.issue} />) },
   { layer: 'anchoring', label: 'legend.wallFixing', swatch: swatch(<circle cx={W / 2} cy={H / 2} r={3} fill={COLORS.anchor} />) },
   { layer: 'anchoring', label: 'legend.pile', swatch: swatch(<circle cx={W / 2} cy={H / 2} r={4.5} fill={COLORS.pier} stroke={COLORS.anchor} />) },
+  { layer: 'equipment', label: 'legend.ladder', swatch: swatch(<rect x={W / 2 - 2} y={H / 2 - 5} width={4} height={10} fill={COLORS.ladder} stroke={COLORS.pier} strokeWidth={0.5} />) },
+  { layer: 'equipment', label: 'legend.safetyPost', swatch: swatch(<circle cx={W / 2} cy={H / 2} r={4} fill="#fff" stroke={COLORS.safetyPost} strokeWidth={2.5} />) },
+  { layer: 'equipment', label: 'legend.pedestal', swatch: swatch(<rect x={W / 2 - 3.5} y={H / 2 - 3.5} width={7} height={7} fill={COLORS.pedestal} />) },
   { layer: 'issues', label: 'legend.issue', swatch: fill('none', COLORS.issue) },
 ];
 

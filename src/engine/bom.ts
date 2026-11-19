@@ -15,6 +15,7 @@ import { DEFAULT_VAT_PCT, installedPriceVat0, parameter, unitPriceVat0, type Pri
 import { distance, distancePointToPolyline } from './geometry';
 import type { CostSettings, Layout, Params, Site } from './model';
 import { rowFrame, toLocalRect } from './rows';
+import { EQUIPMENT_DEFAULTS, equipmentPlan, type EquipmentKind, type EquipmentPlan, type EquipmentSpacing } from './equipment';
 import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierPolygon, pierShoreLink, SHORE_TOLERANCE } from './site';
 import { gangwayClearWidth } from './as3962';
 import { breakwaterModules, breakwaterProductOf, breakwatersOf } from './breakwater';
@@ -97,6 +98,17 @@ export interface CostEstimate {
   perBerth: number;
   perPierMetre: number;
   notes: string[];
+  /** D65: rescue ladders, safety equipment posts and power and water pedestals, placed. */
+  equipment: EquipmentPlan;
+}
+
+/** D65: the spacings of the equipment from the price list's parameters (defaults: EQUIPMENT_DEFAULTS). */
+export function equipmentSpacing(list: PriceList): EquipmentSpacing {
+  return {
+    ladderSpacing: parameter(list, 'ladder_spacing_m', EQUIPMENT_DEFAULTS.ladderSpacing),
+    safetyPostSpacing: parameter(list, 'safety_post_spacing_m', EQUIPMENT_DEFAULTS.safetyPostSpacing),
+    berthsPerPedestal: parameter(list, 'berths_per_power_pedestal', EQUIPMENT_DEFAULTS.berthsPerPedestal),
+  };
 }
 
 const priced = (p: Product, vat: number) => unitPriceVat0(p, vat);
@@ -259,6 +271,8 @@ export function costEstimate(input: CostInput): CostEstimate {
   const { layout, site, priceList: list, choices, anchoring } = input;
   const vat = parameter(list, 'vat_pct', DEFAULT_VAT_PCT);
   const par = (key: string, fallback: number) => parameter(list, key, fallback);
+  const spacing = equipmentSpacing(list);
+  const equipment = equipmentPlan(layout, site, spacing);
   const notes: string[] = [];
   const byId = new Map(list.products.map((p) => [p.id, p]));
 
@@ -576,19 +590,31 @@ export function costEstimate(input: CostInput): CostEstimate {
     addQty('fittings', cleat, cleats, `${berths} berths × ${par('cleats_per_berth', 2)}`);
     smallItems += cleats;
   } else if (!cleat) leaveOut('Cleats or mooring rings', cleats, 'pcs', 'No cleat with a price in the price list.');
+  // D65: rescue ladders, safety equipment posts and power and water pedestals placed on the piers and access pontoons.
+  const count = (kind: EquipmentKind) => equipment.items.filter((x) => x.kind === kind).length;
+  const ladders = count('ladder');
   const ladder = cheapest('ladder');
-  const ladders = held.length * par('ladders_per_pier', 1);
   if (ladder && ladders > 0) {
-    addQty('fittings', ladder, ladders, `${held.length} piers and access pontoons × ${par('ladders_per_pier', 1)}`);
+    addQty('fittings', ladder, ladders, `every ${fmt(spacing.ladderSpacing)} m of ${held.length} piers and access pontoons (at most ${fmt(spacing.ladderSpacing / 2)} m from any point)`);
     smallItems += ladders;
-  } else if (!ladder) leaveOut('Safety ladders', ladders, 'pcs', 'No ladder with a price in the price list.');
-  const perPedestal = par('berths_per_power_pedestal', 0);
-  const power = cheapest('power');
-  if (power && perPedestal > 0 && berths > 0) {
-    const n = Math.ceil(berths / perPedestal);
-    addQty('fittings', power, n, `${berths} berths ÷ ${perPedestal}`);
-    smallItems += n;
-  } else if (!power && perPedestal > 0 && berths > 0) leaveOut('Power pedestals', Math.ceil(berths / perPedestal), 'pcs', 'No power pedestal with a price in the price list.');
+  } else if (!ladder && ladders > 0) leaveOut('Rescue ladders', ladders, 'pcs', 'No ladder with a price in the price list.');
+  const posts = count('safetyPost');
+  const post = cheapest('safety_post');
+  if (post && posts > 0) {
+    addQty('fittings', post, posts, `every ${fmt(spacing.safetyPostSpacing)} m of ${held.length} piers and access pontoons (at most ${fmt(spacing.safetyPostSpacing / 2)} m from any point)`);
+    smallItems += posts;
+  } else if (!post && posts > 0) leaveOut('Safety equipment posts', posts, 'pcs', 'No safety equipment post with a price in the price list.');
+  const pedestals = count('pedestal');
+  // The cheapest pedestal with at least one socket per berth it serves (sockets read from the name, e.g. "4×16A"); else the cheapest.
+  const sockets = (p: Product) => Number((/(\d+)\s*[x×]\s*\d+\s*A/i.exec(p.name) ?? [])[1] ?? NaN);
+  const powers = list.products.filter((p) => p.category === 'power' && priced(p, vat) !== null).sort((a, b) => priced(a, vat)! - priced(b, vat)!);
+  const power = powers.find((p) => sockets(p) >= spacing.berthsPerPedestal) ?? powers[0];
+  if (power && pedestals > 0) {
+    addQty('fittings', power, pedestals, `${equipment.berths} berths ÷ ${fmt(spacing.berthsPerPedestal)} per pedestal (one socket per berth, assumption), per pier`);
+    smallItems += pedestals;
+    if (!(sockets(power) >= spacing.berthsPerPedestal)) notes.push(`Power pedestals: no pedestal of the price list has ${fmt(spacing.berthsPerPedestal)} sockets; ${power.name} is used.`);
+  } else if (!power && pedestals > 0) leaveOut('Power and water pedestals', pedestals, 'pcs', 'No power pedestal with a price in the price list.');
+  if (pedestals > 0) notes.push('Power and water pedestals: cabling, water pipes and the connections ashore are not priced.');
 
   // --- Labour and plant ----------------------------------------------------------------------
   const rate = (id: string) => {
@@ -719,5 +745,6 @@ export function costEstimate(input: CostInput): CostEstimate {
     perBerth: berths > 0 ? totalVat0 / berths : 0,
     perPierMetre: pierMetres > 0 ? totalVat0 / pierMetres : 0,
     notes,
+    equipment,
   };
 }

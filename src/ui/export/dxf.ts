@@ -16,6 +16,8 @@ import { add, distance, scale, sub } from '../../engine/geometry';
 import type { Layout, Project, Vec2 } from '../../engine/model';
 import { rowFrame, toLocalRect } from '../../engine/rows';
 import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayLinks, pierShoreLink } from '../../engine/site';
+import { EQUIPMENT_DEFAULTS, equipmentPlan } from '../../engine/equipment';
+import { equipmentSpacing } from '../../engine/bom';
 
 /** Layers: name and AutoCAD colour index. */
 export const DXF_LAYERS = {
@@ -33,6 +35,7 @@ export const DXF_LAYERS = {
   ANCHORS: 34,
   BUOYS: 40,
   BREAKWATERS: 250,
+  EQUIPMENT: 1,
   LIBRARY: 7,
   TEXT: 7,
 } as const;
@@ -312,6 +315,19 @@ export function buildDxf(input: DxfInput): string {
         e.text('ANCHORS', l.anchor, 0.8, 'PILE ANCHOR');
       }
     }
+  }
+
+  // --- D65: rescue ladders, safety equipment posts and power and water pedestals (indicative) ---
+  const square = (c: Vec2, side: number): Vec2[] => [
+    { x: c.x - side / 2, y: c.y - side / 2 },
+    { x: c.x + side / 2, y: c.y - side / 2 },
+    { x: c.x + side / 2, y: c.y + side / 2 },
+    { x: c.x - side / 2, y: c.y + side / 2 },
+  ];
+  for (const x of equipmentPlan(layout, site, list ? equipmentSpacing(list) : EQUIPMENT_DEFAULTS).items) {
+    if (x.kind === 'safetyPost') e.circle('EQUIPMENT', x.at, 0.6);
+    else e.polyline('EQUIPMENT', square(x.at, x.kind === 'ladder' ? 0.7 : 0.6), true);
+    e.text('EQUIPMENT', add(x.at, { x: 0.8, y: 0 }), 0.4, x.kind === 'ladder' ? 'LADDER' : x.kind === 'safetyPost' ? 'SAFETY POST' : 'PEDESTAL');
   }
 
   // --- Title ---

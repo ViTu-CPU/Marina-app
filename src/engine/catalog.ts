@@ -22,6 +22,7 @@ export const PRODUCT_CATEGORIES = [
   'anode',
   'cleat',
   'ladder',
+  'safety_post',
   'power',
   'labour',
   'plant',

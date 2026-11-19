@@ -480,7 +480,11 @@ async function waitForServer() {
       const legend = page.getByTestId('legend');
       assert.ok(await legend.getByText('Concrete anchor', { exact: true }).isVisible());
       assert.ok(await legend.getByText('Gangway', { exact: true }).isVisible());
+      // D65: rescue ladders, safety equipment posts and pedestals on their own layer, in the bill of materials.
+      for (const label of ['Rescue ladder', 'Safety equipment post', 'Power and water pedestal']) assert.ok(await legend.getByText(label, { exact: true }).isVisible(), label);
       await page.getByRole('button', { name: '▾ Legend', exact: true }).click();
+      const bomText = await page.getByTestId('bom-lines').textContent();
+      for (const name of ['Turvaporras', 'Pelastusvälinepylväs', 'Sähköpylväs RM Platinum 4×16A + vesi']) assert.ok(bomText.includes(name), name);
       // D64: the spec's required text, the status and the unpriced pile anchors (the demo's lines on clay need more than 5 t).
       assert.match(await page.getByTestId('mooring-disclaimer').textContent(), /^Preliminary sizing\. Does not replace the designer's calculation/);
       assert.match(await page.getByTestId('anchoring-status').textContent(), /^Anchoring status\d+ lines with concrete anchors, \d+ with pile anchors$/);

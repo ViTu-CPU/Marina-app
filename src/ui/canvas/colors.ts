@@ -25,6 +25,10 @@ export const COLORS = {
   gridMajor: '#cbd5e1',
   fetchRay: '#0284c7',
   fetchMax: '#c2410c',
+  /** D65: rescue ladder, safety equipment post, power and water pedestal. */
+  ladder: '#eab308',
+  safetyPost: '#dc2626',
+  pedestal: '#2563eb',
 };
 
 /** Hatched fills (background, line) of fairways and restricted zones; see patterns.ts. */
