@@ -23,7 +23,7 @@ import {
 import { sectorBearing, windClimate } from '../../engine/wind';
 import type { StringKey } from '../../i18n';
 import { sectorFetches, RAY_STEP_DEG } from '../../engine/fetchRays';
-import { parseLatLon } from '../../state/geo';
+import { originPlacing, parseLatLon } from '../../state/geo';
 import { lookupWaterFetch, VT_SOURCE, type WaterFetchLookup } from '../../state/vectorTiles';
 import { DEPTH_SOURCES, lookupFetchDepths } from '../../state/depth';
 import { fetchWindHistory } from '../../state/openMeteo';
@@ -73,6 +73,7 @@ function Step({ n, title, children, testId }: { n: number; title: string; childr
 function PositionSection() {
   const t = useT();
   const waves = useAppStore((s) => s.project.waves);
+  const map = useAppStore((s) => s.project.map);
   const { position, siteCentre } = useSitePosition();
   const [text, setText] = useState('');
   return (
@@ -94,6 +95,23 @@ function PositionSection() {
           />
         </label>
         <span className="text-xs text-slate-500">{waves.location ? t('wind.positionEntered') : siteCentre ? t('wind.positionSite') : t('wind.positionNone')}</span>
+        {/* A wave study alone has no map yet: put one under the position so that the fetch rays can be drawn. */}
+        {!map && waves.location && (
+          <Button
+            onClick={() => {
+              const s = state();
+              const loc = s.project.waves.location;
+              if (!loc) return;
+              const empty = s.project.site.water.length === 0 && s.project.background === null;
+              if (empty) s.setView({ cx: 0, cy: 0, zoom: 2 });
+              const view = empty ? { cx: 0, cy: 0 } : s.view;
+              const origin = originPlacing(loc.lat, loc.lon, { x: view.cx, y: view.cy });
+              s.setMap({ provider: 'osm', lat: origin.lat, lon: origin.lon, opacity: 0.8 });
+            }}
+          >
+            {t('waves.showOnMap')}
+          </Button>
+        )}
       </div>
       <p className="text-xs text-slate-500">{t('waves.positionHint')}</p>
     </div>
@@ -727,7 +745,7 @@ export function WaveTool() {
   const piers = useAppStore((s) => s.project.layouts.find((l) => l.id === s.selectedLayoutId)?.piers ?? null);
   const site = useAppStore((s) => s.project.site);
   const { position } = useSitePosition();
-  const dialog = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLElement>(null);
   if (!open) return null;
 
   /** U29: the wave screening as a printable report of its own, with or without a layout. */
@@ -771,16 +789,9 @@ export function WaveTool() {
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4" onClick={() => state().setWaveToolOpen(false)}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('waves.title')}
-        data-testid="wave-tool"
-        ref={dialog}
-        className="w-full max-w-6xl rounded bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    // UI_REVIEW 4: a panel beside the map, so that the fetch rays on the map stay in view.
+    <aside role="complementary" aria-label={t('waves.title')} data-testid="wave-tool" ref={dialog} className="flex w-[52rem] min-w-0 max-w-[64%] shrink-0 flex-col border-l border-slate-200 bg-white">
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2">
           <h2 className="text-sm font-semibold text-slate-800">{t('waves.title')}</h2>
           <div className="flex items-center gap-1.5">
@@ -790,7 +801,7 @@ export function WaveTool() {
             <Button onClick={() => state().setWaveToolOpen(false)}>{t('waves.close')}</Button>
           </div>
         </div>
-        <div className="space-y-4 p-4 text-sm">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-sm">
           {/* UI_REVIEW 2: the result first. */}
           <div
             data-testid="wave-advice"
@@ -912,6 +923,6 @@ export function WaveTool() {
           </Note>
         </div>
       </div>
-    </div>
+    </aside>
   );
 }

@@ -256,7 +256,7 @@ describe('wave window print (U29)', () => {
       s.setWaves({ wind1: 14, wind50: 20, sectors: s.project.waves.sectors.map((x, k) => ({ ...x, fetch: k === 1 ? 3000 : 0 })) });
     });
     fireEvent.click(screen.getByRole('button', { name: 'Waves' }));
-    const dialog = screen.getByRole('dialog', { name: 'Wave screening (preliminary)' });
+    const dialog = screen.getByRole('complementary', { name: 'Wave screening (preliminary)' });
     const printed: string[] = [];
     const original = HTMLIFrameElement.prototype;
     const spy = Object.getOwnPropertyDescriptor(original, 'contentWindow');
@@ -294,5 +294,37 @@ describe('site checklist (UI_REVIEW 7)', () => {
     expect(appStore.getState().project.layouts.length).toBeGreaterThan(0);
     expect(step('generate').dataset.done).toBe('true');
     expect(list.textContent).toContain('All required steps done');
+  });
+});
+
+describe('wave panel and start choice (UI_REVIEW 4, 5)', () => {
+  it('an empty project offers a layout study or a wave study; the wave panel replaces the layout panels', () => {
+    renderShell();
+    const start = screen.getByTestId('start-choice');
+    expect(within(start).getByRole('heading').textContent).toBe('What do you want to study?');
+    fireEvent.click(within(start).getByRole('button', { name: /Wave conditions only/ }));
+    expect(screen.queryByTestId('start-choice')).toBeNull();
+    const panel = screen.getByRole('complementary', { name: 'Wave screening (preliminary)' });
+    expect(panel).toBeTruthy();
+    // Beside the map: the canvas stays, the layout panels make room.
+    expect(screen.getByTestId('canvas-stub')).toBeTruthy();
+    expect(screen.queryByText('Alternatives')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Waves' }).getAttribute('aria-pressed')).toBe('true');
+    // A wave study alone: the typed position can put the map under the drawing for the fetch rays.
+    fireEvent.change(within(panel).getByLabelText('Position'), { target: { value: '60.15, 24.95' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Show on the map' }));
+    const map = appStore.getState().project.map!;
+    expect([map.provider, map.lat.toFixed(4), map.lon.toFixed(4)]).toEqual(['osm', '60.1500', '24.9500']);
+    expect(within(panel).queryByRole('button', { name: 'Show on the map' })).toBeNull();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('wave-tool')).toBeNull();
+    expect(screen.getByText('Alternatives')).toBeTruthy();
+  });
+
+  it('choosing a layout study starts the water area tool', () => {
+    renderShell();
+    fireEvent.click(within(screen.getByTestId('start-choice')).getByRole('button', { name: /Marina layout/ }));
+    expect(appStore.getState().tool).toBe('water');
+    expect(screen.queryByTestId('start-choice')).toBeNull();
   });
 });

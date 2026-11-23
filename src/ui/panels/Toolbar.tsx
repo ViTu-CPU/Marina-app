@@ -84,6 +84,7 @@ export function Toolbar() {
   const canRedo = useAppStore((s) => s.future.length > 0);
   const stale = useAppStore((s) => needsRegeneration(s.project));
   const generating = useAppStore((s) => s.generating);
+  const waveOpen = useAppStore((s) => s.waveToolOpen);
   /** U24: report of the selected alternative, printed from a hidden frame ("Save as PDF"). */
   const printReport = () => {
     const s = state();
@@ -202,7 +203,9 @@ export function Toolbar() {
       />
       <Button onClick={() => state().fitView()}>{t('toolbar.fit')}</Button>
       {/* D40: the wave screening window. */}
-      <Button onClick={() => state().setWaveToolOpen(true)}>{t('toolbar.waves')}</Button>
+      <Button active={waveOpen} title={t('toolbar.wavesHint')} onClick={() => state().setWaveToolOpen(!waveOpen)}>
+        {t('toolbar.waves')}
+      </Button>
 
       <div className="ml-auto flex items-center gap-1" role="group" aria-label={t('toolbar.language')}>
         <Button active={language === 'en'} onClick={() => state().setLanguage('en')}>
