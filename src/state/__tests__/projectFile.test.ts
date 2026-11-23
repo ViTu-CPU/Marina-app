@@ -22,6 +22,17 @@ const fileWith = (patch: (project: Record<string, unknown>) => void): string => 
 };
 
 describe('project file (SPEC §2: JSON export/import)', () => {
+  it('U34: the Helsinki base map and the plan overlay are saved and read back; an unknown provider is refused', () => {
+    const project = DEMO_PROJECTS[0]!.create();
+    project.map = { provider: 'helsinki-ortho', lat: 60.164, lon: 24.9525, opacity: 0.7, planOverlay: true };
+    const parsed = parseProject(serializeProject(project));
+    expect(parsed.ok && parsed.project.map).toEqual(project.map);
+    // Older files: OpenStreetMap without the overlay.
+    const old = parseProject(fileWith((p) => (p.map = { provider: 'osm', lat: 60, lon: 25, opacity: 0.8 })));
+    expect(old.ok && old.project.map).toEqual({ provider: 'osm', lat: 60, lon: 25, opacity: 0.8 });
+    expect(parseProject(fileWith((p) => (p.map = { provider: 'google', lat: 60, lon: 25, opacity: 0.8 }))).ok).toBe(false);
+  });
+
   it('carries the app id and the disclaimer', () => {
     const file = JSON.parse(serializeProject(DEMO_PROJECTS[0]!.create()));
     expect(file.app).toBe(APP_ID);

@@ -51,6 +51,15 @@ toteuttajan arvioita, eivät mittauksia.
     Sen voisi piirtää vain vientikuvaan, jolloin näytöllä olisi yksi lauseke. Vaatimus pysyy: lauseke
     näkyy UI:ssa ja kaikissa vienneissä.
 
-## Ehdotettu järjestys
+## Tila (2026-11-23)
+Toteutettu omistajan pyynnöstä: kohdat 1–3 (U30), 6, 7 ja 9 (U31), 4 ja 5 (U32), 8 ja 10 (U33).
+Kohtaa 11 (lauseke kerran) ei toteutettu: kanvaasin oma kopio tarvitaan PNG-vientiin, ja sen
+siirtäminen vain vientikuvaan vaatii muutoksen vientiin; omistajan päätös.
+
+Mitattu toteutuksen jälkeen (1440 × 900, suorakaidedemo): oikean paneelin välilehdet Alternatives
+777 px ja Compare 777 px (mahtuvat näkyvään 777 px:iin), Anchoring & cost 1 940 px (ennen kaikki
+yhdessä 3 223 px). Työkalupalkissa 12 näkyvää säädintä (ennen 15).
+
+## Ehdotettu järjestys (alkuperäinen)
 1 → 2 → 3 → 6 → 7 → 9 (pieniä ja itsenäisiä), sitten 4, 5, 8 ja 10 (rakenteellisia; omistajan päätös
 ennen toteutusta).

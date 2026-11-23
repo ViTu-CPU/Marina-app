@@ -364,10 +364,13 @@ export interface BackgroundImage {
  * and every calculation stay in local metres.
  */
 export interface MapBackground {
-  provider: 'osm';
+  /** U34: OpenStreetMap, or a City of Helsinki base map (guide map, base map, orthophoto). */
+  provider: 'osm' | 'helsinki-guide' | 'helsinki-base' | 'helsinki-ortho';
   lat: number;
   lon: number;
   opacity: number;
+  /** U34: the City of Helsinki up-to-date detailed plan drawn over the base map. */
+  planOverlay?: boolean;
 }
 
 /**

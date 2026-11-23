@@ -70,6 +70,13 @@ npx playwright install chromium
 - Edit points: move, insert, delete. Measure tool.
 - Map background from OpenStreetMap: type coordinates or paste a map link, no file and no
   calibration needed.
+- In Helsinki: the City of Helsinki guide map, base map or aerial photo as the background, the
+  up-to-date detailed plan (asemakaava) over it, and **"Pick a detailed plan area"**: click a
+  plan on the map and use the water within it (plan area ∩ OpenStreetMap water, islands as
+  obstacles, a suggested shoreline) or the whole plan area as the water area. Data ja kartat ©
+  Helsingin kaupunki, kaupunkimittauspalvelut, CC BY 4.0.
+- A checklist of the steps the generator needs (water area, shoreline, entrance, generate); an
+  empty project asks whether to study a marina layout or wave conditions only.
 - Background image (aerial photo or map screenshot) with two-point scale calibration,
   rotation and opacity.
 - Berth types: finger piers (two boats per finger), Y-boom berths (one boat between light
@@ -246,6 +253,9 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   the OpenStreetMap Foundation's servers, whose
   [usage policy](https://operations.osmfoundation.org/policies/tiles/) allows light use
   only; a widely used deployment would need another tile source. There is no GeoJSON import.
+- The Helsinki maps and plans cover the City of Helsinki only and need kartta.hel.fi online. A
+  plan area's water comes from OpenStreetMap, not from the plan's own water areas (only in the
+  plan image); the plan map is for orientation, the legally binding plan is the plan document.
 - Issue messages and a few notices are in English also in the Finnish UI.
 - Layout generation runs in a Web Worker (about one second for the examples in the test
   environment); the page stays responsive and the run can be cancelled, but there is no

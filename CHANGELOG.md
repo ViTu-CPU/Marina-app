@@ -3,6 +3,26 @@
 Notable changes to Marina Layout Planner. Decisions and assumptions behind each change are in
 [docs/DECISIONS.md](docs/DECISIONS.md); earlier changes are in the git history and in DECISIONS.
 
+## 2026-11-23 — Easier UI; City of Helsinki maps and detailed plans (U30–U34)
+
+### Added
+- **City of Helsinki open map data (U34):** guide map, base map or aerial photo as the background,
+  the up-to-date detailed plan over it, and "Pick a detailed plan area": a click on the map finds
+  the plan in force there and makes its water the site (plan area ∩ OpenStreetMap water, islands as
+  obstacles, a suggested shoreline), or the whole plan area. CC BY 4.0, attribution on the map.
+- An empty project asks: marina layout or wave conditions only (U32).
+- A checklist of what the generator needs in the Site section (U31).
+
+### Changed
+- **Waves** is a panel beside the map instead of a window over it; its steps are numbered from the
+  position on, the result comes first, method texts are folded (U30, U32). "Show on the map" puts a
+  map under a typed position.
+- The four exports are one **Export** menu (U31).
+- The results are in three tabs: Alternatives, Compare, Anchoring & cost; map-layer presets
+  (Layout, Anchoring, Waves, All) follow the tab and the wave panel; the app starts with the
+  Layout preset (U33).
+- The amber status reads "Geometry OK, warnings", and each status explains itself (U31).
+
 ## 2026-11-23 — Wave screening report from the Waves window (U29)
 
 ### Added

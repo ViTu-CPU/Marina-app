@@ -12,6 +12,8 @@ import { anchoringLevels, type WaterLevelInfo } from '../engine/waterLevels';
 import { bearingOf, DEFAULT_WAVES, waveAssessment, type WaveSettings } from '../engine/waves';
 import { breakwaterProposal, defaultBreakwaterProduct } from '../engine/breakwater';
 import { pierAxis } from '../engine/rows';
+import type { PlanArea } from './helsinki';
+import type { Region } from '../engine/geometry';
 import type { PriceList } from '../engine/catalog';
 import { DEFAULT_BOAT_CLASSES, DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS, DEFAULT_SITE_DEPTH } from '../engine/defaults';
 import { DEMO_PROJECTS, type DemoEntry } from '../engine/demos';
@@ -127,7 +129,9 @@ export type ToolId =
   | 'obstacle'
   | 'zone'
   | 'measure'
-  | 'calibrate';
+  | 'calibrate'
+  /** U34: click a point to look up the detailed plan area there (City of Helsinki). */
+  | 'plan';
 
 export type Selection = { kind: 'pier' | 'berth'; id: string } | null;
 
@@ -214,6 +218,8 @@ export interface AppState {
   waveToolOpen: boolean;
   /** UI_REVIEW 8: the open tab of the results panel (not saved). */
   resultsTab: ResultsTab;
+  /** U34: the detailed plan area picked on the map, while it is looked up and shown (not saved). */
+  planPick: PlanPick | null;
   /**
    * The built-in price list (data/hinnasto.xlsx), loaded when the app starts (D24); null
    * while loading or when it could not be read (`priceListError`).
@@ -309,7 +315,15 @@ export interface AppState {
   setWaveToolOpen: (open: boolean) => void;
   setLayerPreset: (preset: LayerPreset) => void;
   setResultsTab: (tab: ResultsTab) => void;
+  setPlanPick: (pick: PlanPick | null) => void;
 }
+
+/** U34: state of a plan-area lookup. `region` is the plan area in local metres. */
+export type PlanPick =
+  | { status: 'loading'; at: Vec2 }
+  | { status: 'none'; at: Vec2 }
+  | { status: 'error'; at: Vec2; message: string }
+  | { status: 'found'; at: Vec2; plan: PlanArea; region: Region; others: number };
 
 /** prepareSite is the costly part of re-validation; remember it for the current site. */
 function makeEditContext(): (project: Project) => EditContext {
@@ -394,6 +408,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       zoneKind: 'noNavigation',
       layers: layersOf('layout'),
       resultsTab: 'alternatives' as ResultsTab,
+      planPick: null,
       builtInPriceList: null,
       priceListError: null,
 
@@ -633,6 +648,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
         set((s) => (s.waveToolOpen === waveToolOpen ? {} : { waveToolOpen, layers: layersOf(waveToolOpen ? 'waves' : TAB_PRESET[s.resultsTab]) })),
       setLayerPreset: (preset) => set({ layers: layersOf(preset) }),
       setResultsTab: (resultsTab) => set({ resultsTab, layers: layersOf(TAB_PRESET[resultsTab]) }),
+      setPlanPick: (planPick) => set({ planPick }),
     };
   });
 }

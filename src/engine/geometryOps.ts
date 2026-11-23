@@ -12,6 +12,7 @@ import BufferOp from 'jsts/org/locationtech/jts/operation/buffer/BufferOp.js';
 import OverlayOp from 'jsts/org/locationtech/jts/operation/overlay/OverlayOp.js';
 import SnapOverlayOp from 'jsts/org/locationtech/jts/operation/overlay/snap/SnapOverlayOp.js';
 import UnaryUnionOp from 'jsts/org/locationtech/jts/operation/union/UnaryUnionOp.js';
+import TopologyPreservingSimplifier from 'jsts/org/locationtech/jts/simplify/TopologyPreservingSimplifier.js';
 import { ensureCounterClockwise, isCounterClockwise, polygonArea, type Region } from './geometry';
 import type { Polygon, Vec2 } from './model';
 
@@ -156,4 +157,13 @@ export function differenceRegions(a: Region, b: Region): Region {
 export function intersectRegions(a: Region, b: Region): Region {
   if (a.length === 0 || b.length === 0) return [];
   return overlay(a, b, OverlayOp.INTERSECTION);
+}
+
+/**
+ * Fewer points, the same shape within `tolerance` (m), without making rings cross each other
+ * (JTS TopologyPreservingSimplifier, Douglas–Peucker that keeps the topology).
+ */
+export function simplifyRegion(region: Region, tolerance: number): Region {
+  if (region.length === 0 || tolerance <= 0) return region;
+  return fromJsts(TopologyPreservingSimplifier.simplify(toJsts(region), tolerance) as JGeometry);
 }

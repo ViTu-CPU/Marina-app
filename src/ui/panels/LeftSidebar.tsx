@@ -8,6 +8,8 @@ import { PIER_SERIES } from '../../engine/modules';
 import { targetCount } from '../../engine/targets';
 import type { StringKey } from '../../i18n';
 import { originPlacing, parseLatLon } from '../../state/geo';
+import { MAP_PROVIDERS, type MapProvider } from '../../state/helsinki';
+import { PlanPickControls } from './PlanPickControls';
 import { appStore, LAYER_IDS, needsRegeneration, useAppStore, type ToolId } from '../../state/store';
 import { LayerPresets } from './LayerPresets';
 import { loadImage, readFileAsDataUrl } from '../export/download';
@@ -294,7 +296,7 @@ function MapControls() {
     if (empty) s.setView({ cx: 0, cy: 0, zoom: 2 });
     const view = empty ? { cx: 0, cy: 0 } : s.view;
     const origin = originPlacing(position.lat, position.lon, { x: view.cx, y: view.cy });
-    s.setMap({ provider: 'osm', lat: origin.lat, lon: origin.lon, opacity: map?.opacity ?? 0.8 });
+    s.setMap({ provider: map?.provider ?? 'osm', lat: origin.lat, lon: origin.lon, opacity: map?.opacity ?? 0.8, ...(map?.planOverlay ? { planOverlay: true } : {}) });
   };
 
   return (
@@ -321,6 +323,35 @@ function MapControls() {
           <p className="text-xs text-slate-600">
             {t('map.position')}: {map.lat.toFixed(5)}, {map.lon.toFixed(5)}
           </p>
+          {/* U34: City of Helsinki base maps and detailed plan. */}
+          <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+            {t('map.provider')}
+            <select
+              aria-label={t('map.provider')}
+              className="min-w-0 rounded border border-slate-300 px-1 py-0.5 text-sm"
+              value={map.provider}
+              onChange={(e) => state().setMap({ ...map, provider: e.target.value as MapProvider })}
+            >
+              {MAP_PROVIDERS.map((p) => (
+                <option key={p} value={p}>
+                  {t(`map.provider.${p}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={map.planOverlay === true}
+              onChange={(e) => {
+                const { planOverlay: _, ...rest } = map;
+                state().setMap(e.target.checked ? { ...rest, planOverlay: true } : rest);
+              }}
+            />
+            {t('map.planOverlay')}
+          </label>
+          <PlanPickControls />
+          {(map.provider !== 'osm' || map.planOverlay) && <p className="text-xs text-slate-500">{t('map.helsinkiNote')}</p>}
           <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
             {t('background.opacity')}
             <input

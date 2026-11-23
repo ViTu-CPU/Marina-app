@@ -799,6 +799,70 @@ async function waitForServer() {
       await page.getByText('Anchoring parameters', { exact: true }).click();
     });
 
+    await step('Helsinki base map and detailed plan; a detailed-plan area as the site (U34)', async () => {
+      // kartta.hel.fi mocked: WMS images, and a plan area 60.155–60.165 N, 24.94–24.96 E; the water is
+      // the lake of lakeTile (60.14–60.16 N, 24.92–24.99 E), so the plan's water is 60.155–60.16 N.
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+      const wms = [];
+      await page.route('https://kartta.hel.fi/ws/geoserver/avoindata/wms?**', (route) => {
+        const q = new URL(route.request().url()).searchParams;
+        wms.push(`${q.get('layers')} ${q.get('crs')}`);
+        route.fulfill({ status: 200, contentType: 'image/png', body: png, headers: { 'access-control-allow-origin': '*' } });
+      });
+      const wfs = [];
+      const plan = {
+        type: 'FeatureCollection',
+        features: [{ type: 'Feature', properties: { id: 1, kaavatunnus: 'TEST-1', pintaala: null, voimaantulopvm: '2020-01-01' }, geometry: { type: 'Polygon', coordinates: [[[24.94, 60.155], [24.96, 60.155], [24.96, 60.165], [24.94, 60.165], [24.94, 60.155]]] } }],
+      };
+      await page.route('https://kartta.hel.fi/ws/geoserver/avoindata/wfs?**', (route) => {
+        wfs.push(new URL(route.request().url()).searchParams.get('CQL_FILTER'));
+        route.fulfill({ json: plan, headers: { 'access-control-allow-origin': '*' } });
+      });
+      await page.route('https://tiles.versatiles.org/tiles/osm/**', async (route) => {
+        const [z, x, y] = route.request().url().split('/').slice(-3).map(Number);
+        route.fulfill({ status: 200, contentType: 'application/vnd.mapbox-vector-tile', body: await lakeTile(z, x, y) });
+      });
+      await page.getByRole('button', { name: 'New', exact: true }).click();
+      await page.getByTestId('start-choice').getByRole('button', { name: 'Dismiss', exact: true }).click();
+      const background = page.locator('summary', { hasText: /^Background$/ });
+      if ((await background.locator('xpath=..').getAttribute('open')) === null) await background.click();
+      await page.getByLabel('Place: "lat, lon" or a map link', { exact: true }).fill('60.158, 24.95');
+      await page.getByRole('button', { name: 'Show map', exact: true }).click();
+      await page.getByLabel('Base map', { exact: true }).selectOption('helsinki-base');
+      await page.getByLabel('Detailed plan in force (Helsinki)', { exact: true }).check();
+      await page.waitForFunction(() => window.__marina.getState().project.map?.planOverlay === true);
+      for (let i = 0; i < 40 && !(wms.some((w) => w.startsWith('avoindata:Kantakartta ')) && wms.some((w) => w.startsWith('avoindata:Ajantasa_asemakaava '))); i++) await page.waitForTimeout(100);
+      assert.ok(wms.some((w) => w === 'avoindata:Kantakartta EPSG:3857'), wms.slice(0, 3).join(' | '));
+      assert.ok(wms.some((w) => w === 'avoindata:Ajantasa_asemakaava EPSG:3857'));
+      await page.getByRole('button', { name: 'Pick a detailed plan area (Helsinki)', exact: true }).click();
+      await click(0.5, 0.5);
+      await page.getByTestId('plan-found').waitFor();
+      assert.match(await page.getByTestId('plan-found').textContent(), /^Detailed plan TEST-1 · in force since 2020-01-01$/);
+      assert.match(wfs[0], /^INTERSECTS\(geom,SRID=4326;POINT\(24\.9\d+ 60\.1\d+\)\)$/);
+      await page.getByRole('button', { name: 'Use the water within it', exact: true }).click();
+      await page.getByTestId('plan-done').waitFor({ timeout: 20000 });
+      const s = await state();
+      const ring = s.project.site.water;
+      const area = Math.abs(ring.reduce((a, p, i) => a + p.x * ring[(i + 1) % ring.length].y - ring[(i + 1) % ring.length].x * p.y, 0) / 2);
+      // Hand calculation (U15 reference lengths at 60° N: 1° of latitude 111 412 m, 1° of longitude
+      // 55 800 m × cos 60.1575° / cos 60° = 55 535 m): 0.005° × 111 412 = 557.1 m; 0.02° × 55 535 = 1 110.7 m;
+      // 557.1 × 1 110.7 ≈ 618 800 m².
+      assert.ok(Math.abs(area / 618800 - 1) < 0.01, `water area ${Math.round(area)} m²`);
+      // The shore is the lake's north edge (60.16 N): one straight run about 1 110 m long.
+      const shore = s.project.site.shoreline;
+      assert.ok(shore.length >= 2);
+      const ys = shore.map((p) => p.y);
+      assert.ok(Math.max(...ys) - Math.min(...ys) < 1, 'shoreline along one latitude');
+      const shoreLength = shore.slice(1).reduce((a, p, i) => a + Math.hypot(p.x - shore[i].x, p.y - shore[i].y), 0);
+      assert.ok(Math.abs(shoreLength - 1110.7) < 15, `shoreline ${shoreLength.toFixed(1)} m`);
+      assert.equal(await page.getByTestId('site-checklist').locator('[aria-current="step"]').getAttribute('data-step'), 'entrance');
+      assert.equal((await state()).project.map.provider, 'helsinki-base');
+      await page.screenshot({ path: path.join(outDir, 'helsinki-plan.png') });
+      await page.unroute('https://kartta.hel.fi/ws/geoserver/avoindata/wms?**');
+      await page.unroute('https://kartta.hel.fi/ws/geoserver/avoindata/wfs?**');
+      await page.unroute('https://tiles.versatiles.org/tiles/osm/**');
+    });
+
     await step('language toggle', async () => {
       await page.getByRole('button', { name: 'FI', exact: true }).click();
       assert.equal(await page.getByRole('heading', { level: 1 }).textContent(), 'Venesataman asettelusuunnittelu');
