@@ -6,7 +6,8 @@ import { IssueList } from './IssueList';
 import { BERTH_TYPE_OPTIONS } from '../berthTypes';
 import { pierAxis } from '../../engine/rows';
 import { pierPolygon } from '../../engine/site';
-import { appStore, useAppStore } from '../../state/store';
+import { appStore, useAppStore, type ResultsTab } from '../../state/store';
+import type { StringKey } from '../../i18n';
 import { comparisonRows } from '../compare';
 import { formatCount, formatLength } from '../format';
 import { useT } from '../useT';
@@ -358,16 +359,47 @@ function As3962Panel({ layout }: { layout: Layout }) {
   );
 }
 
+const TABS: { id: ResultsTab; label: StringKey }[] = [
+  { id: 'alternatives', label: 'tabs.alternatives' },
+  { id: 'compare', label: 'tabs.compare' },
+  { id: 'cost', label: 'tabs.cost' },
+];
+
+/** UI_REVIEW 8: the results in three tabs instead of one long column. */
 export function RightSidebar() {
+  const t = useT();
   const layout = useAppStore((s) => s.project.layouts.find((l) => l.id === s.selectedLayoutId) ?? null);
+  const tab = useAppStore((s) => s.resultsTab);
   return (
-    <aside className="w-96 shrink-0 overflow-y-auto border-l border-slate-200 bg-white" aria-label="Results">
-      <Alternatives />
-      {layout && <SelectionPanel layout={layout} />}
-      <Comparison />
-      {layout && <Issues layout={layout} />}
-      {layout && <As3962Panel layout={layout} />}
-      {layout && <AnchoringAndCost layout={layout} />}
+    <aside className="flex w-96 shrink-0 flex-col border-l border-slate-200 bg-white" aria-label="Results">
+      <div role="tablist" aria-label={t('tabs.label')} className="flex shrink-0 border-b border-slate-200 bg-slate-50 text-sm">
+        {TABS.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            role="tab"
+            id={`results-tab-${x.id}`}
+            aria-selected={tab === x.id}
+            aria-controls="results-tabpanel"
+            onClick={() => state().setResultsTab(x.id)}
+            className={`flex-auto whitespace-nowrap border-b-2 px-2 py-1.5 ${tab === x.id ? 'border-sky-600 bg-white font-medium text-sky-900' : 'border-transparent text-slate-600 hover:bg-white hover:text-slate-900'}`}
+          >
+            {t(x.label)}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id="results-tabpanel" aria-labelledby={`results-tab-${tab}`} className="min-h-0 flex-1 overflow-y-auto">
+        {tab === 'alternatives' && (
+          <>
+            <Alternatives />
+            {layout && <SelectionPanel layout={layout} />}
+            {layout && <Issues layout={layout} />}
+            {layout && <As3962Panel layout={layout} />}
+          </>
+        )}
+        {tab === 'compare' && <Comparison />}
+        {tab === 'cost' && (layout ? <AnchoringAndCost layout={layout} /> : <p className="p-3 text-sm text-slate-500">{t('tabs.noLayout')}</p>)}
+      </div>
     </aside>
   );
 }

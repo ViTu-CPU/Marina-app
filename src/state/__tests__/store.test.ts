@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { IRREGULAR_BAY_SITE } from '../../engine/demos';
-import { createAppStore, emptyProject, engineParams, HISTORY_LIMIT, inputFingerprint, needsRegeneration } from '../store';
+import { createAppStore, emptyProject, engineParams, HISTORY_LIMIT, inputFingerprint, needsRegeneration, LAYER_IDS, presetOf } from '../store';
 
 const demoStore = () => {
   const store = createAppStore();
@@ -74,6 +74,28 @@ describe('undo / redo (SPEC §2: immutable snapshots)', () => {
     store.getState().setLanguage('fi');
     expect(store.getState().past).toEqual([]);
     expect(store.getState().layers.boats).toBe(false);
+  });
+
+  it('layer presets (UI_REVIEW 10) follow the results tab and the wave panel (UI_REVIEW 8, 4)', () => {
+    const store = demoStore();
+    const on = () => LAYER_IDS.filter((id) => store.getState().layers[id]);
+    // The default is the layout view: no anchoring lines, equipment or fetch rays.
+    expect(presetOf(store.getState().layers)).toBe('layout');
+    expect(on()).not.toContain('anchoring');
+    store.getState().setResultsTab('cost');
+    expect(presetOf(store.getState().layers)).toBe('anchoring');
+    expect(on()).toEqual(expect.arrayContaining(['anchoring', 'equipment', 'piers']));
+    expect(on()).not.toContain('boats');
+    store.getState().setWaveToolOpen(true);
+    expect(presetOf(store.getState().layers)).toBe('waves');
+    store.getState().setWaveToolOpen(false);
+    // Closing the wave panel gives back the layers of the open tab.
+    expect(presetOf(store.getState().layers)).toBe('anchoring');
+    store.getState().toggleLayer('grid');
+    expect(presetOf(store.getState().layers)).toBeNull();
+    store.getState().setLayerPreset('all');
+    expect(on()).toEqual([...LAYER_IDS]);
+    expect(store.getState().past).toEqual([]);
   });
 });
 

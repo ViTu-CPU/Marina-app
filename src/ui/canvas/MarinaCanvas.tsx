@@ -29,6 +29,7 @@ import { hatchPatterns } from './patterns';
 
 import { COLORS } from './colors';
 import { MapLegend } from './MapLegend';
+import { LayerPresets } from '../panels/LayerPresets';
 
 /** Pixels within which the cursor snaps to existing geometry. */
 const SNAP_PIXELS = 10;
@@ -835,6 +836,10 @@ export function MarinaCanvas() {
         </Layer>
       </Stage>
       <MapLegend />
+      {/* UI_REVIEW 10: layer presets at hand on the map. */}
+      <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded border border-slate-300 bg-white/90 px-1 py-0.5 shadow-sm">
+        <LayerPresets compact />
+      </div>
     </div>
   );
 }

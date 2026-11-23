@@ -91,6 +91,30 @@ export const LAYER_IDS = [
 ] as const;
 export type LayerId = (typeof LAYER_IDS)[number];
 
+/**
+ * UI_REVIEW 10: named sets of map layers. "layout" leaves out the anchoring lines, the harbour
+ * equipment and the fetch rays, which crowd the berths; "anchoring" shows the lines over the
+ * structures without boats and fairways; "waves" the site, the piers and the fetch rays.
+ */
+export const LAYER_PRESETS = {
+  layout: ['background', 'grid', 'water', 'shoreline', 'obstacles', 'zones', 'fairways', 'piers', 'fingers', 'slots', 'boats', 'issues'],
+  anchoring: ['background', 'grid', 'water', 'shoreline', 'obstacles', 'zones', 'piers', 'fingers', 'anchoring', 'equipment', 'issues'],
+  waves: ['background', 'grid', 'water', 'shoreline', 'obstacles', 'zones', 'piers', 'fingers', 'fetch'],
+  all: [...LAYER_IDS],
+} as const satisfies Record<string, readonly LayerId[]>;
+export type LayerPreset = keyof typeof LAYER_PRESETS;
+export const layersOf = (preset: LayerPreset): Record<LayerId, boolean> => {
+  const on = new Set<LayerId>(LAYER_PRESETS[preset]);
+  return Object.fromEntries(LAYER_IDS.map((id) => [id, on.has(id)])) as Record<LayerId, boolean>;
+};
+/** The preset the layers match, or null when they were set one by one. */
+export const presetOf = (layers: Record<LayerId, boolean>): LayerPreset | null =>
+  (Object.keys(LAYER_PRESETS) as LayerPreset[]).find((p) => LAYER_IDS.every((id) => layers[id] === layersOf(p)[id])) ?? null;
+
+/** UI_REVIEW 8: tabs of the results panel, each with the map layers that suit it. */
+export type ResultsTab = 'alternatives' | 'compare' | 'cost';
+const TAB_PRESET: Record<ResultsTab, LayerPreset> = { alternatives: 'layout', compare: 'layout', cost: 'anchoring' };
+
 export type ToolId =
   | 'select'
   | 'edit'
@@ -188,6 +212,8 @@ export interface AppState {
   notice: string | null;
   /** D40: whether the wave screening window is open (not saved). */
   waveToolOpen: boolean;
+  /** UI_REVIEW 8: the open tab of the results panel (not saved). */
+  resultsTab: ResultsTab;
   /**
    * The built-in price list (data/hinnasto.xlsx), loaded when the app starts (D24); null
    * while loading or when it could not be read (`priceListError`).
@@ -281,6 +307,8 @@ export interface AppState {
   select: (selection: Selection) => void;
   setNotice: (notice: string | null) => void;
   setWaveToolOpen: (open: boolean) => void;
+  setLayerPreset: (preset: LayerPreset) => void;
+  setResultsTab: (tab: ResultsTab) => void;
 }
 
 /** prepareSite is the costly part of re-validation; remember it for the current site. */
@@ -364,7 +392,8 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       viewport: { width: 800, height: 600 },
       obstacleKind: 'rock',
       zoneKind: 'noNavigation',
-      layers: Object.fromEntries(LAYER_IDS.map((id) => [id, true])) as Record<LayerId, boolean>,
+      layers: layersOf('layout'),
+      resultsTab: 'alternatives' as ResultsTab,
       builtInPriceList: null,
       priceListError: null,
 
@@ -599,7 +628,11 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
       toggleLayer: (layer) => set((s) => ({ layers: { ...s.layers, [layer]: !s.layers[layer] } })),
       select: (selection) => set({ selection }),
       setNotice: (notice) => set({ notice }),
-      setWaveToolOpen: (waveToolOpen) => set({ waveToolOpen }),
+      // The wave panel shows the fetch rays; closing it gives back the layers of the open tab.
+      setWaveToolOpen: (waveToolOpen) =>
+        set((s) => (s.waveToolOpen === waveToolOpen ? {} : { waveToolOpen, layers: layersOf(waveToolOpen ? 'waves' : TAB_PRESET[s.resultsTab]) })),
+      setLayerPreset: (preset) => set({ layers: layersOf(preset) }),
+      setResultsTab: (resultsTab) => set({ resultsTab, layers: layersOf(TAB_PRESET[resultsTab]) }),
     };
   });
 }

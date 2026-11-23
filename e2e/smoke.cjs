@@ -162,7 +162,10 @@ async function waitForServer() {
       await page.getByTestId('alternative').first().waitFor();
       const count = await page.getByTestId('alternative').count();
       assert.ok(count >= 2, `expected several alternatives, got ${count}`);
+      // UI_REVIEW 8: the comparison has a tab of its own.
+      await page.getByRole('tab', { name: 'Compare', exact: true }).click();
       await page.getByTestId('comparison').waitFor();
+      await page.getByRole('tab', { name: 'Alternatives', exact: true }).click();
       const s = await state();
       assert.ok(s.project.layouts[0].stats.totalBerths > 0);
       assert.equal(s.project.layouts[0].stats.issueCounts.error, 0);
@@ -372,6 +375,7 @@ async function waitForServer() {
       assert.equal(await weight.getAttribute('placeholder'), '≈1.3');
       await weight.fill('1.5');
       await page.waitForFunction(() => window.__marina.getState().project.boatClasses.find((c) => c.name === '5 m').weight === 1.5);
+      await page.getByRole('tab', { name: 'Anchoring & cost', exact: true }).click();
       const buoys = page.getByText('Stern buoys', { exact: true });
       await buoys.scrollIntoViewIfNeeded();
       assert.ok(await buoys.isVisible());
@@ -393,6 +397,7 @@ async function waitForServer() {
       await page.getByLabel('Exposed harbour (one size up)').uncheck();
       await page.getByText('Anchoring parameters', { exact: true }).click();
       await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('finger');
+      await page.getByRole('tab', { name: 'Alternatives', exact: true }).click();
     });
 
     await step('access pontoon in front of a quay wall: piers start from its edge, shore chains at its gangways hold it (D21, D28, D32)', async () => {
@@ -420,6 +425,7 @@ async function waitForServer() {
       for (const p of between) assert.ok(Math.abs(p.start.y - edge) < 0.6, `pier ${p.id} starts at y = ${p.start.y}`);
       // Held off the wall by two shore chains at its gangway (D28).
       await page.waitForFunction(() => window.__marina.getState().builtInPriceList !== null, null, { timeout: 10000 });
+      await page.getByRole('tab', { name: 'Anchoring & cost', exact: true }).click();
       const fixings = page.getByText('Wall fixings of shore chains', { exact: true });
       await fixings.scrollIntoViewIfNeeded();
       // Piers beside the pontoon reach the shore by their own gangway, with 2 shore chains each (D49).
@@ -434,6 +440,7 @@ async function waitForServer() {
       // I122: the piers starting from it hold it with their chains; it has no chains of its own into the berths.
       assert.match(await page.getByTestId('anchoring-issues').textContent(), new RegExp(`Access pontoon ${pontoon.id} \\(D28\\): off the wall it is held by two shore chains at each gangway and by the piers attached to it`));
       await page.screenshot({ path: path.join(outDir, 'access-pontoon.png') });
+      await page.getByRole('tab', { name: 'Alternatives', exact: true }).click();
     });
 
     await step('delete a pier, draw a new one with "Add pier" and fill its sides (D22)', async () => {
@@ -478,6 +485,8 @@ async function waitForServer() {
       await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
       assert.match(await page.getByTestId('as3962').textContent(), /Table 3\.3/);
       await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
+      // UI_REVIEW 8, 10: the anchoring plan and costs have a tab of their own, which shows the anchoring layers.
+      await page.getByRole('tab', { name: 'Anchoring & cost', exact: true }).click();
       const total = page.getByText(/^Total VAT 0 %( \(excludes \d+ unpriced items?, see list\))?$/);
       await total.scrollIntoViewIfNeeded();
       assert.ok(await total.isVisible());

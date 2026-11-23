@@ -13,6 +13,8 @@ beforeEach(() => {
   act(() => {
     appStore.getState().replaceProject(emptyProject());
     appStore.getState().setLanguage('en');
+    appStore.getState().setWaveToolOpen(false);
+    appStore.getState().setResultsTab('alternatives');
   });
 });
 afterEach(cleanup);
@@ -67,6 +69,8 @@ describe('app shell (SPEC §8)', () => {
     expect(alternatives[0]!.getAttribute('aria-pressed')).toBe('true');
 
     // Best value per row is highlighted: the first alternative has the most berths.
+    // UI_REVIEW 8: the comparison has a tab of its own.
+    fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
     const table = screen.getByTestId('comparison');
     const totalRow = within(table).getByRole('row', { name: /Total berths/ });
     const cells = within(totalRow).getAllByRole('cell');
@@ -75,6 +79,7 @@ describe('app shell (SPEC §8)', () => {
     // An alternative with nothing left out has no issues.
     const clean = appStore.getState().project.layouts.find((l) => l.unreachableRemoved === 0)!;
     act(() => appStore.getState().selectLayout(clean.id));
+    fireEvent.click(screen.getByRole('tab', { name: 'Alternatives' }));
     expect(screen.getByText('No issues found against the configured constraints.')).toBeTruthy();
   });
 
@@ -169,6 +174,10 @@ describe('app shell (SPEC §8)', () => {
       appStore.getState().loadDemo('rectBasin');
       appStore.getState().generate();
     });
+    fireEvent.click(screen.getByRole('tab', { name: 'Anchoring & cost' }));
+    // UI_REVIEW 10: the tab shows the anchoring layers.
+    expect(appStore.getState().layers.anchoring).toBe(true);
+    expect(appStore.getState().layers.boats).toBe(false);
     expect(screen.getAllByText('Loading the price list …').length).toBeGreaterThan(0);
     act(() => appStore.getState().setBuiltInPriceList(parsed.ok ? parsed.priceList : null));
     // D62: the demo's lines on clay need more than the heaviest block: the totals say what they leave out.
@@ -219,14 +228,16 @@ describe('app shell (SPEC §8)', () => {
     expect(issues).toContain(`${layout.unreachableRemoved} berths were left out of this layout`);
     expect(issues).toContain('Warning');
     expect(screen.getByText('Issues (1)')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
     const row = within(screen.getByTestId('comparison')).getByRole('row', { name: /Unreachable berths left out/ });
     expect(within(row).getAllByRole('cell')[0]!.textContent).toBe(String(layout.unreachableRemoved));
     // The status drops from "Constraints met" (green) to "Geometry OK" (amber).
     expect(layout.feasibility).toBe('geometricOK');
-    expect(screen.getAllByTestId('alternative')[0]!.textContent).toContain('Geometry OK');
-    expect(screen.getAllByTestId('alternative')[0]!.textContent).not.toContain('Constraints met');
     const warnings = within(screen.getByTestId('comparison')).getByRole('row', { name: /Warnings/ });
     expect(within(warnings).getAllByRole('cell')[0]!.textContent).toBe('1');
+    fireEvent.click(screen.getByRole('tab', { name: 'Alternatives' }));
+    expect(screen.getAllByTestId('alternative')[0]!.textContent).toContain('Geometry OK');
+    expect(screen.getAllByTestId('alternative')[0]!.textContent).not.toContain('Constraints met');
   });
 
   it('an empty project explains why nothing was generated', () => {
@@ -308,7 +319,10 @@ describe('wave panel and start choice (UI_REVIEW 4, 5)', () => {
     expect(panel).toBeTruthy();
     // Beside the map: the canvas stays, the layout panels make room.
     expect(screen.getByTestId('canvas-stub')).toBeTruthy();
-    expect(screen.queryByText('Alternatives')).toBeNull();
+    expect(screen.queryByRole('tablist', { name: 'Results' })).toBeNull();
+    // UI_REVIEW 10: the panel switches the map to the wave layers (fetch rays on, boats off).
+    expect(appStore.getState().layers.fetch).toBe(true);
+    expect(appStore.getState().layers.boats).toBe(false);
     expect(screen.getByRole('button', { name: 'Waves' }).getAttribute('aria-pressed')).toBe('true');
     // A wave study alone: the typed position can put the map under the drawing for the fetch rays.
     fireEvent.change(within(panel).getByLabelText('Position'), { target: { value: '60.15, 24.95' } });
@@ -318,7 +332,9 @@ describe('wave panel and start choice (UI_REVIEW 4, 5)', () => {
     expect(within(panel).queryByRole('button', { name: 'Show on the map' })).toBeNull();
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByTestId('wave-tool')).toBeNull();
-    expect(screen.getByText('Alternatives')).toBeTruthy();
+    expect(screen.getByRole('tablist', { name: 'Results' })).toBeTruthy();
+    expect(appStore.getState().layers.boats).toBe(true);
+    expect(appStore.getState().layers.fetch).toBe(false);
   });
 
   it('choosing a layout study starts the water area tool', () => {

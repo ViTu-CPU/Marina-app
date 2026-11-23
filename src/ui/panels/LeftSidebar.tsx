@@ -9,6 +9,7 @@ import { targetCount } from '../../engine/targets';
 import type { StringKey } from '../../i18n';
 import { originPlacing, parseLatLon } from '../../state/geo';
 import { appStore, LAYER_IDS, needsRegeneration, useAppStore, type ToolId } from '../../state/store';
+import { LayerPresets } from './LayerPresets';
 import { loadImage, readFileAsDataUrl } from '../export/download';
 import { formatCount, formatLength, formatPercent } from '../format';
 import { calibrateBackground, placeBackground } from '../tools/background';
@@ -808,6 +809,7 @@ function LayersSection() {
   const layers = useAppStore((s) => s.layers);
   return (
     <Section title={t('section.layers')} defaultOpen={false}>
+      <LayerPresets />
       <div className="grid grid-cols-2 gap-x-2">
         {LAYER_IDS.map((id) => (
           <label key={id} className="flex items-center gap-1.5 text-sm text-slate-700">
