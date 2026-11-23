@@ -8,7 +8,7 @@ import { PIER_SERIES } from '../../engine/modules';
 import { targetCount } from '../../engine/targets';
 import type { StringKey } from '../../i18n';
 import { originPlacing, parseLatLon } from '../../state/geo';
-import { appStore, LAYER_IDS, useAppStore, type ToolId } from '../../state/store';
+import { appStore, LAYER_IDS, needsRegeneration, useAppStore, type ToolId } from '../../state/store';
 import { loadImage, readFileAsDataUrl } from '../export/download';
 import { formatCount, formatLength, formatPercent } from '../format';
 import { calibrateBackground, placeBackground } from '../tools/background';
@@ -32,6 +32,52 @@ const TOOLS: { id: ToolId; hint: StringKey }[] = [
   { id: 'zone', hint: 'hint.polygon' },
   { id: 'measure', hint: 'hint.measure' },
 ];
+
+/**
+ * UI_REVIEW 7: the steps the generator needs, in order, ticked when done. A step's button
+ * starts its drawing tool (or generates); the first open step is marked as the next one.
+ */
+function SiteChecklist() {
+  const t = useT();
+  const site = useAppStore((s) => s.project.site);
+  const tool = useAppStore((s) => s.tool);
+  const generated = useAppStore((s) => s.project.layouts.length > 0 && !needsRegeneration(s.project));
+  const steps: { id: string; label: StringKey; done: boolean; run: () => void; active: boolean }[] = [
+    { id: 'water', label: 'checklist.water', done: site.water.length >= 3, run: () => state().setTool('water'), active: tool === 'water' },
+    { id: 'shoreline', label: 'checklist.shoreline', done: site.shoreline.length >= 2, run: () => state().setTool('shoreline'), active: tool === 'shoreline' },
+    { id: 'entrance', label: 'checklist.entrance', done: hasEntrance(site), run: () => state().setTool('entrance'), active: tool === 'entrance' },
+    { id: 'generate', label: 'checklist.generate', done: generated, run: () => state().generate(), active: false },
+  ];
+  const next = steps.findIndex((x) => !x.done);
+  return (
+    <div className="rounded border border-slate-200 bg-slate-50 p-2" data-testid="site-checklist">
+      <div className="mb-1 text-xs font-medium text-slate-600">{next === -1 ? t('checklist.done') : t('checklist.title')}</div>
+      <ol className="space-y-0.5">
+        {steps.map((x, i) => (
+          <li key={x.id}>
+            <button
+              type="button"
+              data-step={x.id}
+              data-done={x.done || undefined}
+              aria-current={i === next ? 'step' : undefined}
+              onClick={x.run}
+              className={`flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-sm ${i === next ? 'bg-sky-100 font-medium text-sky-900' : x.done ? 'text-slate-500' : 'text-slate-700'} ${x.active ? 'ring-1 ring-sky-500' : ''} hover:bg-sky-50`}
+            >
+              <span
+                aria-hidden="true"
+                className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${x.done ? 'bg-emerald-600 text-white' : i === next ? 'bg-sky-700 text-white' : 'bg-slate-300 text-slate-700'}`}
+              >
+                {x.done ? '✓' : i + 1}
+              </span>
+              <span>{t(x.label)}</span>
+              {x.done && <span className="sr-only">({t('checklist.isDone')})</span>}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
 
 const OBSTACLE_KINDS: ObstacleKind[] = ['rock', 'pier', 'island', 'structure', 'other'];
 const ZONE_KINDS: ZoneKind[] = ['noNavigation', 'noStructures', 'protected'];
@@ -91,6 +137,7 @@ function SiteSection() {
 
   return (
     <Section title={t('section.site')}>
+      <SiteChecklist />
       <div className="grid grid-cols-2 gap-1">
         {TOOLS.map(({ id }) => (
           <Button key={id} active={tool === id} onClick={() => state().setTool(id)}>

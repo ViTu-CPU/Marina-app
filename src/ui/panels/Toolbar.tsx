@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DEMO_PROJECTS } from '../../engine/demos';
 import { serializeProject } from '../../state/projectFile';
 import { appStore, needsRegeneration, useAppStore } from '../../state/store';
@@ -15,6 +15,66 @@ const isPristine = (): boolean => {
   const { project, past } = appStore.getState();
   return past.length === 0 && project.site.water.length === 0 && project.layouts.length === 0;
 };
+
+interface MenuItem {
+  label: string;
+  title?: string;
+  disabled?: boolean;
+  onClick: () => void;
+}
+
+/** A button that opens a list of actions; closes on a choice, Escape or a click outside. */
+function ExportMenu({ items }: { items: MenuItem[] }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
+    };
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', key);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', key);
+    };
+  }, [open]);
+  return (
+    <div ref={root} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`rounded border px-2 py-1 text-sm ${open ? 'border-sky-600 bg-sky-100 text-sky-900' : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-100'}`}
+        onClick={() => setOpen(!open)}
+      >
+        {t('toolbar.export')} ▾
+      </button>
+      {open && (
+        <div role="menu" aria-label={t('toolbar.export')} className="absolute left-0 top-full z-40 mt-1 w-56 rounded border border-slate-200 bg-white py-1 shadow-lg">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              disabled={item.disabled}
+              title={item.title}
+              className="block w-full px-3 py-1.5 text-left text-sm text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent"
+              onClick={() => {
+                setOpen(false);
+                item.onClick();
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Toolbar() {
   const t = useT();
@@ -126,22 +186,20 @@ export function Toolbar() {
       )}
 
       <span className="mx-1 h-5 w-px bg-slate-300" />
-      <Button onClick={() => exportPng(`${baseName()}.png`)}>{t('toolbar.exportPng')}</Button>
-      <Button
-        disabled={!hasLayouts}
-        onClick={() =>
-          // The byte-order mark makes spreadsheet programs read the file as UTF-8.
-          downloadText(`${baseName()}.csv`, `﻿${buildCsv(state().project, state().selectedLayoutId, language)}`, 'text/csv')
-        }
-      >
-        {t('toolbar.exportCsv')}
-      </Button>
-      <Button disabled={!hasLayouts} title={t('toolbar.exportDxfHint')} onClick={exportDxf}>
-        {t('toolbar.exportDxf')}
-      </Button>
-      <Button disabled={!hasLayouts} title={t('report.printHint')} onClick={printReport}>
-        {t('report.button')}
-      </Button>
+      {/* UI_REVIEW 6: the four exports in one menu. */}
+      <ExportMenu
+        items={[
+          { label: t('toolbar.exportPng'), onClick: () => exportPng(`${baseName()}.png`) },
+          {
+            label: t('toolbar.exportCsv'),
+            disabled: !hasLayouts,
+            // The byte-order mark makes spreadsheet programs read the file as UTF-8.
+            onClick: () => downloadText(`${baseName()}.csv`, `﻿${buildCsv(state().project, state().selectedLayoutId, language)}`, 'text/csv'),
+          },
+          { label: t('toolbar.exportDxf'), title: t('toolbar.exportDxfHint'), disabled: !hasLayouts, onClick: exportDxf },
+          { label: t('report.button'), title: t('report.printHint'), disabled: !hasLayouts, onClick: printReport },
+        ]}
+      />
       <Button onClick={() => state().fitView()}>{t('toolbar.fit')}</Button>
       {/* D40: the wave screening window. */}
       <Button onClick={() => state().setWaveToolOpen(true)}>{t('toolbar.waves')}</Button>

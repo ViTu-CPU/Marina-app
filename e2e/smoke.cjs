@@ -102,8 +102,15 @@ async function waitForServer() {
       await page.getByRole('button', { name: /^(Generate|Regenerate)$/ }).click();
       await page.waitForFunction(() => !window.__marina.getState().generating && window.__marina.getState().project.layouts.length > 0, null, { timeout: 20000 });
     };
+    /** UI_REVIEW 6: the exports sit in the Export menu. */
+    const EXPORTS = ['Export PNG', 'Export CSV', 'Export DXF', 'Report (PDF)'];
+    const exportItem = async (name) => {
+      await page.getByRole('button', { name: 'Export ▾', exact: true }).click();
+      return page.getByRole('menuitem', { name, exact: true });
+    };
     const download = async (buttonName) => {
-      const [d] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: buttonName, exact: true }).click()]);
+      const target = EXPORTS.includes(buttonName) ? await exportItem(buttonName) : page.getByRole('button', { name: buttonName, exact: true });
+      const [d] = await Promise.all([page.waitForEvent('download'), target.click()]);
       const file = path.join(outDir, d.suggestedFilename());
       await d.saveAs(file);
       return file;
@@ -551,7 +558,7 @@ async function waitForServer() {
     });
 
     await step('report of the selected alternative: printable, and a real PDF from it (U24)', async () => {
-      await page.getByRole('button', { name: 'Report (PDF)', exact: true }).click();
+      await (await exportItem('Report (PDF)')).click();
       const frame = page.frameLocator('iframe[data-testid="report-frame"]');
       await frame.getByRole('heading', { name: 'Sources and assumptions' }).waitFor({ state: 'attached' });
       const html = await page.evaluate(() => document.querySelector('iframe[data-testid="report-frame"]').contentDocument.documentElement.outerHTML);

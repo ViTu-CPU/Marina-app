@@ -25,9 +25,18 @@ describe('app shell (SPEC §8)', () => {
 
   it('has the toolbar actions', () => {
     renderShell();
-    for (const name of ['New', 'Open', 'Save', 'Undo', 'Redo', 'Generate', 'Export PNG', 'Export CSV']) {
+    for (const name of ['New', 'Open', 'Save', 'Undo', 'Redo', 'Generate', 'Waves']) {
       expect(screen.getByRole('button', { name })).toBeTruthy();
     }
+    // UI_REVIEW 6: the exports are in one menu; those needing a layout are disabled without one.
+    expect(screen.queryByRole('menu')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Export ▾' }));
+    const menu = screen.getByRole('menu', { name: 'Export' });
+    const items = within(menu).getAllByRole('menuitem');
+    expect(items.map((i) => i.textContent)).toEqual(['Export PNG', 'Export CSV', 'Export DXF', 'Report (PDF)']);
+    expect(items.map((i) => (i as HTMLButtonElement).disabled)).toEqual([false, true, true, true]);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
     expect(screen.getByRole('combobox', { name: 'Load example' })).toBeTruthy();
   });
 
@@ -264,5 +273,26 @@ describe('wave window print (U29)', () => {
       if (spy) Object.defineProperty(original, 'contentWindow', spy);
       document.querySelector('iframe[data-testid="report-frame"]')?.remove();
     }
+  });
+});
+
+describe('site checklist (UI_REVIEW 7)', () => {
+  it('ticks the required steps as they are done and marks the next one', () => {
+    renderShell();
+    const list = screen.getByTestId('site-checklist');
+    const step = (id: string) => list.querySelector(`[data-step="${id}"]`) as HTMLButtonElement;
+    expect(step('water').getAttribute('aria-current')).toBe('step');
+    expect(step('water').dataset.done).toBeUndefined();
+    fireEvent.click(step('water'));
+    expect(appStore.getState().tool).toBe('water');
+    act(() => {
+      appStore.getState().loadDemo('rectBasin');
+    });
+    for (const id of ['water', 'shoreline', 'entrance']) expect(step(id).dataset.done).toBe('true');
+    expect(step('generate').getAttribute('aria-current')).toBe('step');
+    fireEvent.click(step('generate'));
+    expect(appStore.getState().project.layouts.length).toBeGreaterThan(0);
+    expect(step('generate').dataset.done).toBe('true');
+    expect(list.textContent).toContain('All required steps done');
   });
 });

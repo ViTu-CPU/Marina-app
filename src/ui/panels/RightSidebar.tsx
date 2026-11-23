@@ -26,7 +26,7 @@ const BADGE: Record<Feasibility, string> = {
 function FeasibilityBadge({ feasibility }: { feasibility: Feasibility }) {
   const t = useT();
   return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${BADGE[feasibility]}`} title={t('feasibility.note')}>
+    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${BADGE[feasibility]}`} title={`${t(`feasibility.explain.${feasibility}`)} ${t('feasibility.note')}`}>
       {t(`feasibility.${feasibility}`)}
     </span>
   );
@@ -49,6 +49,14 @@ function Alternatives() {
         </ul>
       )}
       {layouts.length === 0 && diagnostics.length === 0 && <p className="text-sm text-slate-500">{t('results.none')}</p>}
+      {layouts.length > 0 && (
+        <p className="text-xs text-slate-500" data-testid="feasibility-legend">
+          <span className="mr-1 inline-block h-2 w-2 rounded-full bg-red-400" aria-hidden="true" />
+          {t('feasibility.geometricFail')} · <span className="mx-1 inline-block h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
+          {t('feasibility.geometricOK')} · <span className="mx-1 inline-block h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
+          {t('feasibility.operationalOK')}. {t('feasibility.note')}
+        </p>
+      )}
       <ul className="space-y-1" aria-label={t('results.alternatives')}>
         {layouts.map((l) => (
           <li key={l.id}>
