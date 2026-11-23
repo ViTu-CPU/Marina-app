@@ -18,7 +18,7 @@ mainista uuteen haaraan.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D66, I127, U29**).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D66, I127, U30**).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
   (vahvistettu, D54): aallonkorkeudet 2 desimaalilla.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
@@ -80,6 +80,12 @@ Sama haara `claude/new-session-olvxtp`.
   Sähkö- ja vesipollareissa on 4 venepaikkaa per pollari (oletus). Varusteet ovat omalla tasollaan
   sekä BOM:ssa, DXF:ssä ja raportissa.
 - Testit 544/544, e2e 22 vaihetta.
+
+## Aaltoarvion tulostus ja käyttöliittymäanalyysi (2026-11-23, U29)
+Haara `claude/inspiring-ramanujan-5ksg2y`. Waves-ikkunassa on "Print": oma aaltoraportti (A4, PDF selaimen
+kautta), joka toimii myös ilman vesialuetta ja layoutia. Raportin aalto-osio, tulostustyylit ja sivukehys ovat
+yhteisiä layout-raportin kanssa (`src/ui/export/htmlDoc.ts`, `waveReport.ts`). Käyttöliittymän
+parannusehdotukset: `docs/UI_REVIEW.md`. Testit 554/554, e2e 22 vaihetta.
 
 Avoimet kysymykset omistajalle:
 1. Mistä saadaan 30 s mitoitustuuli (speksin TODO)?

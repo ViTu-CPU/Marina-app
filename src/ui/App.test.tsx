@@ -238,3 +238,31 @@ describe('app shell (SPEC §8)', () => {
     expect(screen.getByLabelText('Berth target')).toBeTruthy();
   });
 });
+
+describe('wave window print (U29)', () => {
+  it('prints the wave screening report from the wave window, without a layout', () => {
+    renderShell();
+    act(() => {
+      const s = appStore.getState();
+      s.setWaves({ wind1: 14, wind50: 20, sectors: s.project.waves.sectors.map((x, k) => ({ ...x, fetch: k === 1 ? 3000 : 0 })) });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Waves' }));
+    const dialog = screen.getByRole('dialog', { name: 'Wave screening (preliminary)' });
+    const printed: string[] = [];
+    const original = HTMLIFrameElement.prototype;
+    const spy = Object.getOwnPropertyDescriptor(original, 'contentWindow');
+    // jsdom has no print(); record that it was asked for.
+    Object.defineProperty(original, 'contentWindow', { configurable: true, get: () => ({ print: () => printed.push('print') }) });
+    try {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Print' }));
+      const frame = document.querySelector('iframe[data-testid="report-frame"]') as HTMLIFrameElement;
+      const html = frame.contentDocument!.documentElement.outerHTML;
+      expect(html).toContain('Wave screening report (preliminary)');
+      expect(html).toContain(DISCLAIMER);
+      expect(html).toContain('none (head, oblique and beam seas all checked)');
+    } finally {
+      if (spy) Object.defineProperty(original, 'contentWindow', spy);
+      document.querySelector('iframe[data-testid="report-frame"]')?.remove();
+    }
+  });
+});

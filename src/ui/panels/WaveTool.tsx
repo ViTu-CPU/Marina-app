@@ -29,6 +29,8 @@ import { DEPTH_SOURCES, lookupFetchDepths } from '../../state/depth';
 import { fetchWindHistory } from '../../state/openMeteo';
 import { completeYears, fetchStationWind, findWindStations, FMI_WIND_SOURCE, MIN_YEAR_COVERAGE, type WindStation } from '../../state/fmiWind';
 import { appStore, useAppStore } from '../../state/store';
+import { printHtml } from '../export/download';
+import { buildWaveReportHtml } from '../export/waveReport';
 import { formatCount, formatLength, formatPercent } from '../format';
 import { useSitePosition } from '../sitePosition';
 import { useT } from '../useT';
@@ -677,7 +679,27 @@ export function WaveTool() {
   const boatsPerBay = useAppStore((s) => s.project.params.boatsPerBay);
   const piers = useAppStore((s) => s.project.layouts.find((l) => l.id === s.selectedLayoutId)?.piers ?? null);
   const site = useAppStore((s) => s.project.site);
+  const { position } = useSitePosition();
+  const dialog = useRef<HTMLDivElement>(null);
   if (!open) return null;
+
+  /** U29: the wave screening as a printable report of its own, with or without a layout. */
+  const print = () => {
+    const s = state();
+    const layout = s.project.layouts.find((l) => l.id === s.selectedLayoutId) ?? null;
+    printHtml(
+      buildWaveReportHtml({
+        project: s.project,
+        piers: layout?.piers ?? [],
+        layoutName: layout?.name ?? null,
+        position,
+        positionEntered: s.project.waves.location !== null,
+        windRoseSvg: dialog.current?.querySelector('[data-testid="wind-rose"]')?.outerHTML ?? null,
+        language: s.language,
+        date: new Date().toISOString().slice(0, 10),
+      }),
+    );
+  };
 
   const bearings = (piers ?? []).map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) }));
   const result = waveAssessment(waves, designDepth, bearings);
@@ -695,12 +717,18 @@ export function WaveTool() {
         aria-modal="true"
         aria-label={t('waves.title')}
         data-testid="wave-tool"
+        ref={dialog}
         className="w-full max-w-6xl rounded bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2">
           <h2 className="text-sm font-semibold text-slate-800">{t('waves.title')}</h2>
-          <Button onClick={() => state().setWaveToolOpen(false)}>{t('waves.close')}</Button>
+          <div className="flex items-center gap-1.5">
+            <Button title={t('waves.printHint')} onClick={print}>
+              {t('waves.print')}
+            </Button>
+            <Button onClick={() => state().setWaveToolOpen(false)}>{t('waves.close')}</Button>
+          </div>
         </div>
         <div className="grid gap-4 p-4 lg:grid-cols-[17rem_1fr]">
           <div className="space-y-2">

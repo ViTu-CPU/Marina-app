@@ -570,7 +570,7 @@ async function waitForServer() {
       assert.ok(pages >= 2, `expected several pages, got ${pages}`);
     });
 
-    await step('wave screening: fetches by direction sector and winds give waves, criteria, the bad directions, FMI station winds, depths along the fetches and the shelter behind a breakwater (D40, D47, D58, I108, I110)', async () => {
+    await step('wave screening: fetches by direction sector and winds give waves, criteria, the bad directions, FMI station winds, depths along the fetches, the shelter behind a breakwater and the printed wave report (D40, D47, D58, I108, I110, U29)', async () => {
       await page.getByRole('button', { name: 'Waves', exact: true }).click();
       const tool = page.getByTestId('wave-tool');
       await tool.waitFor();
@@ -727,6 +727,21 @@ async function waitForServer() {
       assert.deepEqual(wd.sectors.map((x) => x.depth), new Array(8).fill(4.2));
       assert.equal(wd.autoDepth.sectors[0].source, 'emodnet');
       await page.unroute('https://rest.emodnet-bathymetry.eu/**');
+      // U29: the wave window prints a report of its own (wind rose, fetch figure, depths) and a PDF from it.
+      await tool.getByRole('button', { name: 'Print', exact: true }).click();
+      await page.frameLocator('iframe[data-testid="report-frame"]').getByRole('heading', { name: 'Fetch and depth lookups' }).waitFor({ state: 'attached' });
+      const waveHtml = await page.evaluate(() => document.querySelector('iframe[data-testid="report-frame"]').contentDocument.documentElement.outerHTML);
+      for (const text of ['Wave screening report (preliminary)', 'Preliminary geometric study', 'data-testid="wind-rose"', 'aria-label="Fetch per direction"', '<polygon', 'EMODnet', 'Helsinki Harmaja', 'Alternative: ']) {
+        assert.ok(waveHtml.includes(text), `wave report: ${text}`);
+      }
+      const wavePdfPage = await page.context().newPage();
+      await wavePdfPage.setContent(waveHtml, { waitUntil: 'load' });
+      const waveFile = path.join(outDir, 'waves-report.pdf');
+      await wavePdfPage.pdf({ path: waveFile, format: 'A4', printBackground: true });
+      await wavePdfPage.close();
+      const wavePdf = fs.readFileSync(waveFile);
+      assert.equal(wavePdf.subarray(0, 5).toString(), '%PDF-');
+      console.log(`        waves-report.pdf: ${(wavePdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length} pages, ${Math.round(wavePdf.length / 1024)} kB`);
       await page.screenshot({ path: path.join(outDir, 'waves.png'), fullPage: true });
       await tool.getByRole('button', { name: 'Close', exact: true }).click();
       assert.equal(await page.getByTestId('wave-tool').count(), 0);

@@ -3,6 +3,19 @@
 Notable changes to Marina Layout Planner. Decisions and assumptions behind each change are in
 [docs/DECISIONS.md](docs/DECISIONS.md); earlier changes are in the git history and in DECISIONS.
 
+## 2026-11-23 — Wave screening report from the Waves window (U29)
+
+### Added
+- **"Print" in the Waves window**: a printable wave screening report of its own (choose "Save as PDF"),
+  also **without a water area or a layout**, so the tool serves a wave-climate study alone. It has the
+  position, the result in one line, a fetch figure by direction (with the map rays), the sources of the
+  fetches and depths, the sector table, criteria, advice and floating breakwater, the wind rose with the
+  extreme winds by direction and the FMI station beside ERA5, and the disclaimer on every page.
+
+### Changed
+- The layout report and the wave report share the wave screening section, the print styles and the
+  page frame (`src/ui/export/htmlDoc.ts`, `src/ui/export/waveReport.ts`); the layout report itself is unchanged.
+
 ## 2026-11-19 — Mooring sizing after the owner's specification; site depth; harbour equipment (D63–D65)
 
 ### Changed

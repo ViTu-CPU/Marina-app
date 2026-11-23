@@ -162,6 +162,8 @@ fairway in front of every berth, connection to the entrance, pier connected to t
   map; wind climate from ERA5 (Open-Meteo), per sector.
 - Proposal of a Marinetek floating breakwater (3300, 3300K, 3800, 4300K, 5300K) from the
   brochures' attenuation diagrams, or "none fits".
+- "Print" in the Waves window: a wave screening report of its own (PDF through the browser), also
+  without a site or layout drawn — the tool can be used for a wave-climate study alone.
 - Water levels from the nearest gauge: FMI mareographs (sea, 1991–2020) or SYKE stations
   (lakes and rivers, last 30 years), extremes and the normal range.
 - Advisory checks against AS 3962-2001 (walkways, fingers, berth width, fairway, entrance,

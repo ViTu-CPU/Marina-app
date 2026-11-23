@@ -6,16 +6,15 @@
 import { frictionSensitivity, MOORING_NOTES, type AnchoringParams } from '../../engine/anchoring';
 import { BOM_GROUPS, type BomGroup } from '../../engine/bom';
 import { as3962NotesFor } from '../as3962Notes';
-import { breakwaterProposal, breakwaterShelter, weightPerMetre } from '../../engine/breakwater';
 import type { Layout, Params, Project } from '../../engine/model';
-import { pierAxis } from '../../engine/rows';
-import { bearingOf, WAVE_SECTORS, waveAssessment, waveSectorBearing } from '../../engine/waves';
 import { targetCount } from '../../engine/targets';
 import { translate, type Language, type StringKey } from '../../i18n';
 import { comparisonRows } from '../compare';
 import { anchoringStatusLabel, excludesLabel, type CostModel } from '../costModel';
-import { formatCount, formatEuro, formatKn, formatLength, formatPercent } from '../format';
+import { formatCount, formatEuro, formatKn, formatLength } from '../format';
 import { groupIssues } from '../issueGroups';
+import { esc, printDocument, tableHelpers } from './htmlDoc';
+import { waveScreeningParts } from './waveReport';
 
 export interface ReportInput {
   project: Project;
@@ -28,9 +27,6 @@ export interface ReportInput {
   /** Date of the report, YYYY-MM-DD. */
   date: string;
 }
-
-const esc = (text: string): string =>
-  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 const BOM_GROUP_KEY: Record<BomGroup, StringKey> = {
   pontoons: 'bom.pontoons',
@@ -84,42 +80,10 @@ const ANCHORING: (keyof AnchoringParams)[] = [
   'fingerPileMinLength',
 ];
 
-const STYLE = `
-@page { size: A4; margin: 14mm 14mm 10mm 14mm; }
-* { box-sizing: border-box; }
-body { font: 10pt/1.35 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; margin: 0; }
-h1 { font-size: 17pt; margin: 0 0 2mm; }
-h2 { font-size: 12.5pt; margin: 6mm 0 2mm; border-bottom: 1px solid #cbd5e1; padding-bottom: 1mm; break-after: avoid; }
-h3 { font-size: 10.5pt; margin: 3mm 0 1mm; break-after: avoid; }
-p { margin: 1mm 0; }
-.meta { color: #475569; }
-.disclaimer { border: 1.5px solid #b45309; background: #fffbeb; color: #78350f; padding: 2mm 3mm; margin: 3mm 0; font-weight: 600; }
-.foot { position: fixed; bottom: 0; left: 0; right: 0; height: 7mm; font-size: 7.5pt; color: #78350f; text-align: center; border-top: 1px solid #fcd34d; padding-top: 1mm; background: #fff; }
-table.pages, table.pages > tbody > tr > td, table.pages > tfoot > tr > td { border: 0; padding: 0; margin: 0; font-size: inherit; }
-table.pages > tfoot .space { height: 9mm; }
-table.data td:first-child { min-width: 28mm; }
-img.map { width: 100%; max-height: 150mm; object-fit: contain; border: 1px solid #cbd5e1; }
-table { border-collapse: collapse; width: 100%; margin: 1mm 0 2mm; font-size: 8.5pt; }
-th, td { border: 1px solid #cbd5e1; padding: 0.8mm 1.5mm; text-align: left; vertical-align: top; }
-td.n, th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-th { background: #f1f5f9; }
-tr { break-inside: avoid; }
-td.sel, th.sel { background: #e0f2fe; font-weight: 600; }
-.small { font-size: 8pt; color: #475569; }
-ul { margin: 1mm 0; padding-left: 5mm; }
-li { margin: 0.5mm 0; }
-.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
-a { color: #0369a1; word-break: break-all; }
-`;
-
 export function buildReportHtml(input: ReportInput): string {
   const { project, layout, model, image, language, date } = input;
   const t = (key: StringKey) => translate(language, key);
-  const table = (head: string[], rows: string[][], numeric: number[] = []) =>
-    `<table class="data"><thead><tr>${head.map((h, i) => `<th${numeric.includes(i) ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows
-      .map((r) => `<tr>${r.map((c, i) => `<td${numeric.includes(i) ? ' class="n"' : ''}>${c}</td>`).join('')}</tr>`)
-      .join('')}</tbody></table>`;
-  const kv = (rows: [string, string][]) => table([t('report.item'), t('report.value')], rows.map(([k, v]) => [esc(k), esc(v)]), [1]);
+  const { table, kv } = tableHelpers(t);
   const issues = (list: Layout['issues']) =>
     list.length === 0
       ? `<p class="small">${esc(t('results.noIssues'))}</p>`
@@ -209,131 +173,7 @@ export function buildReportHtml(input: ReportInput): string {
   parts.push('</div></div>');
 
   // D40, D41, D47: wave screening, when a fetch and a wind are entered.
-  const waveResult = waveAssessment(
-    project.waves,
-    project.anchoring.depth,
-    layout.piers.map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) })),
-  );
-  if (waveResult) {
-    const w = project.waves;
-    const len = (m: number) => formatLength(m, language);
-    const height = (m: number) => new Intl.NumberFormat(language === 'fi' ? 'fi-FI' : 'en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(m);
-    parts.push(`<h2>${esc(t('waves.title'))}</h2>`);
-    parts.push(
-      kv([
-        [t('waves.fetchDepth'), len(w.fetchDepth ?? project.anchoring.depth)],
-        ...(w.wind1 === null ? [] : [[t('waves.wind1'), len(w.wind1)] as [string, string]]),
-        ...(w.wind50 === null ? [] : [[t('waves.wind50'), len(w.wind50)] as [string, string]]),
-        [t('waves.windAveraging'), t(w.windAveragingS === 3600 ? 'waves.avg3600' : 'waves.avg600')],
-        [t('waves.criteriaSet'), t(`waveCriteria.${w.criteria}`)],
-        [t('waves.quality'), t(`waveQuality.${w.quality}`)],
-      ]),
-    );
-    const ev = (x: (typeof waveResult.sectors)[number], e: 'oneYear' | 'fiftyYear') => x.events.find((y) => y.event === e);
-    parts.push(
-      table(
-        [t('waves.sector'), t('waves.fetchCol'), t('waves.depthCol'), t('waves.wind1Col'), t('waves.wind50Col'), t('waves.hm01'), t('waves.hm050'), t('waves.tpL'), t('waves.headingCol'), t('waves.statusCol')],
-        waveResult.sectors.map((x) => {
-          const one = ev(x, 'oneYear');
-          const fifty = ev(x, 'fiftyYear');
-          return [
-            esc(`${WAVE_SECTORS[x.sector]} ${waveSectorBearing(x.sector)}°`),
-            esc(len(x.fetch)),
-            esc(len(x.depth)),
-            esc(one ? len(one.wind) : '–'),
-            esc(fifty ? len(fifty.wind) : '–'),
-            esc(one ? height(one.waves.hm0) : '–'),
-            esc(fifty ? height(fifty.waves.hm0) : '–'),
-            esc(fifty ? `${len(fifty.waves.tp)} / ${len(fifty.waves.wavelength)}` : '–'),
-            esc(x.headings.map((hd) => t(`waveHeading.${hd}`)).join(', ')),
-            esc(x.status === 'exceeds' ? t('waves.exceeds') : x.status === 'ok' ? t('waves.ok') : t('waves.noCriterion')),
-          ];
-        }),
-        [1, 2, 3, 4, 5, 6],
-      ),
-    );
-    parts.push(`<h3>${esc(t('waves.criteria'))}</h3>`);
-    const failing = waveResult.sectors.filter((x) => x.status === 'exceeds');
-    parts.push(
-      failing.length === 0
-        ? `<p>${esc(t('waves.noneBad'))}</p>`
-        : `<p>${esc(t('waves.bad'))}: ${failing
-            .map(
-              (x) =>
-                `<strong>${esc(WAVE_SECTORS[x.sector]!)}</strong> (${esc(
-                  x.checks
-                    .filter((c) => c.ok === false)
-                    .map((c) => `${t(`waveHeading.${c.heading}`).toLowerCase()}, ${t(`waveEvent.${c.event}`).toLowerCase()} ${height(c.waves.hm0)} > ${height(c.limit!)} m`)
-                    .join('; '),
-                )})`,
-            )
-            .join(', ')}</p>`,
-    );
-    if (waveResult.piers.length > 0) parts.push(`<p class="small">${esc(t('waves.piers'))}: ${esc(waveResult.piers.map((p) => p.id).join(', '))}</p>`);
-    parts.push(`<div class="disclaimer">${esc(t(`waveAdvice.${waveResult.advice}`))}</div>`);
-    if (waveResult.doubleBerthPiles && project.params.boatsPerBay === 2) parts.push(`<p class="small">${esc(t('waves.piles'))}</p>`);
-    // D48: floating breakwater type.
-    const proposal = breakwaterProposal(waveResult);
-    if (proposal) {
-      const p = proposal.proposed;
-      parts.push(`<h3>${esc(t('breakwater.title'))}</h3>`);
-      parts.push(
-        `<p>${p ? `${esc(t('breakwater.proposed'))} <strong>${esc(p.name)}</strong> (${esc(p.modules.map((m) => `${m.code} ${len(m.length)} × ${len(p.width)} m`).join(', '))})` : esc(t('breakwater.none'))}</p>`,
-      );
-      parts.push(
-        table(
-          [t('breakwater.product'), t('breakwater.width'), t('breakwater.perMetre'), t('breakwater.result')],
-          proposal.evaluations.map((e) => [
-            esc(e.product.id),
-            esc(`${len(e.product.width)} / ${height(e.product.freeboard)}`),
-            esc(len(weightPerMetre(e.product))),
-            esc(`${e.ok ? t('breakwater.ok') : e.checks.some((c) => c.transmitted === null) ? t('breakwater.beyondCurve') : t('breakwater.notEnough')}${e.beyondBestWavelength ? ` (${t('breakwater.beyondBest')} ${len(e.product.bestBelowWavelength)} m)` : ''}`),
-          ]),
-          [1, 2],
-        ),
-      );
-      parts.push(`<p class="small">${esc(t('breakwater.note'))}</p>`);
-    }
-    // D58, I107: shelter behind the drawn breakwaters.
-    const shelter = breakwaterShelter(project.site, layout.piers, waveResult);
-    if (shelter.length > 0) {
-      parts.push(`<h3>${esc(t('shelter.title'))}</h3>`);
-      parts.push(
-        table(
-          [t('shelter.direction'), t('shelter.pier'), t('shelter.share'), t('shelter.breakwater'), t('shelter.waves'), t('shelter.result')],
-          shelter.map((r) => {
-            const over = (c: (typeof r.checks)[number]) => (c.transmitted ?? c.check.waves.hm0) - c.check.limit!;
-            const worst = r.checks.reduce((a, c) => (over(c) > over(a) ? c : a));
-            const result = r.breakwaterId === null ? 'shelter.unsheltered' : worst.transmitted === null ? 'shelter.beyondCurve' : worst.ok && r.share >= 1 - 1e-9 ? 'shelter.ok' : worst.ok ? 'shelter.partly' : 'shelter.notEnough';
-            return [
-              esc(WAVE_SECTORS[r.sector]!),
-              esc(r.pierId),
-              esc(formatPercent(r.share, language)),
-              esc(r.breakwaterId ?? '–'),
-              esc(`${height(worst.check.waves.hm0)} → ${worst.transmitted === null ? '–' : height(worst.transmitted)} / ${height(worst.check.limit!)}`),
-              esc(t(result as StringKey)),
-            ];
-          }),
-          [2, 4],
-        ),
-      );
-      parts.push(`<p class="small">${esc(t('shelter.note'))}</p>`);
-    }
-    const climate = w.climate;
-    if (climate) {
-      parts.push(
-        `<p class="small">${esc(t('wind.title'))}: ${esc(climate.source)}; ${esc(t('wind.cell'))} ${climate.cell.lat.toFixed(2)}, ${climate.cell.lon.toFixed(2)}; ${climate.startYear}–${climate.endYear}; ${esc(climate.fetchedOn)}. ${esc(t('wind.note'))}</p>`,
-      );
-    }
-    // I108: the FMI station climate and which climate gave the winds.
-    const station = w.stationClimate;
-    if (station) {
-      parts.push(
-        `<p class="small">${esc(t('station.title'))}: ${esc(station.source)}; ${station.startYear}–${station.endYear}; ${esc(station.fetchedOn)}. ${esc(t('station.choice'))}: ${esc(t(`station.choice.${w.climateChoice}`))}. ${esc(t('station.note'))}</p>`,
-      );
-    }
-    parts.push(`<p class="small">${esc(t('waves.note'))}</p>`);
-  }
+  parts.push(...waveScreeningParts(project, layout.piers, language));
 
   // D52: AS 3962-2001 advisory checks.
   const asNotes = as3962NotesFor(project, layout, model?.choices.pontoonFreeboard ?? null);
@@ -527,9 +367,5 @@ export function buildReportHtml(input: ReportInput): string {
     );
   }
 
-  // The disclaimer is a fixed footer on every printed page; the repeated table footer keeps
-  // its space free so that no content runs under it.
-  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><title>${esc(project.name || t('app.title'))} – ${esc(t('report.title'))}</title><style>${STYLE}</style></head><body><div class="foot">${esc(
-    t('app.disclaimer'),
-  )}</div><table class="pages"><tfoot><tr><td><div class="space"></div></td></tr></tfoot><tbody><tr><td>${parts.join('\n')}</td></tr></tbody></table></body></html>`;
+  return printDocument(language, `${project.name || t('app.title')} – ${t('report.title')}`, parts.join('\n'));
 }
