@@ -131,7 +131,9 @@ export type ToolId =
   | 'measure'
   | 'calibrate'
   /** U34: click a point to look up the detailed plan area there (City of Helsinki). */
-  | 'plan';
+  | 'plan'
+  /** U35: click the point of the wave screening. */
+  | 'wavePoint';
 
 export type Selection = { kind: 'pier' | 'berth'; id: string } | null;
 

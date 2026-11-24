@@ -19,6 +19,7 @@ import { appStore, useAppStore, type LayerId, type Selection, type ToolId } from
 import { latLonToLocal } from '../../state/geo';
 import { mapAttributions } from '../../state/helsinki';
 import { pickPlanAt } from '../tools/planPick';
+import { pickWavePoint } from '../tools/wavePoint';
 import { gridStep, panBy, scaleBar, screenToWorld, visibleBounds, worldToScreen, zoomAt, type Size, type View } from '../../state/view';
 import { loadImage, registerStage } from '../export/download';
 import { formatLength } from '../format';
@@ -211,6 +212,24 @@ function EquipmentShapes() {
           <Rect key={x.id} x={x.at.x - 0.45} y={x.at.y - 0.45} width={0.9} height={0.9} fill={COLORS.pedestal} stroke="#ffffff" strokeWidth={1} strokeScaleEnabled={false} listening={false} />
         ),
       )}
+    </>
+  );
+}
+
+/** U35: the point of the wave screening (an entered position), while the wave panel or the fetch rays are shown. */
+function WavePointMark() {
+  const map = useAppStore((s) => s.project.map);
+  const location = useAppStore((s) => s.project.waves.location);
+  const shown = useAppStore((s) => s.waveToolOpen || s.layers.fetch);
+  const zoom = useAppStore((s) => s.view.zoom);
+  if (!map || !location || !shown) return null;
+  const p = latLonToLocal(map, location.lat, location.lon);
+  const px = 1 / zoom;
+  return (
+    <>
+      <Circle x={p.x} y={p.y} radius={9 * px} stroke="#0369a1" strokeWidth={2 * px} fill="rgba(255,255,255,0.7)" listening={false} />
+      <Line points={[p.x - 14 * px, p.y, p.x + 14 * px, p.y]} stroke="#0369a1" strokeWidth={1.5 * px} listening={false} />
+      <Line points={[p.x, p.y - 14 * px, p.x, p.y + 14 * px]} stroke="#0369a1" strokeWidth={1.5 * px} listening={false} />
     </>
   );
 }
@@ -665,6 +684,8 @@ export function MarinaCanvas() {
     if (s.tool === 'select') {
       const name = e.target.name();
       if (name !== 'pier' && name !== 'berth') s.select(null);
+    } else if (s.tool === 'wavePoint' && e.evt.button === 0) {
+      pickWavePoint(toWorld(screen));
     } else if (s.tool === 'plan' && e.evt.button === 0) {
       void pickPlanAt(toWorld(screen));
     } else if (DRAWING_TOOLS.includes(s.tool) && e.evt.button === 0) {
@@ -703,7 +724,7 @@ export function MarinaCanvas() {
       ref={containerRef}
       data-testid="canvas"
       className="relative h-full w-full overflow-hidden bg-white"
-      style={{ cursor: drawing || tool === 'plan' ? 'crosshair' : tool === 'edit' ? 'default' : 'grab' }}
+      style={{ cursor: drawing || tool === 'plan' || tool === 'wavePoint' ? 'crosshair' : tool === 'edit' ? 'default' : 'grab' }}
     >
       <Stage
         ref={stageRef}
@@ -756,6 +777,7 @@ export function MarinaCanvas() {
             {layout && layers.equipment && <EquipmentShapes />}
             {layers.fetch && <FetchRays />}
             <PlanOutline />
+            <WavePointMark />
           </Group>
         </Layer>
 

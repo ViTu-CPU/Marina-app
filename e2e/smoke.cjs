@@ -799,7 +799,7 @@ async function waitForServer() {
       await page.getByText('Anchoring parameters', { exact: true }).click();
     });
 
-    await step('Helsinki base map and detailed plan; a detailed-plan area as the site (U34)', async () => {
+    await step('Helsinki base map and detailed plan; a detailed-plan area as the site; the wave point clicked on the map (U34, U35)', async () => {
       // kartta.hel.fi mocked: WMS images, and a plan area 60.155–60.165 N, 24.94–24.96 E; the water is
       // the lake of lakeTile (60.14–60.16 N, 24.92–24.99 E), so the plan's water is 60.155–60.16 N.
       const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
@@ -858,6 +858,32 @@ async function waitForServer() {
       assert.equal(await page.getByTestId('site-checklist').locator('[aria-current="step"]').getAttribute('data-step'), 'entrance');
       assert.equal((await state()).project.map.provider, 'helsinki-base');
       await page.screenshot({ path: path.join(outDir, 'helsinki-plan.png') });
+      // U35: the wave point clicked on the map: the centre of the canvas is the view centre.
+      await page.getByRole('button', { name: 'Waves', exact: true }).click();
+      const wavePanel = page.getByTestId('wave-tool');
+      await wavePanel.getByRole('button', { name: 'Pick on the map', exact: true }).click();
+      const cbox = await canvas.boundingBox();
+      await page.mouse.click(cbox.x + cbox.width / 2, cbox.y + cbox.height / 2);
+      await page.waitForFunction(() => window.__marina.getState().project.waves.location !== null);
+      const ws = await page.evaluate(() => {
+        const st = window.__marina.getState();
+        return { loc: st.project.waves.location, map: st.project.map, view: st.view, tool: st.tool };
+      });
+      // Back to local metres with the map's formulas (U15): Web Mercator scaled at the origin.
+      const A = 6378137;
+      const E2 = 0.00669437999014;
+      const rad = (d) => (d * Math.PI) / 180;
+      const my = (lat) => A * Math.log(Math.tan(Math.PI / 4 + rad(lat) / 2));
+      const phi = rad(ws.map.lat);
+      const w = 1 - E2 * Math.sin(phi) ** 2;
+      const lx = A * rad(ws.loc.lon - ws.map.lon) * (Math.cos(phi) / Math.sqrt(w));
+      const ly = (my(ws.loc.lat) - my(ws.map.lat)) * (((1 - E2) * Math.cos(phi)) / w ** 1.5);
+      // Within 2 m (the point is rounded to 1e-5°, and a screen pixel is under a metre here).
+      assert.ok(Math.hypot(lx - ws.view.cx, ly - ws.view.cy) < 2, `wave point ${lx.toFixed(1)}, ${ly.toFixed(1)} vs view centre ${ws.view.cx.toFixed(1)}, ${ws.view.cy.toFixed(1)}`);
+      assert.equal(ws.tool, 'select');
+      await page.waitForFunction(() => document.querySelector('[data-testid="wave-tool"] input[aria-label="Position"]')?.value !== '');
+      assert.equal(await wavePanel.getByLabel('Position', { exact: true }).inputValue(), `${ws.loc.lat.toFixed(5)}, ${ws.loc.lon.toFixed(5)}`);
+      await wavePanel.getByRole('button', { name: 'Close', exact: true }).click();
       await page.unroute('https://kartta.hel.fi/ws/geoserver/avoindata/wms?**');
       await page.unroute('https://kartta.hel.fi/ws/geoserver/avoindata/wfs?**');
       await page.unroute('https://tiles.versatiles.org/tiles/osm/**');

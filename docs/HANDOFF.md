@@ -18,7 +18,7 @@ mainista uuteen haaraan.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D66, I127, U35**).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D66, I127, U36**).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
   (vahvistettu, D54): aallonkorkeudet 2 desimaalilla.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
@@ -92,7 +92,7 @@ Sama haara. UI_REVIEW-kohdat 1–10 toteutettu (U30–U33): aaltopaneeli kartan 
 vaihein, Export-valikko, tarkistuslista, aloitusvalinta, tulokset välilehdillä ja karttatasojen
 esiasetukset. Helsingin avoin karttadata (U34): pohjakartat, ajantasa-asemakaava ja kaava-alueen
 valinta suunnittelualueeksi (kartta.hel.fi WMS/WFS, CC BY 4.0). Ympäristöön lisättiin
-kartta.hel.fi, www.hel.fi ja hri.fi. Testit 575/575, e2e 23 vaihetta.
+kartta.hel.fi, www.hel.fi ja hri.fi. Julkaistu PR #8:lla. 2026-11-24: aaltopisteen valinta kartalta (U35). Testit 578/578, e2e 23 vaihetta.
 
 Avoimet kysymykset omistajalle:
 1. Mistä saadaan 30 s mitoitustuuli (speksin TODO)?

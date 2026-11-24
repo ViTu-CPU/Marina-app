@@ -74,8 +74,18 @@ function PositionSection() {
   const t = useT();
   const waves = useAppStore((s) => s.project.waves);
   const map = useAppStore((s) => s.project.map);
+  const picking = useAppStore((s) => s.tool === 'wavePoint');
   const { position, siteCentre } = useSitePosition();
   const [text, setText] = useState('');
+  // U35: a point picked on the map shows in the field like a typed one.
+  const location = waves.location;
+  useEffect(() => {
+    if (!location) return;
+    setText((current) => {
+      const typed = parseLatLon(current);
+      return typed && Math.abs(typed.lat - location.lat) < 1e-9 && Math.abs(typed.lon - location.lon) < 1e-9 ? current : `${location.lat.toFixed(5)}, ${location.lon.toFixed(5)}`;
+    });
+  }, [location]);
   return (
     <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
@@ -94,6 +104,10 @@ function PositionSection() {
             }}
           />
         </label>
+        {/* U35: or click the point on the map. */}
+        <Button active={picking} disabled={!map} title={map ? t('waves.pickHint') : t('waves.pickNeedsMap')} onClick={() => state().setTool(picking ? 'select' : 'wavePoint')}>
+          {t('waves.pickOnMap')}
+        </Button>
         <span className="text-xs text-slate-500">{waves.location ? t('wind.positionEntered') : siteCentre ? t('wind.positionSite') : t('wind.positionNone')}</span>
         {/* A wave study alone has no map yet: put one under the position so that the fetch rays can be drawn. */}
         {!map && waves.location && (
@@ -113,6 +127,12 @@ function PositionSection() {
           </Button>
         )}
       </div>
+      {picking && (
+        <p role="status" className="text-xs font-medium text-sky-800">
+          {t('waves.pickHint')}
+        </p>
+      )}
+      {!map && <p className="text-xs text-slate-500">{t('waves.pickNeedsMap')}</p>}
       <p className="text-xs text-slate-500">{t('waves.positionHint')}</p>
     </div>
   );
