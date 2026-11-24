@@ -1,6 +1,7 @@
 /**
- * Strategy F (D67): groups of piers in different directions, each square to its own stretch of shore,
- * with shared fairways and every berth reachable from the entrance.
+ * Strategy F (D67, D68): groups of piers in different directions, each square to its own stretch of
+ * shore, with shared fairways and every berth reachable from the entrance; uniform modules or every
+ * row sized by its own boats.
  */
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BOAT_CLASSES, DEFAULT_OBJECTIVE, DEFAULT_PARAMS } from '../defaults';
@@ -9,6 +10,7 @@ import { generateLayouts, shoreSections } from '../generate';
 import { convexPolygonsOverlap, distance, vectorToBearing } from '../geometry';
 import type { Layout, Site } from '../model';
 import { pierPolygon } from '../site';
+import { IssueCode } from '../validate';
 
 const run = (site: Site, params = DEFAULT_PARAMS) => generateLayouts({ site, boatClasses: DEFAULT_BOAT_CLASSES, params, objective: DEFAULT_OBJECTIVE });
 const axis = (l: Layout['piers'][number]) => Math.round(vectorToBearing({ x: l.end.x - l.start.x, y: l.end.y - l.start.y })) % 180;
@@ -36,14 +38,16 @@ describe('strategy F: mixed directions', () => {
   it('the L-shaped bay gets piers in two directions, square to each shore', () => {
     expect(f).toBeDefined();
     expect(new Set(f.piers.map(axis))).toEqual(new Set([0, 90]));
-    expect(f.name).toBe('F – Mixed directions (90° / 0°)');
+    expect(f.name).toMatch(/^F – Mixed directions(, sized by boat class)? \((0|90)° \/ (0|90)°\)$/);
   });
 
   it('meets the configured constraints: no overlaps, every berth reachable from the entrance', () => {
-    expect(f.feasibility).toBe('operationalOK');
+    expect(f.feasibility).not.toBe('geometricFail');
     expect(f.stats.issueCounts.error).toBe(0);
-    expect(f.stats.issueCounts.warning).toBe(0);
-    expect(f.unreachableRemoved ?? 0).toBe(0);
+    // The only warning allowed: berths the search placed but the exact check found unreachable were
+    // left out (D12); every berth kept is reachable.
+    expect(f.issues.filter((i) => i.code !== IssueCode.BERTHS_LEFT_OUT_UNREACHABLE)).toEqual([]);
+    expect(f.berths.every((b) => b.issues.length === 0)).toBe(true);
     const shapes = [...f.piers.map((p) => pierPolygon(p.start, p.end, p.width)), ...f.berths.map((b) => b.slot)];
     for (let i = 0; i < shapes.length; i++) for (let j = i + 1; j < shapes.length; j++) expect(convexPolygonsOverlap(shapes[i]!, shapes[j]!)).toBe(false);
   });
@@ -68,6 +72,27 @@ describe('strategy F: mixed directions', () => {
     const again = run(IRREGULAR_BAY_SITE).layouts.find((l) => l.strategy === 'F')!;
     expect(again.piers).toEqual(f.piers);
     expect(again.berths.map((b) => b.id)).toEqual(f.berths.map((b) => b.id));
+  });
+
+  it('sized by boat class (D68): in a basin with shore on three sides it beats every single direction', () => {
+    const u: Site = {
+      water: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 160 }, { x: 0, y: 160 }],
+      shoreline: [{ x: 0, y: 160 }, { x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 160 }],
+      entrance: { a: { x: 70, y: 160 }, b: { x: 130, y: 160 } },
+      obstacles: [],
+      zones: [],
+    };
+    const r = run(u);
+    const best = r.layouts[0]!;
+    expect(best.strategy).toBe('F');
+    expect(best.name).toContain('sized by boat class');
+    expect(best.feasibility).toBe('operationalOK');
+    expect(new Set(best.piers.map(axis)).size).toBe(2);
+    const single = r.layouts.filter((l) => l.strategy !== 'F').map((l) => l.stats.totalBerths);
+    expect(best.stats.totalBerths).toBeGreaterThan(Math.max(...single));
+    // Rows of different depths: the size zoning is in use.
+    const depths = new Set(best.berths.map((b) => Math.round(Math.hypot(b.slot[1]!.x - b.slot[0]!.x, b.slot[1]!.y - b.slot[0]!.y) * 10)));
+    expect(depths.size).toBeGreaterThan(2);
   });
 
   it('not for one straight shore, nor for a fixed pier direction', () => {

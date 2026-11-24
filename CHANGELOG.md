@@ -3,6 +3,14 @@
 Notable changes to Marina Layout Planner. Decisions and assumptions behind each change are in
 [docs/DECISIONS.md](docs/DECISIONS.md); earlier changes are in the git history and in DECISIONS.
 
+## 2026-11-24 — Mixed directions sized by boat class (D68); anchors near land on blocks
+
+### Changed
+- Strategy F sizes every row by its own boats where it can (as E): large boats in one group, the
+  smaller ones in the other direction. Test basins: U-shaped 344 berths (best single direction 298),
+  wide L 732 (E 577).
+- An anchor that would lie on land now goes to a concrete block at the foot of the wall by default.
+
 ## 2026-11-24 — Piers in more than one direction (D67)
 
 ### Added

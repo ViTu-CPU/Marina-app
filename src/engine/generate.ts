@@ -205,6 +205,8 @@ interface Candidate {
   angle: number;
   /** Strategy F: the pier directions of its groups, in the order they were placed, degrees. */
   angles?: number[];
+  /** Strategy F: the groups are sized by boat class (D68). */
+  zoned?: boolean;
   piers: CandidatePier[];
   /** Berths that can be reached from the entrance (estimated on the reach grid). */
   berths: number;
@@ -837,6 +839,35 @@ interface GroupChoice {
   candidate: Candidate;
 }
 
+/**
+ * Which piers a family accepts, and its band across the piers (the lateral axis of `bestGroup`
+ * and `sizeZonedLayout` with direction +1), m.
+ */
+function familyFilter(ctx: SearchContext, family: PierFamily): { keep?: (segment: PierSegment) => boolean; band: [number, number] | null } {
+  // A pier belongs to a section when its shore end lies within the gangway gap (plus the pier
+  // width for an oblique shore) of it.
+  const near = ctx.params.shoreGap + ctx.params.mainPierWidth + SHORE_TOLERANCE;
+  const dir = bearingToVector(family.angle);
+  const lateral = { x: dir.y, y: -dir.x };
+  let band: [number, number] | null = null;
+  if (family.section && family.band) {
+    const us = family.section.points.map((p) => dot(p, lateral));
+    const lo = Math.min(...us);
+    const hi = Math.max(...us);
+    band = [lo + family.band[0] * (hi - lo) - EPS, lo + family.band[1] * (hi - lo) + EPS];
+  }
+  const range = band;
+  const keep = family.section
+    ? (segment: PierSegment) => {
+        if (distancePointToPolyline(segment.start, family.section!.points) > near) return false;
+        if (!range) return true;
+        const u = dot(segment.start, lateral);
+        return u >= range[0] && u <= range[1];
+      }
+    : undefined;
+  return { ...(keep ? { keep } : {}), band };
+}
+
 /** The best offset for a group of `family` after `placed`, judged on the whole layout. */
 function bestGroup(
   ctx: SearchContext,
@@ -847,27 +878,8 @@ function bestGroup(
   placements: Map<string, PierSegment[]>,
   step: number,
 ): GroupChoice | null {
-  const { params, design } = ctx;
-  // A pier belongs to a section when its shore end lies within the gangway gap (plus the pier
-  // width for an oblique shore) of it.
-  const near = params.shoreGap + params.mainPierWidth + SHORE_TOLERANCE;
-  const dir = bearingToVector(family.angle);
-  const lateral = { x: dir.y, y: -dir.x };
-  let band: [number, number] | null = null;
-  if (family.section && family.band) {
-    const us = family.section.points.map((p) => dot(p, lateral));
-    const lo = Math.min(...us);
-    const hi = Math.max(...us);
-    band = [lo + family.band[0] * (hi - lo) - EPS, lo + family.band[1] * (hi - lo) + EPS];
-  }
-  const keep = family.section
-    ? (segment: PierSegment) => {
-        if (distancePointToPolyline(segment.start, family.section!.points) > near) return false;
-        if (!band) return true;
-        const u = dot(segment.start, lateral);
-        return u >= band[0] && u <= band[1];
-      }
-    : undefined;
+  const { design } = ctx;
+  const { keep } = familyFilter(ctx, family);
   let best: GroupChoice | null = null;
   for (let offset = 0; offset < design.pitch; offset += step) {
     const mix = cloneMix(mixIn);
@@ -961,6 +973,153 @@ function bestMixed(base: SearchContext): Candidate[] {
 }
 
 // ---------------------------------------------------------------------------
+// Strategy F with size zoning (D68)
+// ---------------------------------------------------------------------------
+
+/** Offset step of the size-zoned groups' search, m. */
+const ZONED_MIXED_STEP = 6;
+/**
+ * The size-zoned groups are searched asking for this many times the berths of the best
+ * one-direction layout (more than fit, to rank the offsets, as E does). Measured on four test
+ * basins (L-shaped bay, U, corner, wide L) with 1, 1.25, 1.5 and 2: 1.25 gave the most berths
+ * in all four (I129).
+ */
+const ZONED_MIXED_PROBE = 1.25;
+/** Parts of a stretch of shore the first size-zoned group may take. */
+const ZONED_FIRST_BANDS: [number, number][] = [
+  [0, 1 / 2],
+  [1 / 2, 1],
+];
+/** Fractions of the largest complete total that are tried (see `bestZonedMixed`). */
+const ZONED_MIXED_TOTALS = [1, 0.9, 0.8];
+/** How many of the best first groups (each start) are followed by the search for the second one. */
+const ZONED_MIXED_SHORTLIST = 1;
+
+/**
+ * Strategy F with every row sized by its own boats, as strategy E (D68). The first group is a
+ * size-zoned layout on one half of a stretch of shore, square to it, from the largest boats down; the second, in the
+ * water left free and in the other direction, goes on with the same berth quotas. As in E, the
+ * total is the largest for which every class gets its full share (bisection).
+ */
+function bestZonedMixed(base: SearchContext, reference: number): Candidate | null {
+  if (base.params.orientation !== 'auto') return null;
+  const ctx: SearchContext = base.caps ? { ...base, balanceLastPier: false } : base;
+  const zoned0 = zonedContext(ctx);
+  if (zoned0.zones.length < 2) return null;
+  const largest = zoned0.zones[0]!;
+  const firstModule = ctx.params.mainPierWidth + 2 * largest.depth + largest.fairway;
+  const capLimit = ctx.caps ? Object.values(ctx.caps).reduce((a, b) => a + b, 0) : Infinity;
+  const zonedOf = new Map<SearchContext, ZonedContext>([[ctx, zoned0]]);
+  const zonedFor = (c: SearchContext): ZonedContext => {
+    let z = zonedOf.get(c);
+    if (!z) zonedOf.set(c, (z = zonedContext(c)));
+    return z;
+  };
+  const quotaMix = (total: number): MixState => ({ ...newMixState(zoned0.classes), quota: apportion(total, zoned0.classes) });
+
+  interface Plan {
+    first: PierFamily;
+    one: Omit<ZonedOptions, 'total' | 'order'>;
+    two: Omit<ZonedOptions, 'total' | 'order'> | null;
+  }
+  /** Both groups for `total` berths; the second only if the first leaves quota. */
+  const build = (plan: Plan, total: number, order: boolean) => {
+    const mix = quotaMix(total);
+    const one = sizeZonedLayout(ctx, zoned0, { ...plan.one, total, order }, mix).piers;
+    let two: CandidatePier[] = [];
+    if (plan.two && mix.total < total) {
+      const c2 = contextAfter(ctx, one);
+      two = sizeZonedLayout(c2, zonedFor(c2), { ...plan.two, total, order }, mix).piers;
+    }
+    return { one, two, placed: mix.total };
+  };
+
+  let best: Candidate | null = null;
+  const sections = shoreSections(ctx.prepared.site.shoreline);
+  const angles: number[] = [];
+  for (const section of sections) {
+    const a = normalizeAxis(section.bearing + 90);
+    if (!angles.some((x) => axisDifference(x, a) < SAME_DIRECTION)) angles.push(a);
+  }
+  if (angles.length < 2) return null;
+  const firsts: PierFamily[] = sections.flatMap((section) =>
+    ZONED_FIRST_BANDS.map((band) => ({ angle: normalizeAxis(section.bearing + 90), section, band })),
+  );
+  for (const first of firsts) {
+    const others = angles.filter((a) => axisDifference(a, first.angle) >= SAME_DIRECTION);
+    if (others.length === 0) continue;
+    const { keep, band } = familyFilter(ctx, first);
+    // Ask for more berths than fit, to rank the start offsets (as E does).
+    const probe = Math.min(capLimit, Math.ceil(reference * ZONED_MIXED_PROBE) + 10);
+    const ones: { one: Plan['one']; reached: number; mix: MixState; piers: CandidatePier[] }[] = [];
+    for (const direction of [1, -1] as const) {
+      const range: [number, number] | undefined = band ? (direction === 1 ? band : [-band[1], -band[0]]) : undefined;
+      for (let offset = ctx.params.mainPierWidth / 2; offset < firstModule; offset += ZONED_MIXED_STEP) {
+        const one = { angle: first.angle, direction, head: 'own' as const, offset, ...(range ? { range } : {}), ...(keep ? { keep } : {}) };
+        const mix = quotaMix(probe);
+        const piers = sizeZonedLayout(ctx, zoned0, { ...one, total: probe, order: false }, mix).piers;
+        if (piers.length > 0) ones.push({ one, reached: summarize(ctx, 'F', first.angle, piers).berths, mix, piers });
+      }
+    }
+    ones.sort((x, y) => y.reached - x.reached);
+    let bestPlan: { plan: Plan; placed: number; reached: number } | null = null;
+    for (const o of ones.slice(0, ZONED_MIXED_SHORTLIST)) {
+      const c2 = contextAfter(ctx, o.piers);
+      for (const angle of others) {
+        for (const direction of [1, -1] as const) {
+          for (let offset = ctx.params.mainPierWidth / 2; offset < firstModule; offset += ZONED_MIXED_STEP) {
+            const two = { angle, direction, head: 'own' as const, offset };
+            const mix = cloneMix(o.mix);
+            const piers = sizeZonedLayout(c2, zonedFor(c2), { ...two, total: probe, order: false }, mix).piers;
+            if (piers.length === 0) continue;
+            // Judged by the berths that can be reached: the second group must not wall off the first.
+            const reached = summarize(ctx, 'F', first.angle, [...o.piers, ...piers]).berths;
+            if (!bestPlan || reached > bestPlan.reached) bestPlan = { plan: { first, one: o.one, two }, placed: mix.total, reached };
+          }
+        }
+      }
+    }
+    if (!bestPlan) continue;
+    // The largest total for which every class gets its full share.
+    const complete = (total: number) => build(bestPlan!.plan, total, false).placed === total;
+    let high = Math.min(probe, bestPlan.placed);
+    // Start the bisection near the berths the search placed; below that only if it must.
+    let low = Math.floor(high * 0.6);
+    if (low > 0 && !complete(low)) low = 0;
+    if (complete(high)) low = high;
+    else {
+      while (high - low > 1) {
+        const mid = (low + high) >> 1;
+        if (complete(mid)) low = mid;
+        else high = mid;
+      }
+    }
+    if (low <= 0) continue;
+    const plan = bestPlan.plan;
+    // Asking for fewer berths can leave a fairway open that the full total closes: a few
+    // totals below the largest complete one are tried and the one reaching most berths kept.
+    let chosen: { total: number; built: ReturnType<typeof build>; candidate: Candidate } | null = null;
+    for (const k of ZONED_MIXED_TOTALS) {
+      const total = Math.max(1, Math.floor(low * k));
+      const built = build(plan, total, false);
+      if (built.two.length === 0) continue; // one direction only: that is strategy E
+      const candidate = summarize(ctx, 'F', first.angle, [...built.one, ...built.two]);
+      if (!chosen || better(candidate, chosen.candidate, ctx.objective)) chosen = { total, built, candidate };
+    }
+    if (!chosen) continue;
+    const { total, candidate } = chosen;
+    candidate.angles = [first.angle, plan.two!.angle];
+    candidate.zoned = true;
+    candidate.rebuild = () => {
+      const again = build(plan, total, true);
+      return [...again.one, ...again.two];
+    };
+    if (better(candidate, best, ctx.objective)) best = candidate;
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------------------
 // Strategy E: piers sized by boat class
 // ---------------------------------------------------------------------------
 
@@ -991,6 +1150,10 @@ interface ZonedOptions {
   total: number;
   /** Order the runs by boat length (final layout) or not (search). */
   order: boolean;
+  /** D68: only pier lines within this range of the forward axis, m (the offset counts from its start). */
+  range?: [number, number];
+  /** D68: only the piers this accepts (e.g. those starting from one stretch of shore). */
+  keep?: (segment: PierSegment) => boolean;
 }
 
 /**
@@ -1006,14 +1169,22 @@ interface ZonedOptions {
  * Because sizes only go down along the way, the fairway in front of a row is always
  * decided by the row placed before it, which is already known.
  */
-function sizeZonedLayout(ctx: SearchContext, zoned: ZonedContext, options: ZonedOptions): { piers: CandidatePier[]; placed: number } {
+function sizeZonedLayout(
+  ctx: SearchContext,
+  zoned: ZonedContext,
+  options: ZonedOptions,
+  /** D68: continue the quotas of an earlier group (updated in place); `total` is then not used. */
+  shared?: MixState,
+): { piers: CandidatePier[]; placed: number } {
   const { prepared, params } = ctx;
   const { classes } = zoned;
   const width = params.mainPierWidth;
   const dir = bearingToVector(options.angle);
   const forward = scale({ x: dir.y, y: -dir.x }, options.direction);
-  const { min, max } = extentAlong(prepared.site, forward);
-  const mix: MixState = { ...newMixState(classes), quota: apportion(options.total, classes) };
+  const extent = extentAlong(prepared.site, forward);
+  const min = options.range ? options.range[0] : extent.min;
+  const max = options.range ? Math.min(options.range[1], extent.max) : extent.max;
+  const mix: MixState = shared ?? { ...newMixState(classes), quota: apportion(options.total, classes) };
   const nextClass = (): ZoneClass | undefined => zoned.zones.find((z) => (mix.counts[z.boat.id] ?? 0) < (mix.quota![z.boat.id] ?? 0));
 
   const piers: CandidatePier[] = [];
@@ -1040,6 +1211,7 @@ function sizeZonedLayout(ctx: SearchContext, zoned: ZonedContext, options: Zoned
     let placedHere = false;
     for (const raw of segments) {
       let segment: PierSegment = { start: roundVec(raw.start), end: roundVec(raw.end) };
+      if (options.keep && !options.keep(segment)) continue;
       const along = scale(sub(segment.end, segment.start), 1 / distance(segment.start, segment.end));
       // Which side of this pier looks forward depends on which way the pier runs.
       const frontSide: PierSide = dot({ x: -along.y, y: along.x }, forward) > 0 ? 'left' : 'right';
@@ -1137,6 +1309,7 @@ function zonedContext(ctx: SearchContext): ZonedContext {
           design: { rowDepth: zone.depth, fairwayWidth: fairway, pitch: 0, minBayFootprint: zone.minFootprint },
           orderRuns: order,
           maxBoatLength: zone.boat.length,
+          ...(ctx.fill.noBerths ? { noBerths: ctx.fill.noBerths } : {}),
         };
         cache.set(key, context);
       }
@@ -1262,7 +1435,7 @@ const STRATEGY_NAME: Record<StrategyId, (c: Candidate) => string> = {
   C: (c) => `C – Best orientation (${fmtAngle(c.angle)})`,
   D: () => 'D – Shore-parallel pier',
   E: () => 'E – Piers sized by boat class',
-  F: (c) => `F – Mixed directions (${(c.angles ?? [c.angle]).map(fmtAngle).join(' / ')})`,
+  F: (c) => `F – Mixed directions${c.zoned ? ', sized by boat class' : ''} (${(c.angles ?? [c.angle]).map(fmtAngle).join(' / ')})`,
 };
 
 /**
@@ -1467,7 +1640,11 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = pa
   const e = process.env.MARINA_NO_E ? null : bestSizeZoned(ctx, orientations.shorePerpendicular);
   if (e) pool.push(e);
   // F: groups of piers in different directions, each square to its own stretch of shore.
-  pool.push(...bestMixed(ctx));
+  // F with every row sized by its own boats (D68); with uniform modules (D67) where that gives
+  // nothing (e.g. one boat class). Asked for twice the berths of the best one-direction layout.
+  const zonedMixed = bestZonedMixed(ctx, Math.max(0, ...pool.map((c) => c.berths)));
+  if (zonedMixed) pool.push(zonedMixed);
+  else pool.push(...bestMixed(ctx));
 
   if (pool.length === 0) return { layouts: [], diagnostics: explainEmpty(ctx) };
 
