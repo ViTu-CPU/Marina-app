@@ -13,7 +13,8 @@ import {
   tileZoomFor,
 } from '../geo';
 import { parseProject, serializeProject } from '../projectFile';
-import { createAppStore } from '../store';
+import { createAppStore, emptyProject, withStartMap } from '../store';
+import { DEFAULT_START_MAP } from '../../engine/defaults';
 
 const HELSINKI = { lat: 60, lon: 25 };
 
@@ -164,5 +165,31 @@ describe('map background in the project', () => {
     store.getState().generate();
     store.getState().setMap({ provider: 'osm', lat: 60.15, lon: 24.95, opacity: 0.7 });
     expect(needsRegeneration(store.getState().project)).toBe(false);
+  });
+});
+
+describe('start map (U36)', () => {
+  it('a new project opens on OpenStreetMap at Senate Square, Helsinki', () => {
+    const store = createAppStore();
+    const map = store.getState().project.map!;
+    expect([map.provider, map.lat, map.lon, map.startMap]).toEqual(['osm', 60.16944, 24.9525, true]);
+    // A new project from the toolbar too.
+    store.getState().setMap(null);
+    store.getState().newProject();
+    expect(store.getState().project.map).toEqual(DEFAULT_START_MAP);
+  });
+
+  it('is kept in the project file', () => {
+    const parsed = parseProject(serializeProject(emptyProject()));
+    expect(parsed.ok && parsed.project.map).toEqual(DEFAULT_START_MAP);
+  });
+
+  it('an autosaved project with nothing drawn gets the start map; others are left as they are', () => {
+    const blank = { ...emptyProject(), map: null };
+    expect(withStartMap(blank).map).toEqual(DEFAULT_START_MAP);
+    const demo = DEMO_PROJECTS[0]!.create();
+    expect(withStartMap(demo)).toBe(demo);
+    const withImage = { ...blank, background: { dataUrl: 'data:image/png;base64,', origin: { x: 0, y: 0 }, metresPerPixel: 1, rotation: 0, opacity: 1 } };
+    expect(withStartMap(withImage)).toBe(withImage);
   });
 });

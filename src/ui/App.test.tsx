@@ -348,6 +348,8 @@ describe('wave panel and start choice (UI_REVIEW 4, 5)', () => {
 describe('wave point on the map (U35)', () => {
   it('"Pick on the map" needs a map; a picked point shows in the position field', () => {
     renderShell();
+    // U36: a new project opens on the start map, on which a point can be picked too; remove it first.
+    act(() => appStore.getState().setMap(null));
     act(() => appStore.getState().setWaveToolOpen(true));
     const panel = screen.getByTestId('wave-tool');
     const pick = within(panel).getByRole('button', { name: 'Pick on the map' }) as HTMLButtonElement;

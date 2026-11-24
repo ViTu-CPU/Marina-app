@@ -389,7 +389,9 @@ function BackgroundSection() {
       const s = state();
       // Start with the image filling most of the current view; calibration sets the real scale.
       const widthMetres = (s.viewport.width * 0.8) / s.view.zoom;
-      s.setBackground(placeBackground(dataUrl, { width: image.width, height: image.height }, { x: s.view.cx, y: s.view.cy }, widthMetres));
+      const placed = placeBackground(dataUrl, { width: image.width, height: image.height }, { x: s.view.cx, y: s.view.cy }, widthMetres);
+      // U36: an image replaces the online map (one undo step); the map can be shown again above.
+      s.commit((p) => ({ ...p, background: placed, map: null }));
     } catch {
       state().setNotice('The image could not be read.');
     }

@@ -3,6 +3,12 @@
 Notable changes to Marina Layout Planner. Decisions and assumptions behind each change are in
 [docs/DECISIONS.md](docs/DECISIONS.md); earlier changes are in the git history and in DECISIONS.
 
+## 2026-11-24 — Start map (U36)
+
+### Changed
+- A new project opens on **OpenStreetMap at the centre of Helsinki** (Senate Square); draw the site
+  straight on it. Loading a background image replaces the map.
+
 ## 2026-11-24 — Wave point clicked on the map (U35)
 
 ### Added

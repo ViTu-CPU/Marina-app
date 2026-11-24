@@ -7,6 +7,8 @@ export function useSitePosition(): { position: { lat: number; lon: number } | nu
   const location = useAppStore((s) => s.project.waves.location);
   const map = useAppStore((s) => s.project.map);
   const water = useAppStore((s) => s.project.site.water);
-  const siteCentre = map ? localToLatLon(map, water.length >= 3 ? centroid(water) : { x: 0, y: 0 }) : null;
+  // U36: the start map is not a site yet: it gives a position only once the water area is drawn on it.
+  const placed = map !== null && (!map.startMap || water.length >= 3);
+  const siteCentre = map && placed ? localToLatLon(map, water.length >= 3 ? centroid(water) : { x: 0, y: 0 }) : null;
   return { position: location ?? siteCentre, siteCentre };
 }

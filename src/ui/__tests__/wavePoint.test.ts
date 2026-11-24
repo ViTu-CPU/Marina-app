@@ -7,6 +7,8 @@ beforeEach(() => appStore.getState().replaceProject(emptyProject()));
 
 describe('wave point picked on the map (U35)', () => {
   it('without a map nothing is set', () => {
+    // U36: a new project has the start map; remove it.
+    appStore.getState().setMap(null);
     expect(pickWavePoint({ x: 10, y: 10 })).toBe(false);
     expect(appStore.getState().project.waves.location).toBeNull();
   });

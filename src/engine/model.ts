@@ -371,6 +371,11 @@ export interface MapBackground {
   opacity: number;
   /** U34: the City of Helsinki up-to-date detailed plan drawn over the base map. */
   planOverlay?: boolean;
+  /**
+   * U36: the map a new project opens with (Helsinki centre, `DEFAULT_START_MAP`), not yet placed
+   * on a site. Until a water area is drawn on it, it gives no site position to the lookups.
+   */
+  startMap?: boolean;
 }
 
 /**

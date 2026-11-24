@@ -15,7 +15,7 @@ import { pierAxis } from '../engine/rows';
 import type { PlanArea } from './helsinki';
 import type { Region } from '../engine/geometry';
 import type { PriceList } from '../engine/catalog';
-import { DEFAULT_BOAT_CLASSES, DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS, DEFAULT_SITE_DEPTH } from '../engine/defaults';
+import { DEFAULT_BOAT_CLASSES, DEFAULT_COST, DEFAULT_OBJECTIVE, DEFAULT_PARAMS, DEFAULT_SITE_DEPTH, DEFAULT_START_MAP } from '../engine/defaults';
 import { DEMO_PROJECTS, type DemoEntry } from '../engine/demos';
 import {
   addPier,
@@ -55,9 +55,12 @@ import { rankLayouts, scoreLayouts } from '../engine/score';
 import { prepareSite, type PreparedSite } from '../engine/site';
 import type { Language } from '../i18n';
 import { parseProject } from './projectFile';
-import { DEFAULT_VIEW, fitBounds, type Size, type View } from './view';
+import { DEFAULT_VIEW, fitBounds, START_VIEW, type Size, type View } from './view';
 
 /** Everything drawn on the site, as a box; a default area when the site is empty. */
+/** The box shown when nothing is drawn. */
+const EMPTY_BOUNDS: Box = { minX: 0, minY: 0, maxX: 200, maxY: 120 };
+
 export function projectBounds(project: Project): Box {
   const { site } = project;
   const points = [
@@ -68,7 +71,7 @@ export function projectBounds(project: Project): Box {
     ...(site.accessPontoons ?? []).flatMap((p) => [p.start, p.end]),
     ...(site.breakwaters ?? []).flatMap((b) => [b.start, b.end]),
   ];
-  return points.length > 0 ? boundingBox(points) : { minX: 0, minY: 0, maxX: 200, maxY: 120 };
+  return points.length > 0 ? boundingBox(points) : EMPTY_BOUNDS;
 }
 
 /** Number of undo steps kept. */
@@ -148,7 +151,8 @@ export function emptyProject(): Project {
     layouts: [],
     preferredLayoutId: null,
     background: null,
-    map: null,
+    // U36: the OpenStreetMap at the centre of Helsinki; loading an image replaces it.
+    map: { ...DEFAULT_START_MAP },
     anchoring: structuredClone(DEFAULT_ANCHORING),
     cost: { ...DEFAULT_COST },
     waves: structuredClone(DEFAULT_WAVES),
@@ -156,6 +160,15 @@ export function emptyProject(): Project {
     siteDepth: structuredClone(DEFAULT_SITE_DEPTH),
     generatedFrom: null,
   };
+}
+
+/**
+ * U36: a saved project with nothing drawn and no background (e.g. autosaved before U36) opens on
+ * the start map like a new one. Projects with a drawing or a background are left as they are.
+ */
+export function withStartMap(project: Project): Project {
+  if (project.map !== null || project.background !== null || project.site.water.length > 0 || project.layouts.length > 0) return project;
+  return { ...project, map: { ...DEFAULT_START_MAP } };
 }
 
 /**
@@ -404,7 +417,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
     return {
       ...resetSession(initial),
       language: 'en',
-      view: DEFAULT_VIEW,
+      view: initial.map?.startMap && initial.site.water.length === 0 ? START_VIEW : DEFAULT_VIEW,
       viewport: { width: 800, height: 600 },
       obstacleKind: 'rock',
       zoneKind: 'noNavigation',
@@ -443,7 +456,7 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
         get().select(null);
       },
 
-      newProject: () => set(resetSession(emptyProject())),
+      newProject: () => set({ ...resetSession(emptyProject()), view: START_VIEW }),
       loadDemo: (id) => {
         const demo = DEMO_PROJECTS.find((d) => d.id === id);
         if (demo) set(resetSession(demo.create()));
@@ -551,7 +564,12 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
 
       setView: (view) => set({ view }),
       setViewport: (viewport) => set({ viewport }),
-      fitView: () => set((s) => ({ view: fitBounds(projectBounds(s.project), s.viewport) })),
+      fitView: () =>
+        set((s) => {
+          // U36: with nothing drawn on the start map, show the shore around Helsinki centre.
+          const blank = s.project.map?.startMap === true && projectBounds(s.project) === EMPTY_BOUNDS;
+          return { view: blank ? START_VIEW : fitBounds(projectBounds(s.project), s.viewport) };
+        }),
       zoomToBox: (box) => set((s) => ({ view: fitBounds(box, s.viewport, Math.min(s.viewport.width, s.viewport.height) / 3) })),
       setCursor: (cursor) => set({ cursor }),
 

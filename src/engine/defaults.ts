@@ -1,4 +1,4 @@
-import type { BoatClass, CostSettings, ObjectiveSettings, Params, SiteDepthSettings } from './model';
+import type { BoatClass, CostSettings, MapBackground, ObjectiveSettings, Params, SiteDepthSettings } from './model';
 
 /**
  * Default dock and fairway parameters (SPEC §4).
@@ -74,6 +74,13 @@ export const DEFAULT_TOP_N = 5;
  * I121: the anchoring design depth follows the depth lookup around the site position; the rays are
  * 200 m long (Assumption, about the extent of a small marina).
  */
+/**
+ * U36: a new project opens on OpenStreetMap at the centre of Helsinki, Senate Square
+ * (60.16944 N, 24.95250 E: https://en.wikipedia.org/wiki/Senate_Square,_Helsinki, read 2026-11-24;
+ * latlong.net gives 60.169716, 24.952087). The local origin (0, 0) lies there.
+ */
+export const DEFAULT_START_MAP: MapBackground = { provider: 'osm', lat: 60.16944, lon: 24.9525, opacity: 0.8, startMap: true };
+
 export const DEFAULT_SITE_DEPTH: SiteDepthSettings = { auto: true, radius: 200, result: null };
 
 export const DEFAULT_COST: CostSettings = { priceList: null, pontoonSeries: '', fingerSeries: '', boomSeries: '', gangwaySeries: '' };

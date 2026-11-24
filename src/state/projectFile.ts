@@ -344,7 +344,8 @@ function mapBackground(v: unknown): MapBackground | null {
   const opacity = o.opacity === undefined ? 0.8 : num(o.opacity, 'map.opacity');
   const provider = oneOf(o.provider, ['osm', 'helsinki-guide', 'helsinki-base', 'helsinki-ortho'] as const, 'map.provider');
   const planOverlay = o.planOverlay === undefined ? false : o.planOverlay === true;
-  return { provider, lat, lon, opacity: Math.min(1, Math.max(0, opacity)), ...(planOverlay ? { planOverlay } : {}) };
+  const startMap = o.startMap === true;
+  return { provider, lat, lon, opacity: Math.min(1, Math.max(0, opacity)), ...(planOverlay ? { planOverlay } : {}), ...(startMap ? { startMap } : {}) };
 }
 
 /**
