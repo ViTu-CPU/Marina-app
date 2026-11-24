@@ -344,3 +344,20 @@ describe('wave panel and start choice (UI_REVIEW 4, 5)', () => {
     expect(screen.queryByTestId('start-choice')).toBeNull();
   });
 });
+
+describe('wave point on the map (U35)', () => {
+  it('"Pick on the map" needs a map; a picked point shows in the position field', () => {
+    renderShell();
+    act(() => appStore.getState().setWaveToolOpen(true));
+    const panel = screen.getByTestId('wave-tool');
+    const pick = within(panel).getByRole('button', { name: 'Pick on the map' }) as HTMLButtonElement;
+    expect(pick.disabled).toBe(true);
+    act(() => appStore.getState().setMap({ provider: 'osm', lat: 60.15, lon: 24.95, opacity: 0.8 }));
+    expect(pick.disabled).toBe(false);
+    fireEvent.click(pick);
+    expect(appStore.getState().tool).toBe('wavePoint');
+    expect(within(panel).getByRole('status').textContent).toContain('Click the map at the point to study');
+    act(() => appStore.getState().setWaves({ location: { lat: 60.15123, lon: 24.95456 } }));
+    expect((within(panel).getByLabelText('Position') as HTMLInputElement).value).toBe('60.15123, 24.95456');
+  });
+});

@@ -3,6 +3,12 @@
 Notable changes to Marina Layout Planner. Decisions and assumptions behind each change are in
 [docs/DECISIONS.md](docs/DECISIONS.md); earlier changes are in the git history and in DECISIONS.
 
+## 2026-11-24 — Wave point clicked on the map (U35)
+
+### Added
+- Waves, step 1: **"Pick on the map"** sets the point of the wave screening with a click on the map;
+  the point shows as a cross-hair and in the position field.
+
 ## 2026-11-23 — Easier UI; City of Helsinki maps and detailed plans (U30–U34)
 
 ### Added
