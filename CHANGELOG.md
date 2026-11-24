@@ -3,6 +3,13 @@
 Notable changes to Marina Layout Planner. Decisions and assumptions behind each change are in
 [docs/DECISIONS.md](docs/DECISIONS.md); earlier changes are in the git history and in DECISIONS.
 
+## 2026-11-24 — Anchors never on land (D66)
+
+### Changed
+- An anchor is never placed on land (beyond the shoreline or on an island): the chain is fixed to the
+  shore wall where it meets it, or, by choice, goes to a concrete block at the foot of the wall on a
+  shorter chain. Anchors beyond other edges of the water area get a warning to draw the shoreline.
+
 ## 2026-11-24 — Start map (U36)
 
 ### Changed

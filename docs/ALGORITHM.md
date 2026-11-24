@@ -134,6 +134,9 @@ D62–D65, I121–I126; price-list schema in [PRICE_LIST.md](PRICE_LIST.md)):
 5. Anchor (D63, I125): the cheapest concrete block(s) of at most `maxAnchorMass` (5 t) and
    `maxAnchorsPerLine` (1) that hold; otherwise **a pile anchor** at the end of the chain (status
    PILE, the reason "block: needs … kg, max product … kg"), priced only from a `pile` row.
+5a. **No anchor on land** (D66, I127): a leg whose chain would cross the shoreline or an island edge is
+   fixed to the wall where it meets it (default), or goes to a concrete block 1 m from the wall on a
+   chain shortened so the catenary just reaches it; anchors beyond other water-area edges are warned.
 6. Rules (spec §6) as warnings: chain ≥ 5 × depth (FCG / Top Marine) and ≥ 4 × depth, at least
    four anchor points per pontoon, the FCG wave attenuator preset for breakwaters, winter use.
 7. Bill of materials: cheapest module combination per pier, fingers by length, gangways per

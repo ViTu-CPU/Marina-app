@@ -3,7 +3,7 @@
  */
 import { useRef, useState } from 'react';
 import { SEABED_FRICTION, SEABED_KEYS } from '../../engine/mooring';
-import { MAX_SPLAY_ANGLE, MOORING_NOTES, resetAnchoringFactors, type AnchoringParams, type BuoySinkerMethod, type BuoyTableId, type Seabed } from '../../engine/anchoring';
+import { MAX_SPLAY_ANGLE, MOORING_NOTES, resetAnchoringFactors, type AnchoringParams, type BuoySinkerMethod, type BuoyTableId, type LandAnchorFix, type Seabed } from '../../engine/anchoring';
 import { BOM_GROUPS, seriesNames, type BomGroup } from '../../engine/bom';
 import type { Layout } from '../../engine/model';
 import { parsePriceListFile, priceListToXlsx } from '../../catalog/priceList';
@@ -310,6 +310,7 @@ export function AnchoringSection() {
   const seabed = useAppStore((s) => s.project.anchoring.seabed);
   const friction = useAppStore((s) => s.project.anchoring.friction);
   const anchorsPerLine = useAppStore((s) => s.project.anchoring.maxAnchorsPerLine);
+  const landAnchors = useAppStore((s) => s.project.anchoring.landAnchors);
   const winter = useAppStore((s) => s.project.anchoring.winterInWater);
   const capacityFactor = useAppStore((s) => s.project.anchoring.capacityFactor);
   const capacitySource = useAppStore((s) => s.project.anchoring.capacityFactorSource);
@@ -397,6 +398,22 @@ export function AnchoringSection() {
           {[1, 2].map((n) => (
             <option key={n} value={n}>
               {t(n === 1 ? 'anchorsPerLine.1' : 'anchorsPerLine.2')}
+            </option>
+          ))}
+        </select>
+      </label>
+      {/* D66: anchors never lie on land. */}
+      <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+        {t('anchoring.landAnchors')}
+        <select
+          className="min-w-0 rounded border border-slate-300 px-1 py-0.5 text-sm"
+          data-testid="land-anchors"
+          value={landAnchors}
+          onChange={(e) => state().setAnchoring({ landAnchors: e.target.value as LandAnchorFix })}
+        >
+          {(['wall', 'blockAtWall'] as const).map((x) => (
+            <option key={x} value={x}>
+              {t(`landAnchors.${x}`)}
             </option>
           ))}
         </select>

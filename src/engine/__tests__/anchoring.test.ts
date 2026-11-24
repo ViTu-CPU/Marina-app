@@ -14,6 +14,7 @@ import {
   choosePileGuide,
   DEFAULT_ANCHORING,
   evenJoints,
+  landDistance,
   frictionSensitivity,
   MOORING_DISCLAIMER,
   MOORING_NOTES,
@@ -306,8 +307,11 @@ describe('the layout of other legs', () => {
   it('a pier reached by a gangway: two shore chains crossed under it to the wall (D49), holding it towards the head', () => {
     const near: Site = { ...site, shoreline: [{ x: -100, y: -4 }, { x: 100, y: -4 }] };
     const r = plan({}, { site: near });
-    const shore = r.lines.filter((l) => l.fixing === 'wall');
+    const shore = r.lines.filter((l) => l.role === 'shore');
     expect(shore.map((l) => l.id)).toEqual(['P1-S1', 'P1-S2']);
+    // D66: the chains of the first joint splayed towards the shore would reach land: to the wall too.
+    expect(r.lines.filter((l) => l.landed === 'wall').map((l) => l.id)).toEqual(['P1-A5', 'P1-A6']);
+    expect(r.lines.filter((l) => l.landed).every((l) => Math.abs(l.anchor.y + 4) < 1e-6)).toBe(true);
     for (const l of shore) {
       expect(l.anchorKind).toBeNull();
       expect(l.chainLength).toBeCloseTo(4 / Math.SQRT1_2 + 1.5 + 0.9, 9);
@@ -456,5 +460,75 @@ describe('friction sensitivity (D62)', () => {
     expect(s.rows[2]!.maxKg).toBeLessThan(mid.maxKg);
     expect(s.heaviestBlockKg).toBe(5000);
     expect(SOFT_CLAY_NOTE).toBe('Gravity block capacity in soft clay is highly uncertain; requires geotechnical data.');
+  });
+});
+
+describe('anchors never on land (D66)', () => {
+  // A shore wall 10 m east of the pier's centreline: the legs anchored on its right side (east) reach it.
+  const wallSite: Site = { ...site, shoreline: [{ x: 10, y: -40 }, { x: 10, y: 100 }] };
+  // The legs are crossed under the pier: those pointing east are fixed on its west edge.
+  const eastIds = new Set(plan().lines.filter((l) => l.anchor.x > l.fix.x).map((l) => l.id));
+  const east = (r: ReturnType<typeof plan>) => r.lines.filter((l) => eastIds.has(l.id));
+  const west = (r: ReturnType<typeof plan>) => r.lines.filter((l) => !eastIds.has(l.id));
+
+  it('the plan distance to the first shoreline or island edge along a chain', () => {
+    const s = { shoreline: [{ x: 10, y: -10 }, { x: 10, y: 10 }], obstacles: [] };
+    expect(landDistance(s, { x: 0, y: 0 }, { x: 1, y: 0 }, 30)).toBeCloseTo(10, 9);
+    expect(landDistance(s, { x: 0, y: 0 }, { x: 1, y: 0 }, 9)).toBeNull();
+    expect(landDistance(s, { x: 0, y: 0 }, { x: -1, y: 0 }, 30)).toBeNull();
+    const island = { shoreline: [], obstacles: [{ id: 'i', kind: 'island' as const, shape: [{ x: 5, y: -2 }, { x: 8, y: -2 }, { x: 8, y: 2 }, { x: 5, y: 2 }] }] };
+    expect(landDistance(island, { x: 0, y: 0 }, { x: 1, y: 0 }, 30)).toBeCloseTo(5, 9);
+    // A rock is not land.
+    expect(landDistance({ ...island, obstacles: [{ ...island.obstacles[0]!, kind: 'rock' as const }] }, { x: 0, y: 0 }, { x: 1, y: 0 }, 30)).toBeNull();
+  });
+
+  it('without land in the way nothing changes', () => {
+    expect(plan().lines.some((l) => l.landed)).toBe(false);
+    expect(DEFAULT_ANCHORING.landAnchors).toBe('wall');
+  });
+
+  it('default: a chain that would reach land is fixed to the wall where it meets it', () => {
+    const free = plan();
+    const r = plan({}, { site: wallSite });
+    expect(east(free).every((l) => l.anchor.x > 10)).toBe(true);
+    for (const l of east(r)) {
+      expect([l.landed, l.fixing, l.anchorCount, l.anchorKind]).toEqual(['wall', 'wall', 0, null]);
+      expect(l.anchor.x).toBeCloseTo(10, 6);
+      // Straight on in the same direction as before.
+      expect(l.dirDeg).toBeCloseTo(free.lines.find((x) => x.id === l.id)!.dirDeg, 9);
+    }
+    // The other side is left as it was.
+    expect(west(r).map((l) => [l.fixing, l.anchor.x])).toEqual(west(free).map((l) => [l.fixing, l.anchor.x]));
+    expect(codes(r)).toContain('ANCHOR_ON_LAND_TO_WALL');
+    expect(r.lines.every((l) => l.anchor.x <= 10 + 1e-6)).toBe(true);
+  });
+
+  it('or to a concrete block at the foot of the wall on a shortened chain', () => {
+    const r = plan({ landAnchors: 'blockAtWall' }, { site: wallSite });
+    const nominal = chainLengthFor(DEFAULT_ANCHORING.depth + DEFAULT_ANCHORING.highWater, DEFAULT_ANCHORING);
+    for (const l of east(r)) {
+      expect([l.landed, l.fixing]).toEqual(['blockAtWall', 'seabed']);
+      expect(l.anchorCount + (l.status === 'PILE' ? 1 : 0)).toBeGreaterThan(0);
+      // The block lies 1 m from the wall along the chain, in the water.
+      const toWall = (10 - l.fix.x) / Math.cos((45 * Math.PI) / 180);
+      expect(Math.hypot(l.anchor.x - l.fix.x, l.anchor.y - l.fix.y)).toBeCloseTo(toWall - 1, 6);
+      expect(l.anchor.x).toBeLessThan(10);
+      expect(l.chainLength).toBeLessThan(nominal);
+    }
+    expect(codes(r)).toContain('ANCHOR_ON_LAND_TO_BLOCK');
+  });
+
+  it('an anchor beyond another edge of the water area is kept, with a warning to draw the shoreline', () => {
+    expect(codes(plan())).not.toContain('ANCHOR_OUTSIDE_WATER_AREA');
+    const narrow: Site = { ...site, water: [{ x: -8, y: -40 }, { x: 8, y: -40 }, { x: 8, y: 100 }, { x: -8, y: 100 }] };
+    const r = plan({}, { site: narrow });
+    expect(r.lines.some((l) => l.landed)).toBe(false);
+    expect(codes(r)).toContain('ANCHOR_OUTSIDE_WATER_AREA');
+  });
+
+  it('an anchor on an island is moved too', () => {
+    const islandSite: Site = { ...site, obstacles: [{ id: 'isle', kind: 'island', shape: [{ x: 6, y: -40 }, { x: 60, y: -40 }, { x: 60, y: 100 }, { x: 6, y: 100 }] }] };
+    const r = plan({}, { site: islandSite });
+    expect(east(r).every((l) => l.landed === 'wall' && Math.abs(l.anchor.x - 6) < 1e-6)).toBe(true);
   });
 });
