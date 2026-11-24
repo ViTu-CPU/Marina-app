@@ -81,7 +81,8 @@ export async function usePlanArea(use: PlanUse, waterLookup: typeof lookupWaterR
       taken.push(`plan-island-${n}`);
       return { id: `plan-island-${n}`, kind: 'island' as const, shape };
     });
-    return { ...site, water: next.water, shoreline: next.shoreline, entrance: NO_ENTRANCE, obstacles: [...kept, ...islands] };
+    const { shorelines: _old, ...rest } = site;
+    return { ...rest, water: next.water, shoreline: next.shoreline, entrance: NO_ENTRANCE, obstacles: [...kept, ...islands] };
   });
   appStore.getState().fitView();
   return result;

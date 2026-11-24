@@ -23,6 +23,9 @@ export const MAX_ZOOM = 400;
 
 export const DEFAULT_VIEW: View = { cx: 0, cy: 0, zoom: 4 };
 
+/** U36: the view over the start map: 1 px per metre, so that the shore around the centre shows. */
+export const START_VIEW: View = { cx: 0, cy: 0, zoom: 1 };
+
 export const worldToScreen = (view: View, size: Size, p: Vec2): Vec2 => ({
   x: (p.x - view.cx) * view.zoom + size.width / 2,
   y: -(p.y - view.cy) * view.zoom + size.height / 2,

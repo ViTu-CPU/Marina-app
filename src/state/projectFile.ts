@@ -86,6 +86,8 @@ function site(v: unknown): Site {
     // An empty water area is allowed: a new project has nothing drawn yet.
     water: arr(o.water, 'site.water').length === 0 ? [] : polygon(o.water, 'site.water'),
     shoreline: points(o.shoreline, 'site.shoreline'),
+    // D69: further pieces of shoreline; missing in older files.
+    ...(o.shorelines === undefined ? {} : { shorelines: arr(o.shorelines, 'site.shorelines').map((line, i) => points(line, `site.shorelines[${i}]`)) }),
     entrance: { a: vec(entrance.a, 'site.entrance.a'), b: vec(entrance.b, 'site.entrance.b') },
     obstacles: arr(o.obstacles, 'site.obstacles').map((item, i): Obstacle => {
       const p = `site.obstacles[${i}]`;
@@ -344,7 +346,8 @@ function mapBackground(v: unknown): MapBackground | null {
   const opacity = o.opacity === undefined ? 0.8 : num(o.opacity, 'map.opacity');
   const provider = oneOf(o.provider, ['osm', 'helsinki-guide', 'helsinki-base', 'helsinki-ortho'] as const, 'map.provider');
   const planOverlay = o.planOverlay === undefined ? false : o.planOverlay === true;
-  return { provider, lat, lon, opacity: Math.min(1, Math.max(0, opacity)), ...(planOverlay ? { planOverlay } : {}) };
+  const startMap = o.startMap === true;
+  return { provider, lat, lon, opacity: Math.min(1, Math.max(0, opacity)), ...(planOverlay ? { planOverlay } : {}), ...(startMap ? { startMap } : {}) };
 }
 
 /**
@@ -571,6 +574,8 @@ function anchoring(v: unknown): AnchoringParams {
     maxAnchorMass: pick('maxAnchorMass'),
     maxAnchorsPerLine: pick('maxAnchorsPerLine'),
     tipAnchorMinLength: pick('tipAnchorMinLength'),
+    // D66: missing in older files: the default (a block at the foot of the wall).
+    landAnchors: o.landAnchors === undefined ? d.landAnchors : oneOf(o.landAnchors, ['wall', 'blockAtWall'] as const, 'anchoring.landAnchors'),
     fingerPileMinLength: pick('fingerPileMinLength'),
     buoySinkerMethod:
       o.buoySinkerMethod === undefined ? d.buoySinkerMethod : oneOf(o.buoySinkerMethod, ['factor', 'table'] as const, 'anchoring.buoySinkerMethod'),

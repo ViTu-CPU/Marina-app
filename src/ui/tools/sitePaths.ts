@@ -6,7 +6,10 @@ import { ensureCounterClockwise } from '../../engine/geometry';
 import type { Site, Vec2 } from '../../engine/model';
 
 export interface SitePath {
-  /** Stable key: 'water', 'shoreline', 'entrance', 'access:<id>', 'breakwater:<id>', 'obstacle:<id>' or 'zone:<id>'. */
+  /**
+   * Stable key: 'water', 'shoreline', 'shoreline:<n>' (further pieces, D69, n from 1), 'entrance',
+   * 'access:<id>', 'breakwater:<id>', 'obstacle:<id>' or 'zone:<id>'.
+   */
   key: string;
   points: Vec2[];
   closed: boolean;
@@ -25,6 +28,9 @@ export function sitePaths(site: Site): SitePath[] {
   if (site.shoreline.length > 0) {
     paths.push({ key: 'shoreline', points: site.shoreline, closed: false, minPoints: 2, canInsert: true });
   }
+  (site.shorelines ?? []).forEach((line, i) => {
+    if (line.length > 0) paths.push({ key: `shoreline:${i + 1}`, points: line, closed: false, minPoints: 2, canInsert: true });
+  });
   if (hasEntrance(site)) {
     paths.push({ key: 'entrance', points: [site.entrance.a, site.entrance.b], closed: false, minPoints: 2, canInsert: false });
   }
@@ -55,6 +61,10 @@ export function setPathPoints(site: Site, key: string, points: Vec2[]): Site {
     return a && b ? { ...site, entrance: { a, b } } : site;
   }
   const [kind, id] = key.split(':');
+  if (kind === 'shoreline') {
+    const n = Number(id) - 1;
+    return { ...site, shorelines: (site.shorelines ?? []).map((line, i) => (i === n ? points : line)) };
+  }
   if (kind === 'access') {
     const [start, end] = points;
     if (!start || !end) return site;
@@ -110,12 +120,21 @@ export function normalizeSite(site: Site): Site {
   return unchanged ? site : { ...site, water, obstacles, zones };
 }
 
-/** Remove a whole object: 'water', 'shoreline', 'entrance', 'access:<id>', 'breakwater:<id>', 'obstacle:<id>' or 'zone:<id>'. */
+/** D69: the site with its pieces of shoreline set; the first is `shoreline`, the rest `shorelines`. */
+export function withShorelines(site: Site, lines: Vec2[][]): Site {
+  const [first = [], ...rest] = lines;
+  const { shorelines: _old, ...base } = site;
+  return rest.length > 0 ? { ...base, shoreline: first, shorelines: rest } : { ...base, shoreline: first };
+}
+
+/** Remove a whole object: 'water', 'shoreline', 'shoreline:<n>', 'entrance', 'access:<id>', 'breakwater:<id>', 'obstacle:<id>' or 'zone:<id>'. */
 export function deleteSiteObject(site: Site, key: string): Site {
   if (key === 'water') return { ...site, water: [] };
-  if (key === 'shoreline') return { ...site, shoreline: [] };
+  // D69: the next piece of shoreline takes the place of a deleted first one.
+  if (key === 'shoreline') return withShorelines(site, [...(site.shorelines ?? [])]);
   if (key === 'entrance') return { ...site, entrance: { a: { x: 0, y: 0 }, b: { x: 0, y: 0 } } };
   const [kind, id] = key.split(':');
+  if (kind === 'shoreline') return withShorelines(site, [site.shoreline, ...(site.shorelines ?? []).filter((_, i) => i !== Number(id) - 1)]);
   if (kind === 'access') return { ...site, accessPontoons: (site.accessPontoons ?? []).filter((p) => p.id !== id) };
   if (kind === 'breakwater') return { ...site, breakwaters: (site.breakwaters ?? []).filter((b) => b.id !== id) };
   if (kind === 'obstacle') return { ...site, obstacles: site.obstacles.filter((o) => o.id !== id) };

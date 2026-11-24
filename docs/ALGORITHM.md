@@ -37,7 +37,8 @@ Default mix: 12.5 m, 18 m and 46 m.
    the first line is swept over one pitch in 1 m steps.
 3. **Pier placement** (`site.ts → placePiersOnLine`): the line is clipped to the structure
    region (centreline and both edges). A stretch becomes a pier if one end is within 0.5 m
-   of the shoreline or of an access pontoon's long edge (I5, I35). The pier keeps one fairway width clear at its head (I4, I16) and
+   of the shoreline (any of its pieces, D69) or of an access pontoon's long edge (I5, I35). With
+   shore at both ends and too long for one pier, a pier from each end, sharing the head clearance (D69). The pier keeps one fairway width clear at its head (I4, I16) and
    is capped at `maxMainPierLength`.
 4. **Filling** (`fill.ts`): each side of a pier is filled from the shore end
    (`shoreOffset`) outwards, bay by bay. A bay is kept only if the water from the pier
@@ -65,6 +66,7 @@ Default mix: 12.5 m, 18 m and 46 m.
 | C | best offset for each other orientation; the best four orientations (I13) |
 | D | one pier lying along a shoreline segment, berths on the water side (D4) |
 | E | shore-perpendicular piers, every row sized for its own boat classes (D10) |
+| F | mixed directions: groups of parallel piers, each square to its own stretch of shore; rows sized by boat class where possible (D67, D68, I128, I129) |
 
 **Strategy E in more detail** (I23–I27). The berths to place are split over the classes
 by target share into quotas. Piers are then placed one after another across the site;
@@ -95,6 +97,18 @@ pier module, no pier reaches the shoreline, water too short for a pier, or all b
 blocked.
 
 The search is deterministic: no random numbers, fixed iteration order, fixed tie-breaks.
+
+**Strategy F in more detail** (D67, I128). The shoreline is split into sections where it turns
+by more than 30°. The first group is the piers of one section (whole, a half or an outer third)
+square to it; the next groups take, in the water left free, the direction that adds the most
+berths reachable from the entrance. Earlier piers, rows, the fairways in front of their rows and
+the water around their heads are kept free of structures, and of boats too, but a new row may face
+an earlier fairway, so the two rows share it. Only layouts with two or more directions count; the
+three best are evaluated exactly and the best is kept.
+
+First, though, F tries **size zoning** (D68, I129): the first group is a size-zoned layout as in E
+on one half of a stretch of shore; the second, in another direction in the water left free,
+continues the same berth quotas. The uniform-module search above runs only when that gives nothing.
 
 ## 4. Fairways (`fairways.ts`)
 
@@ -134,6 +148,9 @@ D62–D65, I121–I126; price-list schema in [PRICE_LIST.md](PRICE_LIST.md)):
 5. Anchor (D63, I125): the cheapest concrete block(s) of at most `maxAnchorMass` (5 t) and
    `maxAnchorsPerLine` (1) that hold; otherwise **a pile anchor** at the end of the chain (status
    PILE, the reason "block: needs … kg, max product … kg"), priced only from a `pile` row.
+5a. **No anchor on land** (D66, I127): a leg whose chain would cross the shoreline or an island edge is
+   taken to a concrete block 1 m from the wall on a chain shortened so the catenary just reaches it
+   (default), or fixed to the wall where it meets it; anchors beyond other water-area edges are warned.
 6. Rules (spec §6) as warnings: chain ≥ 5 × depth (FCG / Top Marine) and ≥ 4 × depth, at least
    four anchor points per pontoon, the FCG wave attenuator preset for breakwaters, winter use.
 7. Bill of materials: cheapest module combination per pier, fingers by length, gangways per
@@ -179,5 +196,5 @@ scaled by the best alternative. Layouts with geometric errors always rank below 
 
 ## 7. Not implemented
 
-Local refinement of angle and offset (I22); piers from both banks on one line (I18);
-size zoning for other pier directions than square to the shore.
+Local refinement of angle and offset (I22); piers from both banks on one line where one pier could reach across (D69);
+size zoning for other pier directions than square to the shore; F's size zoning has two groups.

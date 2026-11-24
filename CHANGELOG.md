@@ -3,6 +3,42 @@
 Notable changes to Marina Layout Planner. Decisions and assumptions behind each change are in
 [docs/DECISIONS.md](docs/DECISIONS.md); earlier changes are in the git history and in DECISIONS.
 
+## 2026-11-24 — Several shorelines (D69)
+
+### Added
+- The shoreline can be drawn in **several separate pieces** (e.g. two facing quays): each drawing adds
+  a piece, listed, edited and deleted on its own.
+- Piers come from **both banks** of a line when one pier cannot reach across.
+
+## 2026-11-24 — Mixed directions sized by boat class (D68); anchors near land on blocks
+
+### Changed
+- Strategy F sizes every row by its own boats where it can (as E): large boats in one group, the
+  smaller ones in the other direction. Test basins: U-shaped 344 berths (best single direction 298),
+  wide L 732 (E 577).
+- An anchor that would lie on land now goes to a concrete block at the foot of the wall by default.
+
+## 2026-11-24 — Piers in more than one direction (D67)
+
+### Added
+- **Strategy F – Mixed directions:** where the shore turns (an L-shaped bay, a corner), the layout
+  can have groups of piers in different directions, each square to its own stretch of shore. The
+  groups share fairways and every berth must be reachable from the entrance; F is ranked with the
+  other alternatives. In the L-shaped example: 260 berths against 223 for one direction.
+
+## 2026-11-24 — Anchors never on land (D66)
+
+### Changed
+- An anchor is never placed on land (beyond the shoreline or on an island): the chain goes to a
+  concrete block on the seabed at the foot of the wall on a shorter chain (default), or, by choice,
+  is fixed to the shore wall where it meets it. Anchors beyond other edges of the water area get a warning to draw the shoreline.
+
+## 2026-11-24 — Start map (U36)
+
+### Changed
+- A new project opens on **OpenStreetMap at the centre of Helsinki** (Senate Square); draw the site
+  straight on it. Loading a background image replaces the map.
+
 ## 2026-11-24 — Wave point clicked on the map (U35)
 
 ### Added

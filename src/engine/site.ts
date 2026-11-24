@@ -29,6 +29,32 @@ import type { AccessPontoon, Params, Polygon, Polyline, Site, Vec2, ZoneKind } f
  */
 export const SHORE_TOLERANCE = 0.5;
 
+/** D69: every piece of shoreline of the site, `shoreline` first; pieces of fewer than two points are left out. */
+export const shorelinesOf = (site: Pick<Site, 'shoreline'> & Partial<Pick<Site, 'shorelines'>>): Polyline[] =>
+  [site.shoreline, ...(site.shorelines ?? [])].filter((line) => line.length >= 2);
+
+/** D69: distance from a point to the nearest piece of shoreline, m; Infinity without one. */
+export function distanceToShore(lines: Polyline[], p: Vec2): number {
+  let best = Infinity;
+  for (const line of lines) best = Math.min(best, distancePointToPolyline(p, line));
+  return best;
+}
+
+/** D69: the nearest point on any piece of shoreline; null without one. */
+export function closestShorePoint(lines: Polyline[], p: Vec2): Vec2 | null {
+  let best: Vec2 | null = null;
+  let bestDistance = Infinity;
+  for (const line of lines) {
+    const q = closestPointOnPolyline(p, line);
+    const d = distance(p, q);
+    if (d < bestDistance) {
+      best = q;
+      bestDistance = d;
+    }
+  }
+  return best;
+}
+
 /** The site's access pontoons (D21) that have a length and a width. */
 export const accessPontoonsOf = (site: Site): AccessPontoon[] =>
   (site.accessPontoons ?? []).filter((p) => p.width > 0 && distance(p.start, p.end) > EPS);
@@ -45,18 +71,19 @@ export function gangwayPositions(p: AccessPontoon): number[] {
 
 /**
  * Each gangway of an access pontoon (D32) as the shortest link from the pontoon's edge facing
- * the shore to the shoreline: from, to and its length (the gap), m. Empty without a shoreline.
+ * the shore to the shoreline (the nearest piece, D69): from, to and its length (the gap), m.
+ * Empty without a shoreline.
  */
-export function gangwayLinks(p: AccessPontoon, shoreline: Polyline): { t: number; centre: Vec2; from: Vec2; to: Vec2; gap: number }[] {
+export function gangwayLinks(p: AccessPontoon, shorelines: Polyline[]): { t: number; centre: Vec2; from: Vec2; to: Vec2; gap: number }[] {
   const length = distance(p.start, p.end);
-  if (shoreline.length < 2 || !(length > 0)) return [];
+  if (shorelines.length === 0 || !(length > 0)) return [];
   const along = scale(sub(p.end, p.start), 1 / length);
   const left = { x: -along.y, y: along.x };
   return gangwayPositions(p).map((t) => {
     const centre = add(p.start, scale(along, t));
     const edges = [add(centre, scale(left, p.width / 2)), add(centre, scale(left, -p.width / 2))];
-    const from = distancePointToPolyline(edges[0]!, shoreline) <= distancePointToPolyline(edges[1]!, shoreline) ? edges[0]! : edges[1]!;
-    const to = closestPointOnPolyline(from, shoreline);
+    const from = distanceToShore(shorelines, edges[0]!) <= distanceToShore(shorelines, edges[1]!) ? edges[0]! : edges[1]!;
+    const to = closestShorePoint(shorelines, from)!;
     return { t, centre, from, to, gap: distance(from, to) };
   });
 }
@@ -66,7 +93,7 @@ export function gangwayLinks(p: AccessPontoon, shoreline: Polyline): { t: number
  * pontoon (D21).
  */
 export function connectionLines(site: Site): Polyline[] {
-  const lines: Polyline[] = site.shoreline.length >= 2 ? [site.shoreline] : [];
+  const lines: Polyline[] = [...shorelinesOf(site)];
   for (const p of accessPontoonsOf(site)) {
     const [a, b, c, d] = pierPolygon(p.start, p.end, p.width);
     lines.push([a!, b!], [d!, c!]);
@@ -169,12 +196,13 @@ export function pierShoreLink(pier: { start: Vec2; end: Vec2; width: number }, s
   const along = scale(sub(pier.end, pier.start), 1 / length);
   const left = { x: -along.y, y: along.x };
   const ends = [0, pier.width / 2, -pier.width / 2].map((l) => add(pier.start, scale(left, l)));
-  const accessEdges = connectionLines({ ...site, shoreline: [] });
+  const accessEdges = connectionLines({ ...site, shoreline: [], shorelines: [] });
   if (ends.some((p) => distanceToConnection(accessEdges, p) <= SHORE_TOLERANCE)) return { kind: 'access', from: pier.start, to: pier.start, gap: 0 };
-  if (site.shoreline.length < 2) return null;
-  const gap = Math.min(...ends.map((p) => distancePointToPolyline(p, site.shoreline)));
+  const shores = shorelinesOf(site);
+  if (shores.length === 0) return null;
+  const gap = Math.min(...ends.map((p) => distanceToShore(shores, p)));
   if (gap > reach + SHORE_TOLERANCE) return null;
-  return { kind: 'gangway', from: pier.start, to: closestPointOnPolyline(pier.start, site.shoreline), gap };
+  return { kind: 'gangway', from: pier.start, to: closestShorePoint(shores, pier.start)!, gap };
 }
 
 export interface PierSegment {
@@ -267,16 +295,37 @@ export function placePiersOnLine(
   };
   const touchesShore = (t: number): boolean => touchesLines(t, lines);
   // D49: a pier starting from the shoreline (not from an access pontoon) keeps the gangway gap.
-  const accessEdges = lines.filter((l) => l !== site.shoreline);
+  const shores = new Set(shorelinesOf(site));
+  const accessEdges = lines.filter((l) => !shores.has(l));
   const gapAt = (t: number): number => (touchesLines(t, accessEdges) ? 0 : Math.max(0, options.shoreGap ?? 0));
 
   const piers: PierSegment[] = [];
+  const verified = (startT: number, endT: number): PierSegment | null => {
+    const start = add(base, scale(dir, startT));
+    const end = add(base, scale(dir, endT));
+    return convexInsideRegion(pierPolygon(start, end, options.width), structureRegion) ? { start, end } : null;
+  };
   for (const [t0, t1] of intervals ?? []) {
     const fromStart = touchesShore(t0);
-    if (!fromStart && !touchesShore(t1)) continue;
+    const fromEnd = touchesShore(t1);
+    if (!fromStart && !fromEnd) continue;
     if (report) {
       report.shoreRuns++;
       report.longestShoreRun = Math.max(report.longestShoreRun, t1 - t0);
+    }
+    // D69: shore at both ends and too far for one pier to reach across: a pier from each end,
+    // the head clearance between them shared.
+    if (fromStart && fromEnd) {
+      const gap0 = gapAt(t0);
+      const gap1 = gapAt(t1);
+      const free = t1 - t0 - gap0 - gap1 - options.headClearance;
+      if (free > options.maxLength) {
+        const each = Math.min(options.maxLength, free / 2);
+        if (each >= options.minLength && each > 0) {
+          for (const pier of [verified(t0 + gap0, t0 + gap0 + each), verified(t1 - gap1, t1 - gap1 - each)]) if (pier) piers.push(pier);
+          continue;
+        }
+      }
     }
     const gap = gapAt(fromStart ? t0 : t1);
     const usable = Math.min(options.maxLength, t1 - t0 - options.headClearance - gap);

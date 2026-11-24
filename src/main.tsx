@@ -4,7 +4,7 @@ import priceListUrl from '../data/hinnasto.xlsx?url';
 import { parsePriceListFile } from './catalog/priceList';
 import { translate } from './i18n';
 import { browserStorage, loadProjectFromStorage, saveProjectToStorage } from './state/persistence';
-import { appStore } from './state/store';
+import { appStore, withStartMap } from './state/store';
 import { AppShell } from './ui/App';
 import { MarinaCanvas } from './ui/canvas/MarinaCanvas';
 import './index.css';
@@ -14,7 +14,7 @@ function startAutosave(): void {
   const storage = browserStorage();
   if (!storage) return;
   const saved = loadProjectFromStorage(storage);
-  if (saved) appStore.getState().replaceProject(saved);
+  if (saved) appStore.getState().replaceProject(withStartMap(saved));
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let warned = false;

@@ -13,7 +13,7 @@ import { add, centroid, distance, dot, sub } from '../../engine/geometry';
 import type { BackgroundImage, BoatClass, Layout, Polygon, Site, Vec2 } from '../../engine/model';
 import { sectorFetches } from '../../engine/fetchRays';
 import { pierAxis } from '../../engine/rows';
-import { gangwayLinks, pierPolygon, pierShoreLink } from '../../engine/site';
+import { gangwayLinks, pierPolygon, pierShoreLink, shorelinesOf } from '../../engine/site';
 import { breakwaterProductOf, breakwatersOf } from '../../engine/breakwater';
 import { appStore, useAppStore, type LayerId, type Selection, type ToolId } from '../../state/store';
 import { latLonToLocal } from '../../state/geo';
@@ -100,9 +100,10 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
             listening={false}
           />
         ))}
-      {layers.shoreline && site.shoreline.length >= 2 && (
-        <Line points={flat(site.shoreline)} stroke={COLORS.shoreline} strokeWidth={4} strokeScaleEnabled={false} lineCap="round" lineJoin="round" listening={false} />
-      )}
+      {layers.shoreline &&
+        shorelinesOf(site).map((line, i) => (
+          <Line key={`shore-${i}`} points={flat(line)} stroke={COLORS.shoreline} strokeWidth={4} strokeScaleEnabled={false} lineCap="round" lineJoin="round" listening={false} />
+        ))}
       {layers.piers &&
         (site.accessPontoons ?? []).map((p) =>
           distance(p.start, p.end) > 0 ? (
@@ -123,7 +124,7 @@ const SiteShapes = memo(function SiteShapes({ site, layers, patternScale, transl
         (site.accessPontoons ?? []).flatMap((p) =>
           // D32: each gangway as a mark across the pontoon and on to the shoreline, so it shows
           // at any zoom.
-          gangwayLinks(p, site.shoreline).map((g, i) => (
+          gangwayLinks(p, shorelinesOf(site)).map((g, i) => (
             <Line
               key={`${p.id}-gangway-${i}`}
               points={flat([add(g.centre, sub(g.centre, g.from)), g.from, g.to])}

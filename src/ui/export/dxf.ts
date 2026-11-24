@@ -15,7 +15,7 @@ import type { PriceList, Product } from '../../engine/catalog';
 import { add, distance, scale, sub } from '../../engine/geometry';
 import type { Layout, Project, Vec2 } from '../../engine/model';
 import { rowFrame, toLocalRect } from '../../engine/rows';
-import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayLinks, pierShoreLink } from '../../engine/site';
+import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayLinks, pierShoreLink, shorelinesOf } from '../../engine/site';
 import { EQUIPMENT_DEFAULTS, equipmentPlan } from '../../engine/equipment';
 import { equipmentSpacing } from '../../engine/bom';
 
@@ -190,7 +190,7 @@ export function buildDxf(input: DxfInput): string {
   const e = new Writer();
   // --- Site ---
   if (site.water.length >= 3) e.polyline('WATER', site.water, true);
-  if (site.shoreline.length >= 2) e.polyline('SHORELINE', site.shoreline, false);
+  for (const line of shorelinesOf(site)) e.polyline('SHORELINE', line, false);
   if (distance(site.entrance.a, site.entrance.b) > 0) e.line('ENTRANCE', site.entrance.a, site.entrance.b);
   for (const o of site.obstacles) e.polyline('OBSTACLES', o.shape, true);
   for (const z of site.zones) e.polyline('ZONES', z.shape, true);
@@ -272,7 +272,7 @@ export function buildDxf(input: DxfInput): string {
     const link = pierShoreLink(pier, site, reach);
     if (link?.kind === 'gangway') gangwayAt(link.from, link.to, layout.berths.filter((b) => b.pierId === pier.id && !b.removed).length);
   }
-  for (const a of accessPontoonsOf(site)) for (const g of gangwayLinks(a, site.shoreline)) gangwayAt(g.from, g.to, 0);
+  for (const a of accessPontoonsOf(site)) for (const g of gangwayLinks(a, shorelinesOf(site))) gangwayAt(g.from, g.to, 0);
 
   // --- Breakwaters (D58) ---
   for (const bw of breakwatersOf(site)) {

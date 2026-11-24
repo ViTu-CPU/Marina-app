@@ -30,7 +30,7 @@
 import { chooseBlock, groupThousands, installParams, pileProduct, usableBlocks } from './anchorChoice';
 import { unitPriceVat0, type AnchorKind, type PriceList, type Product } from './catalog';
 import { breakwaterJoints, breakwaterProductOf, breakwatersOf } from './breakwater';
-import { add, distance, distancePointToPolyline, dot, pointInRing, scale, sub } from './geometry';
+import { add, distance, distancePointToPolyline, dot, pointInRing, scale, segmentIntersectionParam, sub } from './geometry';
 import type { BoatClass, Finger, Issue, Layout, Site, Vec2 } from './model';
 import { jointPositions } from './modules';
 import {
@@ -56,7 +56,7 @@ import {
   type VesselType,
 } from './mooring';
 import { pierAxis } from './rows';
-import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierShoreLink, SHORE_TOLERANCE } from './site';
+import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, distanceToShore, gangwayPositions, pierShoreLink, SHORE_TOLERANCE, shorelinesOf } from './site';
 
 /** D64: seabed types of NAVFAC DM-7.02 (engine/mooring.ts). */
 export type Seabed = SeabedKey;
@@ -74,6 +74,13 @@ export type BuoySinkerMethod = 'table' | 'factor';
  * (2016), Tabell 3; 'topMarine' = Top Marine's table for sailing boats.
  */
 export type BuoyTableId = 'batunionen' | 'topMarine';
+
+/**
+ * D66: where a chain whose anchor would lie on land (beyond the shoreline or on an island) is
+ * fixed instead: 'wall' = to a fixing in the shore wall where the chain meets it; 'blockAtWall' =
+ * to a concrete block on the seabed right at the foot of the wall, on a chain shortened to reach it.
+ */
+export type LandAnchorFix = 'wall' | 'blockAtWall';
 
 /** D64: the cohesive model of the spec (§5.3) with the dry mass of the block it describes. */
 export type CohesiveBlock = CohesiveParams & { massDryKg: number };
@@ -141,6 +148,8 @@ export interface AnchoringParams {
   maxAnchorsPerLine: number;
   /** Main piers at least this long get two crossed tip chains (D30), m. */
   tipAnchorMinLength: number;
+  /** D66: anchors never lie on land; how a chain that would reach land is fixed instead. */
+  landAnchors: LandAnchorFix;
   /** Fingers longer than this get an end pile at the tip (D31), m. */
   fingerPileMinLength: number;
   /** Stern buoys (D36): how the sinker is sized. */
@@ -186,6 +195,7 @@ export const DEFAULT_FRICTION: Record<FrictionSeabed, number> = {
  *  - seabed mediumClay (μ 0.30), as the earlier clay default of 0.3.
  *  - splayAngle 45° (D25), tipAnchorMinLength 10 m (D30), fingerPileMinLength 12 m (D31),
  *    lineSpacing 12 m (assumption), stern buoys after Båtunionen (D37).
+ *  - landAnchors 'blockAtWall': the owner's choice (D66, 2026-11-24): a concrete block at the foot of the wall.
  */
 export const DEFAULT_ANCHORING: AnchoringParams = {
   depth: 4,
@@ -220,6 +230,7 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   maxAnchorMass: 5000,
   maxAnchorsPerLine: 1,
   tipAnchorMinLength: 10,
+  landAnchors: 'blockAtWall',
   fingerPileMinLength: 12,
   buoySinkerMethod: 'table',
   buoyTable: 'batunionen',
@@ -256,6 +267,7 @@ export const resetAnchoringFactors = (p: AnchoringParams): AnchoringParams => ({
   buoySinkerMethod: p.buoySinkerMethod,
   buoyTable: p.buoyTable,
   buoyExposed: p.buoyExposed,
+  landAnchors: p.landAnchors,
 });
 
 /** Largest splay angle accepted, degrees. */
@@ -327,6 +339,11 @@ export interface AnchorLine {
   /** 'seabed': chain to an anchor. 'wall': shore chain to a fixing in the quay wall (D28). */
   fixing: 'seabed' | 'wall';
   role: 'side' | 'tip' | 'shore' | 'buoy';
+  /**
+   * D66: the anchor would have lain on land, so the line was fixed to the shore wall ('wall') or to
+   * a concrete block at the foot of the wall ('blockAtWall') instead.
+   */
+  landed?: LandAnchorFix;
   /** Where the chain is fixed to the pontoon. */
   fix: Vec2;
   /** Position of the anchor on the seabed, or of the wall fixing (plan view). */
@@ -680,6 +697,38 @@ interface LegSpec {
   minSpan: number;
   /** Wall legs: plan distance to the wall fixing, m. */
   plan?: number;
+  /** D66: the leg was moved off land (see `AnchorLine.landed`). */
+  landed?: LandAnchorFix;
+  /** D66 'blockAtWall': the block's plan distance from the fixing and the shortened chain, m. */
+  atWall?: { span: number; chainLength: number };
+}
+
+/** D66: centre of a block at the foot of the wall from the wall line, m (Assumption: half of a 1.2 m block + 0.4 m). */
+export const WALL_BLOCK_OFFSET = 1;
+/** D66: a block closer to the fixing than this is not used; the chain goes to the wall instead, m (Assumption). */
+const MIN_WALL_BLOCK_SPAN = 1;
+
+/**
+ * D66: plan distance from `from` along the unit vector `dir`, within `span`, to the first point
+ * where the chain would reach land: the shoreline or the edge of an island. Null when it stays
+ * in water over the whole span.
+ */
+export function landDistance(site: Pick<Site, 'shoreline' | 'obstacles'> & Partial<Pick<Site, 'shorelines'>>, from: Vec2, dir: Vec2, span: number): number | null {
+  if (!(span > 0)) return null;
+  const to = add(from, scale(dir, span));
+  let best: number | null = null;
+  const test = (c: Vec2, d: Vec2) => {
+    const t = segmentIntersectionParam(from, to, c, d);
+    if (t === null) return;
+    const s = t * span;
+    if (s > 1e-6 && (best === null || s < best)) best = s;
+  };
+  for (const line of shorelinesOf(site)) for (let i = 0; i + 1 < line.length; i++) test(line[i]!, line[i + 1]!);
+  for (const o of site.obstacles) {
+    if (o.kind !== 'island') continue;
+    for (let i = 0; i < o.shape.length; i++) test(o.shape[i]!, o.shape[(i + 1) % o.shape.length]!);
+  }
+  return best;
 }
 
 /** Anchoring plan of a layout. Deterministic; positions in plan view. */
@@ -687,6 +736,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   const { layout, site, classes, params: p, priceList, vatPct } = input;
   const moduleLengths = input.moduleLengths ?? [];
   const reach = input.gangwayReach ?? DEFAULT_GANGWAY_LENGTH;
+  const shores = shorelinesOf(site);
   const freeboard = input.pierFreeboard ?? p.pontoonFreeboard;
   const issues: Issue[] = [];
   const warn = (code: string, message: string, elementId?: string, severity: Issue['severity'] = 'warning') =>
@@ -823,10 +873,10 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       // Access pontoons (I64): square lines at `lineSpacing`; in front of a wall on the water side only
       // (D28) and two shore chains at each gangway, crossed at θ to fixings in the wall.
       let wallSide: 'left' | 'right' | undefined;
-      if (site.shoreline.length >= 2) {
+      if (shores.length > 0) {
         const mid = add(item.start, scale(along, length / 2));
-        const toLeft = distancePointToPolyline(add(mid, scale(left, item.width / 2)), site.shoreline);
-        const toRight = distancePointToPolyline(add(mid, scale(left, -item.width / 2)), site.shoreline);
+        const toLeft = distanceToShore(shores, add(mid, scale(left, item.width / 2)));
+        const toRight = distanceToShore(shores, add(mid, scale(left, -item.width / 2)));
         wallSide = toLeft <= toRight ? 'left' : 'right';
         item.wallSide = wallSide;
       }
@@ -855,7 +905,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       if (wallSide && a) {
         const wallSign = wallSide === 'left' ? 1 : -1;
         gangwayPositions(a).forEach((tg, g) => {
-          const gap = distancePointToPolyline(add(add(item.start, scale(along, tg)), scale(left, (wallSign * item.width) / 2)), site.shoreline);
+          const gap = distanceToShore(shores, add(add(item.start, scale(along, tg)), scale(left, (wallSign * item.width) / 2)));
           const plan = Math.max(gap, 0.5) / Math.cos(theta);
           const half = (plan * Math.sin(theta)) / 2;
           for (const sign of [-1, 1]) {
@@ -1005,10 +1055,10 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       });
     }
     let alongGoverns = 0;
-    legs.forEach((leg, i) => {
+    const sizeLeg = (leg: LegSpec, i: number): void => {
       const cases = perLeg[i]!;
       const wall = leg.fixing === 'wall';
-      const length = wall ? leg.plan! + p.highWater + p.lowWater : chainLengthFor(hHigh, p);
+      const length = wall ? leg.plan! + p.highWater + p.lowWater : (leg.atWall?.chainLength ?? chainLengthFor(hHigh, p));
       const levels = wall
         ? ([
             ['LW', p.lowWater],
@@ -1030,13 +1080,45 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       const loadCases: LegLoadCase[] = results.map((r) => ({ case: r.case, waterLevel: r.waterLevel, Th: r.Th, Tfair: r.Tfair, Tanchor: r.Tanchor, Fv: r.Fv }));
       // The anchor lies `X` from the fixing at the largest load at high water, on the far side.
       const atHw = results.filter((r) => r.waterLevel === 'HW').reduce<(typeof results)[number] | null>((a, r) => (!a || r.Th > a.Th ? r : a), null);
-      const span = wall ? leg.plan! : Math.max(atHw?.X ?? Math.sqrt(Math.max(0, length * length - hHigh * hHigh)), leg.minSpan);
+      const span = wall ? leg.plan! : (leg.atWall?.span ?? Math.max(atHw?.X ?? Math.sqrt(Math.max(0, length * length - hHigh * hHigh)), leg.minSpan));
+      // D66: an anchor never lies on land. A chain that would reach the shoreline or an island is
+      // fixed to the wall where it meets it, or to a block at the foot of the wall on a shorter chain.
+      if (!wall && !leg.landed) {
+        const hit = landDistance(site, leg.fix, leg.direction, span);
+        if (hit !== null) {
+          const blockSpan = hit - WALL_BLOCK_OFFSET;
+          if (p.landAnchors === 'blockAtWall' && blockSpan >= MIN_WALL_BLOCK_SPAN && chain) {
+            // The chain that puts the anchor at the block under the largest load at high water.
+            const Th = atHw?.Th ?? 0;
+            const xOf = (L: number) => {
+              const c = catenary(Th, chain.w, hHigh, L);
+              return c.ok ? c.X : 0;
+            };
+            let lo = hHigh + 1e-3;
+            let hi = length;
+            for (let k = 0; k < 40; k++) {
+              const mid = (lo + hi) / 2;
+              if (xOf(mid) <= blockSpan) lo = mid;
+              else hi = mid;
+            }
+            const moved: LegSpec = { ...leg, landed: 'blockAtWall', atWall: { span: blockSpan, chainLength: Math.round(lo * 10) / 10 } };
+            legs[i] = moved;
+            sizeLeg(moved, i);
+            return;
+          }
+          const moved: LegSpec = { ...leg, fixing: 'wall', landed: 'wall', plan: Math.max(hit, 0.5) };
+          legs[i] = moved;
+          sizeLeg(moved, i);
+          return;
+        }
+      }
       const base = {
         id: leg.id,
         holdsId: leg.holdsId,
         splay: leg.splay,
         fixing: leg.fixing,
         role: leg.role,
+        ...(leg.landed ? { landed: leg.landed } : {}),
         fix: leg.fix,
         anchor: add(leg.fix, scale(leg.direction, span)),
         dirDeg: legDirs[i]!.dirDeg,
@@ -1110,7 +1192,25 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       };
       lines.push(line);
       if (!pick) pileLines.set(item.id, [...(pileLines.get(item.id) ?? []), line]);
-    });
+    };
+    legs.forEach((leg, i) => sizeLeg(leg, i));
+    // D66: say which chains were moved off land.
+    const toWall = legs.filter((l) => l.landed === 'wall').map((l) => l.id);
+    const toBlock = legs.filter((l) => l.landed === 'blockAtWall').map((l) => l.id);
+    if (toWall.length > 0) {
+      warn('ANCHOR_ON_LAND_TO_WALL', `${item.id}: the anchors of ${toWall.join(', ')} would lie on land, so these chains are fixed to the shore wall where they meet it (D66). The wall and its fixings are not checked: they need a structural check of the wall.`, item.id);
+    }
+    if (toBlock.length > 0) {
+      warn('ANCHOR_ON_LAND_TO_BLOCK', `${item.id}: the anchors of ${toBlock.join(', ')} would lie on land, so these chains go to concrete blocks at the foot of the shore wall on shortened chains (D66). A short chain lifts the block; check the wall foot (scour, slope, existing structures).`, item.id);
+    }
+    // D66: only the shoreline and islands are known to be land; an anchor beyond another edge of
+    // the water area may be on land that has no shoreline drawn.
+    if (site.water.length >= 3) {
+      const outside = lines.filter((l) => l.holdsId === item.id && l.fixing === 'seabed' && !pointInRing(l.anchor, site.water)).map((l) => l.id);
+      if (outside.length > 0) {
+        warn('ANCHOR_OUTSIDE_WATER_AREA', `${item.id}: the anchors of ${outside.join(', ')} lie outside the drawn water area. If the water area ends at land there, draw the shoreline along it: anchors are then kept off the land (D66).`, item.id);
+      }
+    }
     alongGovernsBy.set(item.id, alongGoverns);
     // Practical rules of the spec (§6), per pontoon.
     const mooringLegs: MooringLeg[] = legs.map((leg) => {

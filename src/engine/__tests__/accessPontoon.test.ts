@@ -89,7 +89,7 @@ describe('access pontoon in front of a high quay wall (D21)', () => {
     expect(gangwayPositions(pontoon)).toEqual([30]);
     expect(gangwayPositions({ ...pontoon, gangways: [70, 10, 10, -5] })).toEqual([0, 10, 60]);
     // From the edge facing the shore (y = 1) straight to the shoreline (y = 0): 1 m.
-    const [g] = gangwayLinks({ ...pontoon, gangways: [12] }, site.shoreline);
+    const [g] = gangwayLinks({ ...pontoon, gangways: [12] }, [site.shoreline]);
     expect(g!.from).toEqual({ x: 12, y: 1 });
     expect(g!.to).toEqual({ x: 12, y: 0 });
     expect(g!.gap).toBeCloseTo(1, 9);

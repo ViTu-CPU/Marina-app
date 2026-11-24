@@ -52,6 +52,7 @@ export function siteSnapTargets(site: Site, extraVertices: Vec2[] = []): SnapTar
   const vertices = [
     ...site.water,
     ...site.shoreline,
+    ...(site.shorelines ?? []).flat(),
     ...site.obstacles.flatMap((o) => o.shape),
     ...site.zones.flatMap((z) => z.shape),
     ...extraVertices,

@@ -102,10 +102,12 @@ npx playwright install chromium
   or balanced (with weights).
 
 **Layouts**
-- Deterministic generator with five strategies: piers square to the shore (A), every
+- Deterministic generator with six strategies: piers square to the shore (A), every
   other pier (B), other pier directions from a 5° sweep (C), one pier along the shore (D),
-  and piers sized by boat class (E), where every row and fairway is as deep and wide as
-  its own boats need.
+  piers sized by boat class (E), where every row and fairway is as deep and wide as
+  its own boats need, and mixed directions (F): where the shore turns (an L-shaped bay, a
+  corner), groups of piers each square to their own stretch of shore, sharing fairways,
+  with rows sized by boat class where possible.
 - Berths that cannot be reached from the entrance are left out; the number is shown and
   the layout is marked with a warning instead of "Constraints met".
 - Up to five alternatives, ranked by the objective, near-duplicates removed.
@@ -225,7 +227,9 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   published rules of thumb differ by a factor of up to 25 (docs/RESEARCH.md §9.14). Boat weights
   should be entered, otherwise they are estimated from the length.
 - Piers are straight, start at the shoreline and keep one fairway width clear at the head.
-  No T- or L-heads, no piers from two banks on the same line, strategy D places one pier.
+  No T- or L-heads; strategy D places one pier. The shoreline can be drawn in several pieces;
+  piers come from both banks of a line only when one pier cannot reach across.
+  Strategy F sizes its rows by boat class in two groups at most; otherwise one module size.
 - The search uses fixed steps (5° and 1 m) and no local refinement, so it finds good
   layouts, not provably optimal ones.
 - Fairway width is a single rule (factor × boat length, with a minimum). There is no

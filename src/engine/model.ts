@@ -86,6 +86,11 @@ export interface Site {
   water: Polygon;
   /** Where piers may connect to land. */
   shoreline: Polyline;
+  /**
+   * Extension (D69): further pieces of shoreline, apart from `shoreline` (e.g. both banks of a
+   * basin, or a quay and a beach); missing in older files. Use `shorelinesOf` for all of them.
+   */
+  shorelines?: Polyline[];
   /** Line segment where boats enter/leave the marina. */
   entrance: Segment;
   obstacles: Obstacle[];
@@ -371,6 +376,11 @@ export interface MapBackground {
   opacity: number;
   /** U34: the City of Helsinki up-to-date detailed plan drawn over the base map. */
   planOverlay?: boolean;
+  /**
+   * U36: the map a new project opens with (Helsinki centre, `DEFAULT_START_MAP`), not yet placed
+   * on a site. Until a water area is drawn on it, it gives no site position to the lookups.
+   */
+  startMap?: boolean;
 }
 
 /**

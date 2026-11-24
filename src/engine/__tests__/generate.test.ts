@@ -227,8 +227,11 @@ describe('generateLayouts on the demo projects (SPEC §10)', () => {
 
       it('property: the class mix is close to the target (A–D) and stats agree with the elements', () => {
         // Strategy E may leave out a class that fits nowhere (I25); its mix is tested separately.
+        // So is F sized by boat class (D68): its quotas, like E's, are met before unreachable
+        // berths are left out.
         for (const layout of result.layouts) {
-          if (layout.strategy !== 'E') expect(layout.stats.mixDeviation).toBeLessThan(0.05);
+          const zoned = layout.strategy === 'E' || (layout.strategy === 'F' && layout.name.includes('sized by boat class'));
+          if (!zoned) expect(layout.stats.mixDeviation).toBeLessThan(0.05);
           expect(layout.stats.totalBerths).toBe(layout.berths.length);
           expect(Object.values(layout.stats.berthsByClass).reduce((a, b) => a + b, 0)).toBe(layout.berths.length);
           const ids = [...layout.piers, ...layout.fingers, ...layout.berths].map((e) => e.id);

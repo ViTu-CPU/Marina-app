@@ -74,6 +74,8 @@ function PositionSection() {
   const t = useT();
   const waves = useAppStore((s) => s.project.waves);
   const map = useAppStore((s) => s.project.map);
+  // U36: the start map can still be moved to the position while nothing is drawn on it.
+  const movable = useAppStore((s) => s.project.map === null || (s.project.map.startMap === true && s.project.site.water.length === 0));
   const picking = useAppStore((s) => s.tool === 'wavePoint');
   const { position, siteCentre } = useSitePosition();
   const [text, setText] = useState('');
@@ -110,7 +112,7 @@ function PositionSection() {
         </Button>
         <span className="text-xs text-slate-500">{waves.location ? t('wind.positionEntered') : siteCentre ? t('wind.positionSite') : t('wind.positionNone')}</span>
         {/* A wave study alone has no map yet: put one under the position so that the fetch rays can be drawn. */}
-        {!map && waves.location && (
+        {movable && waves.location && (
           <Button
             onClick={() => {
               const s = state();
@@ -120,7 +122,8 @@ function PositionSection() {
               if (empty) s.setView({ cx: 0, cy: 0, zoom: 2 });
               const view = empty ? { cx: 0, cy: 0 } : s.view;
               const origin = originPlacing(loc.lat, loc.lon, { x: view.cx, y: view.cy });
-              s.setMap({ provider: 'osm', lat: origin.lat, lon: origin.lon, opacity: 0.8 });
+              const current = s.project.map;
+              s.setMap({ provider: current?.provider ?? 'osm', lat: origin.lat, lon: origin.lon, opacity: current?.opacity ?? 0.8, ...(current?.planOverlay ? { planOverlay: true } : {}) });
             }}
           >
             {t('waves.showOnMap')}

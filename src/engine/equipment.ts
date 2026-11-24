@@ -20,10 +20,10 @@
  * real ones follow the fingers, the berths and the supplier. Breakwaters get none (not walkways).
  * Nothing here says the harbour meets any safety requirement.
  */
-import { add, distancePointToPolyline, dot, scale, sub } from './geometry';
+import { add, dot, scale, sub } from './geometry';
 import { pierAxis } from './rows';
 import type { Layout, Site, Vec2 } from './model';
-import { accessPontoonsOf } from './site';
+import { accessPontoonsOf, distanceToShore, shorelinesOf } from './site';
 
 export interface EquipmentSpacing {
   /** Rescue ladders, m; 0 = none. */
@@ -75,9 +75,10 @@ export function equipmentPlan(layout: Pick<Layout, 'piers' | 'berths'>, site: Si
     const at = (t: number, lateral = 0) => add(add(p.start, scale(along, t)), scale(left, lateral));
     // Ladders at an edge: on an access pontoon the edge away from the shore; on a pier alternately right and left.
     let ladderSide = -1;
-    if (p.access && site.shoreline.length >= 2) {
+    const shores = shorelinesOf(site);
+    if (p.access && shores.length > 0) {
       const mid = at(length / 2);
-      const near = (side: number) => distancePointToPolyline(add(mid, scale(left, (side * p.width) / 2)), site.shoreline);
+      const near = (side: number) => distanceToShore(shores, add(mid, scale(left, (side * p.width) / 2)));
       ladderSide = near(1) <= near(-1) ? -1 : 1;
     }
     evenlySpaced(0, length, spacing.ladderSpacing).forEach((t, i) => {

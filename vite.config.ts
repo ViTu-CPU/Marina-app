@@ -27,5 +27,8 @@ export default defineConfig({
     // UI tests opt in per file with `// @vitest-environment jsdom`.
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],
+    // Tests that generate the demos take about 4 s each when the whole suite runs in parallel, too
+    // close to the default 5 s; speed is checked by the "runs in under 2 seconds" tests instead.
+    testTimeout: 20000,
   },
 });
