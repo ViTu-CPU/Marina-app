@@ -56,7 +56,7 @@ import {
   type VesselType,
 } from './mooring';
 import { pierAxis } from './rows';
-import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, gangwayPositions, pierShoreLink, SHORE_TOLERANCE } from './site';
+import { accessPontoonsOf, DEFAULT_GANGWAY_LENGTH, distanceToShore, gangwayPositions, pierShoreLink, SHORE_TOLERANCE, shorelinesOf } from './site';
 
 /** D64: seabed types of NAVFAC DM-7.02 (engine/mooring.ts). */
 export type Seabed = SeabedKey;
@@ -713,7 +713,7 @@ const MIN_WALL_BLOCK_SPAN = 1;
  * where the chain would reach land: the shoreline or the edge of an island. Null when it stays
  * in water over the whole span.
  */
-export function landDistance(site: Pick<Site, 'shoreline' | 'obstacles'>, from: Vec2, dir: Vec2, span: number): number | null {
+export function landDistance(site: Pick<Site, 'shoreline' | 'obstacles'> & Partial<Pick<Site, 'shorelines'>>, from: Vec2, dir: Vec2, span: number): number | null {
   if (!(span > 0)) return null;
   const to = add(from, scale(dir, span));
   let best: number | null = null;
@@ -723,7 +723,7 @@ export function landDistance(site: Pick<Site, 'shoreline' | 'obstacles'>, from: 
     const s = t * span;
     if (s > 1e-6 && (best === null || s < best)) best = s;
   };
-  for (let i = 0; i + 1 < site.shoreline.length; i++) test(site.shoreline[i]!, site.shoreline[i + 1]!);
+  for (const line of shorelinesOf(site)) for (let i = 0; i + 1 < line.length; i++) test(line[i]!, line[i + 1]!);
   for (const o of site.obstacles) {
     if (o.kind !== 'island') continue;
     for (let i = 0; i < o.shape.length; i++) test(o.shape[i]!, o.shape[(i + 1) % o.shape.length]!);
@@ -736,6 +736,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
   const { layout, site, classes, params: p, priceList, vatPct } = input;
   const moduleLengths = input.moduleLengths ?? [];
   const reach = input.gangwayReach ?? DEFAULT_GANGWAY_LENGTH;
+  const shores = shorelinesOf(site);
   const freeboard = input.pierFreeboard ?? p.pontoonFreeboard;
   const issues: Issue[] = [];
   const warn = (code: string, message: string, elementId?: string, severity: Issue['severity'] = 'warning') =>
@@ -872,10 +873,10 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       // Access pontoons (I64): square lines at `lineSpacing`; in front of a wall on the water side only
       // (D28) and two shore chains at each gangway, crossed at θ to fixings in the wall.
       let wallSide: 'left' | 'right' | undefined;
-      if (site.shoreline.length >= 2) {
+      if (shores.length > 0) {
         const mid = add(item.start, scale(along, length / 2));
-        const toLeft = distancePointToPolyline(add(mid, scale(left, item.width / 2)), site.shoreline);
-        const toRight = distancePointToPolyline(add(mid, scale(left, -item.width / 2)), site.shoreline);
+        const toLeft = distanceToShore(shores, add(mid, scale(left, item.width / 2)));
+        const toRight = distanceToShore(shores, add(mid, scale(left, -item.width / 2)));
         wallSide = toLeft <= toRight ? 'left' : 'right';
         item.wallSide = wallSide;
       }
@@ -904,7 +905,7 @@ export function anchoringPlan(input: AnchoringInput): AnchoringResult {
       if (wallSide && a) {
         const wallSign = wallSide === 'left' ? 1 : -1;
         gangwayPositions(a).forEach((tg, g) => {
-          const gap = distancePointToPolyline(add(add(item.start, scale(along, tg)), scale(left, (wallSign * item.width) / 2)), site.shoreline);
+          const gap = distanceToShore(shores, add(add(item.start, scale(along, tg)), scale(left, (wallSign * item.width) / 2)));
           const plan = Math.max(gap, 0.5) / Math.cos(theta);
           const half = (plan * Math.sin(theta)) / 2;
           for (const sign of [-1, 1]) {

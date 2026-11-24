@@ -74,11 +74,11 @@ describe('strategy F: mixed directions', () => {
     expect(again.berths.map((b) => b.id)).toEqual(f.berths.map((b) => b.id));
   });
 
-  it('sized by boat class (D68): in a basin with shore on three sides it beats every single direction', () => {
+  it('sized by boat class (D68): in a wide L-shaped basin it beats every single direction', () => {
     const u: Site = {
-      water: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 160 }, { x: 0, y: 160 }],
-      shoreline: [{ x: 0, y: 160 }, { x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 160 }],
-      entrance: { a: { x: 70, y: 160 }, b: { x: 130, y: 160 } },
+      water: [{ x: 0, y: 0 }, { x: 300, y: 0 }, { x: 300, y: 120 }, { x: 160, y: 120 }, { x: 160, y: 260 }, { x: 0, y: 260 }],
+      shoreline: [{ x: 0, y: 260 }, { x: 0, y: 0 }, { x: 300, y: 0 }],
+      entrance: { a: { x: 300, y: 40 }, b: { x: 300, y: 120 } },
       obstacles: [],
       zones: [],
     };

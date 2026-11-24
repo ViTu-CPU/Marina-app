@@ -227,7 +227,8 @@ class mix is followed, and others) are listed in [docs/DECISIONS.md](docs/DECISI
   published rules of thumb differ by a factor of up to 25 (docs/RESEARCH.md §9.14). Boat weights
   should be entered, otherwise they are estimated from the length.
 - Piers are straight, start at the shoreline and keep one fairway width clear at the head.
-  No T- or L-heads, no piers from two banks on the same line, strategy D places one pier.
+  No T- or L-heads; strategy D places one pier. The shoreline can be drawn in several pieces;
+  piers come from both banks of a line only when one pier cannot reach across.
   Strategy F sizes its rows by boat class in two groups at most; otherwise one module size.
 - The search uses fixed steps (5° and 1 m) and no local refinement, so it finds good
   layouts, not provably optimal ones.

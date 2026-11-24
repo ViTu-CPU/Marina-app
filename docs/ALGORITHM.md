@@ -37,7 +37,8 @@ Default mix: 12.5 m, 18 m and 46 m.
    the first line is swept over one pitch in 1 m steps.
 3. **Pier placement** (`site.ts → placePiersOnLine`): the line is clipped to the structure
    region (centreline and both edges). A stretch becomes a pier if one end is within 0.5 m
-   of the shoreline or of an access pontoon's long edge (I5, I35). The pier keeps one fairway width clear at its head (I4, I16) and
+   of the shoreline (any of its pieces, D69) or of an access pontoon's long edge (I5, I35). With
+   shore at both ends and too long for one pier, a pier from each end, sharing the head clearance (D69). The pier keeps one fairway width clear at its head (I4, I16) and
    is capped at `maxMainPierLength`.
 4. **Filling** (`fill.ts`): each side of a pier is filled from the shore end
    (`shoreOffset`) outwards, bay by bay. A bay is kept only if the water from the pier
@@ -195,5 +196,5 @@ scaled by the best alternative. Layouts with geometric errors always rank below 
 
 ## 7. Not implemented
 
-Local refinement of angle and offset (I22); piers from both banks on one line (I18);
+Local refinement of angle and offset (I22); piers from both banks on one line where one pier could reach across (D69);
 size zoning for other pier directions than square to the shore; F's size zoning has two groups.

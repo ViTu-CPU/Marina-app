@@ -69,6 +69,7 @@ import {
   placePiersOnLine,
   prepareSite,
   SHORE_TOLERANCE,
+  shorelinesOf,
   type PierSegment,
   type PlacementReport,
   type PreparedSite,
@@ -140,13 +141,15 @@ const normalizeAxis = (bearingDeg: number): number => {
  * direction of its segments. Falls back to the longest segment when the mean is undefined
  * (e.g. two equally long legs at right angles).
  */
-export function mainShorelineBearing(shoreline: Vec2[]): number | null {
+export function mainShorelineBearing(shoreline: Vec2[] | Vec2[][]): number | null {
+  // D69: several pieces of shoreline count together; no segment joins one piece to the next.
+  const lines = asLines(shoreline);
   let sumSin = 0;
   let sumCos = 0;
   let longest = 0;
   let longestBearing: number | null = null;
-  for (let i = 0; i + 1 < shoreline.length; i++) {
-    const v = sub(shoreline[i + 1]!, shoreline[i]!);
+  for (const [a, b] of segmentsOf(lines)) {
+    const v = sub(b, a);
     const len = Math.hypot(v.x, v.y);
     if (len === 0) continue;
     const bearing = vectorToBearing(v);
@@ -163,9 +166,19 @@ export function mainShorelineBearing(shoreline: Vec2[]): number | null {
   return normalizeAxis((Math.atan2(sumSin, sumCos) * 180) / Math.PI / 2);
 }
 
+/** One polyline or several (D69), as a list of polylines. */
+const asLines = (x: Vec2[] | Vec2[][]): Vec2[][] => (x.length > 0 && Array.isArray(x[0]) ? (x as Vec2[][]) : [x as Vec2[]]);
+
+/** The segments of the polylines, in order. */
+function segmentsOf(lines: Vec2[][]): [Vec2, Vec2][] {
+  const out: [Vec2, Vec2][] = [];
+  for (const line of lines) for (let i = 0; i + 1 < line.length; i++) out.push([line[i]!, line[i + 1]!]);
+  return out;
+}
+
 /** Pier directions to try (SPEC §5.2), as axis bearings in [0, 180), without duplicates. */
 export function candidateOrientations(site: Site, params: Params): { all: number[]; shorePerpendicular: number } {
-  const shore = mainShorelineBearing(site.shoreline) ?? 90;
+  const shore = mainShorelineBearing(shorelinesOf(site)) ?? 90;
   const shorePerpendicular = normalizeAxis(shore + 90);
   if (params.orientation !== 'auto') {
     const fixed = normalizeAxis(params.orientation);
@@ -633,9 +646,8 @@ function bestShoreParallel(ctx: SearchContext): Candidate | null {
   const { site } = prepared;
   const width = params.mainPierWidth;
   let best: Candidate | null = null;
-  for (let i = 0; i + 1 < site.shoreline.length; i++) {
-    const a = site.shoreline[i]!;
-    const b = site.shoreline[i + 1]!;
+  // D69: every segment of every piece of shoreline.
+  for (const [a, b] of segmentsOf(shorelinesOf(site))) {
     const segmentLength = distance(a, b);
     if (segmentLength < design.minBayFootprint) continue;
     const dir = scale(sub(b, a), 1 / segmentLength);
@@ -727,23 +739,26 @@ export interface ShoreSection {
  * The shoreline split where it turns by more than `SECTION_TURN` from where the current stretch
  * began; stretches shorter than `MIN_SECTION_LENGTH` are dropped, the longest `MAX_SECTIONS` kept.
  */
-export function shoreSections(shoreline: Vec2[]): ShoreSection[] {
+export function shoreSections(shoreline: Vec2[] | Vec2[][]): ShoreSection[] {
   const raw: Vec2[][] = [];
-  let current: Vec2[] | null = null;
-  let first = 0;
-  for (let i = 0; i + 1 < shoreline.length; i++) {
-    const a = shoreline[i]!;
-    const b = shoreline[i + 1]!;
-    if (distance(a, b) === 0) continue;
-    const bearing = normalizeAxis(vectorToBearing(sub(b, a)));
-    if (current && axisDifference(bearing, first) <= SECTION_TURN) current.push(b);
-    else {
-      if (current) raw.push(current);
-      current = [a, b];
-      first = bearing;
+  // D69: each piece of shoreline is split on its own; sections never join two pieces.
+  for (const line of asLines(shoreline)) {
+    let current: Vec2[] | null = null;
+    let first = 0;
+    for (let i = 0; i + 1 < line.length; i++) {
+      const a = line[i]!;
+      const b = line[i + 1]!;
+      if (distance(a, b) === 0) continue;
+      const bearing = normalizeAxis(vectorToBearing(sub(b, a)));
+      if (current && axisDifference(bearing, first) <= SECTION_TURN) current.push(b);
+      else {
+        if (current) raw.push(current);
+        current = [a, b];
+        first = bearing;
+      }
     }
+    if (current) raw.push(current);
   }
-  if (current) raw.push(current);
   return raw
     .map((points) => {
       let length = 0;
@@ -903,7 +918,7 @@ function bestGroup(
 function bestMixed(base: SearchContext): Candidate[] {
   if (base.params.orientation !== 'auto') return [];
   const ctx: SearchContext = base.caps ? { ...base, balanceLastPier: false } : base;
-  const sections = shoreSections(ctx.prepared.site.shoreline);
+  const sections = shoreSections(shorelinesOf(ctx.prepared.site));
   const firsts: PierFamily[] = sections.flatMap((section) =>
     FIRST_GROUP_BANDS.map((band) => ({ angle: normalizeAxis(section.bearing + 90), section, band })),
   );
@@ -1035,7 +1050,7 @@ function bestZonedMixed(base: SearchContext, reference: number): Candidate | nul
   };
 
   let best: Candidate | null = null;
-  const sections = shoreSections(ctx.prepared.site.shoreline);
+  const sections = shoreSections(shorelinesOf(ctx.prepared.site));
   const angles: number[] = [];
   for (const section of sections) {
     const a = normalizeAxis(section.bearing + 90);
@@ -1573,7 +1588,7 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = pa
   if (site.water.length < 3 || polygonArea(site.water) <= 0) {
     return fail('NO_WATER_AREA', 'Draw the water area first.');
   }
-  if (site.shoreline.length < 2) {
+  if (shorelinesOf(site).length === 0) {
     return fail('NO_SHORELINE', 'Draw the shoreline first: piers must connect to it.');
   }
   if (distance(site.entrance.a, site.entrance.b) === 0) {

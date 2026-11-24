@@ -66,6 +66,7 @@ export function projectBounds(project: Project): Box {
   const points = [
     ...site.water,
     ...site.shoreline,
+    ...(site.shorelines ?? []).flat(),
     ...site.obstacles.flatMap((o) => o.shape),
     ...site.zones.flatMap((z) => z.shape),
     ...(site.accessPontoons ?? []).flatMap((p) => [p.start, p.end]),
@@ -600,7 +601,8 @@ export function createAppStore(initial: Project = emptyProject()): StoreApi<AppS
           get().updateSite((site) => ({ ...site, water: ensureCounterClockwise(closed) }));
           set({ tool: 'select' });
         } else if (tool === 'shoreline' && points.length >= 2) {
-          get().updateSite((site) => ({ ...site, shoreline: points }));
+          // D69: a further shoreline is added as a piece of its own; the first one stays.
+          get().updateSite((site) => (site.shoreline.length >= 2 ? { ...site, shorelines: [...(site.shorelines ?? []), points] } : { ...site, shoreline: points }));
           set({ tool: 'select' });
         } else if (tool === 'entrance' && points.length >= 2) {
           get().updateSite((site) => ({ ...site, entrance: { a: points[0]!, b: points[1]! } }));

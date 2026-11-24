@@ -5,6 +5,7 @@ import { BREAKWATERS } from '../../engine/breakwater';
 import { distance } from '../../engine/geometry';
 import type { BerthTarget, BerthType, BoatClass, ObjectiveId, ObstacleKind, Params, ZoneKind } from '../../engine/model';
 import { PIER_SERIES } from '../../engine/modules';
+import { shorelinesOf } from '../../engine/site';
 import { targetCount } from '../../engine/targets';
 import type { StringKey } from '../../i18n';
 import { originPlacing, parseLatLon } from '../../state/geo';
@@ -27,7 +28,7 @@ const TOOLS: { id: ToolId; hint: StringKey }[] = [
   { id: 'select', hint: 'hint.select' },
   { id: 'edit', hint: 'hint.edit' },
   { id: 'water', hint: 'hint.polygon' },
-  { id: 'shoreline', hint: 'hint.polyline' },
+  { id: 'shoreline', hint: 'hint.shoreline' },
   { id: 'entrance', hint: 'hint.entrance' },
   { id: 'access', hint: 'hint.access' },
   { id: 'breakwater', hint: 'hint.breakwater' },
@@ -47,7 +48,7 @@ function SiteChecklist() {
   const generated = useAppStore((s) => s.project.layouts.length > 0 && !needsRegeneration(s.project));
   const steps: { id: string; label: StringKey; done: boolean; run: () => void; active: boolean }[] = [
     { id: 'water', label: 'checklist.water', done: site.water.length >= 3, run: () => state().setTool('water'), active: tool === 'water' },
-    { id: 'shoreline', label: 'checklist.shoreline', done: site.shoreline.length >= 2, run: () => state().setTool('shoreline'), active: tool === 'shoreline' },
+    { id: 'shoreline', label: 'checklist.shoreline', done: shorelinesOf(site).length > 0, run: () => state().setTool('shoreline'), active: tool === 'shoreline' },
     { id: 'entrance', label: 'checklist.entrance', done: hasEntrance(site), run: () => state().setTool('entrance'), active: tool === 'entrance' },
     { id: 'generate', label: 'checklist.generate', done: generated, run: () => state().generate(), active: false },
   ];
@@ -118,7 +119,12 @@ function SiteSection() {
   /** `width` and `gangways` are set for access pontoons (D21, D32), `product` for breakwaters (D58), edited here. */
   const objects: { key: string; label: string; width?: number; gangways?: number[]; product?: string }[] = [];
   if (site.water.length > 0) objects.push({ key: 'water', label: t('site.water') });
-  if (site.shoreline.length > 0) objects.push({ key: 'shoreline', label: t('site.shoreline') });
+  // D69: every piece of shoreline is an object of its own, numbered when there are several.
+  const extraShores = site.shorelines ?? [];
+  if (site.shoreline.length > 0) objects.push({ key: 'shoreline', label: extraShores.length > 0 ? `${t('site.shoreline')} 1` : t('site.shoreline') });
+  extraShores.forEach((line, i) => {
+    if (line.length > 0) objects.push({ key: `shoreline:${i + 1}`, label: `${t('site.shoreline')} ${i + 2}` });
+  });
   if (hasEntrance(site)) objects.push({ key: 'entrance', label: t('site.entrance') });
   for (const p of site.accessPontoons ?? []) {
     objects.push({

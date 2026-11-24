@@ -98,6 +98,7 @@ export const en = {
   'hint.edit': 'Drag a point to move it. Drag a small midpoint to add a point. Double-click a point to delete it.',
   'hint.polygon': 'Click to add points. Click the first point, double-click or press Enter to close. Esc cancels.',
   'hint.polyline': 'Click to add points. Double-click or press Enter to finish. Esc cancels.',
+  'hint.shoreline': 'Click to add points. Double-click or press Enter to finish. Esc cancels. Each shoreline you draw is added as a piece of its own; delete one under Site objects.',
   'hint.entrance': 'Click the two ends of the entrance.',
   'hint.pier': 'Click the shore end of the new pier, then its head. Then fill its sides.',
   'hint.access': 'Empty pontoon, e.g. in front of a high quay wall. Click the two ends of its centreline; main piers can start from its edges. Set its width in the list below.',

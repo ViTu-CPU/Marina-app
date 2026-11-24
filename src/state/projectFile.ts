@@ -86,6 +86,8 @@ function site(v: unknown): Site {
     // An empty water area is allowed: a new project has nothing drawn yet.
     water: arr(o.water, 'site.water').length === 0 ? [] : polygon(o.water, 'site.water'),
     shoreline: points(o.shoreline, 'site.shoreline'),
+    // D69: further pieces of shoreline; missing in older files.
+    ...(o.shorelines === undefined ? {} : { shorelines: arr(o.shorelines, 'site.shorelines').map((line, i) => points(line, `site.shorelines[${i}]`)) }),
     entrance: { a: vec(entrance.a, 'site.entrance.a'), b: vec(entrance.b, 'site.entrance.b') },
     obstacles: arr(o.obstacles, 'site.obstacles').map((item, i): Obstacle => {
       const p = `site.obstacles[${i}]`;

@@ -100,6 +100,7 @@ export const fi: Partial<Record<StringKey, string>> = {
   'hint.edit': 'Siirrä pistettä vetämällä. Lisää piste vetämällä pientä välipistettä. Poista piste kaksoisnapsauttamalla.',
   'hint.polygon': 'Lisää pisteitä napsauttamalla. Sulje napsauttamalla ensimmäistä pistettä, kaksoisnapsauttamalla tai Enterillä. Esc peruu.',
   'hint.polyline': 'Lisää pisteitä napsauttamalla. Lopeta kaksoisnapsautuksella tai Enterillä. Esc peruu.',
+  'hint.shoreline': 'Lisää pisteitä napsauttamalla. Lopeta kaksoisnapsautuksella tai Enterillä. Esc peruu. Jokainen piirretty rantaviiva lisätään omaksi osakseen; poista ylimääräinen kohdasta Site objects.',
   'hint.entrance': 'Napsauta sataman suun kaksi päätepistettä.',
   'hint.pier': 'Napsauta uuden laiturin rannanpuoleinen pää ja sitten kärki. Täytä sitten sen sivut.',
   'hint.access': 'Tyhjä ponttoni esim. korkean rantamuurin eteen. Napsauta keskilinjan kaksi päätä; pistolaiturit voivat lähteä sen reunoista. Leveyden voi muuttaa alla olevasta listasta.',

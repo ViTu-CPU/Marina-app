@@ -3,6 +3,13 @@
 Notable changes to Marina Layout Planner. Decisions and assumptions behind each change are in
 [docs/DECISIONS.md](docs/DECISIONS.md); earlier changes are in the git history and in DECISIONS.
 
+## 2026-11-24 — Several shorelines (D69)
+
+### Added
+- The shoreline can be drawn in **several separate pieces** (e.g. two facing quays): each drawing adds
+  a piece, listed, edited and deleted on its own.
+- Piers come from **both banks** of a line when one pier cannot reach across.
+
 ## 2026-11-24 — Mixed directions sized by boat class (D68); anchors near land on blocks
 
 ### Changed

@@ -18,7 +18,7 @@ mainista uuteen haaraan.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D69, I130, U37**).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D70, I130, U37**).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
   (vahvistettu, D54): aallonkorkeudet 2 desimaalilla.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
@@ -101,7 +101,9 @@ Haara `claude/tender-gates-6kg09a`.
 - **Ankkurit eivät maalle (D66, I127):** rantaviivan tai saaren yli menevä ketju kiinnitetään rantamuuriin
   (oletus) tai betonipainoon muurin juurelle lyhennetyllä ketjulla.
 - **Strategia F (D67, I128):** laiturit useaan suuntaan, kukin ryhmä kohtisuoraan omaan rantaosuuteensa,
-  yhteiset väylät. L-lahti 260 paikkaa (A 223). E:n kokovyöhykkeitä ei vielä yhdistetty F:ään.
+  yhteiset väylät; rivit veneluokittain (D68, I129). Laaja L-allas 757 paikkaa (E 597).
+- **Ankkurit maalla (D66):** oletus betonipaino muurin juureen (omistajan valinta).
+- **Useita rantaviivoja (D69):** jokainen piirto lisää palan; laiturit molemmilta rannoilta, kun yksi ei ulotu yli.
 
 Avoimet kysymykset omistajalle:
 1. Mistä saadaan 30 s mitoitustuuli (speksin TODO)?
