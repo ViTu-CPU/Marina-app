@@ -18,7 +18,7 @@ mainista uuteen haaraan.
 ## Työtavat (CLAUDE.md + omat toiveeni)
 - Yksi vaihe kerrallaan; committaa ja pushaa, kun `npx tsc --noEmit`, `npx vitest run` ja
   tarvittaessa `npm run build && node e2e/smoke.cjs` menevät läpi.
-- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D66, I127, U36**).
+- Kirjaa päätökset ja oletukset `docs/DECISIONS.md`:hen (seuraavat vapaat: **D68, I129, U37**).
 - Yksiköt: pituudet m 1 desimaalilla, pinta-alat m² ja lukumäärät kokonaislukuina. Poikkeus
   (vahvistettu, D54): aallonkorkeudet 2 desimaalilla.
 - Älä koskaan väitä teknistä tai turvallisuusvaatimustenmukaisuutta (RIL 201-3-2013, AS 3962).
@@ -93,6 +93,15 @@ vaihein, Export-valikko, tarkistuslista, aloitusvalinta, tulokset välilehdillä
 esiasetukset. Helsingin avoin karttadata (U34): pohjakartat, ajantasa-asemakaava ja kaava-alueen
 valinta suunnittelualueeksi (kartta.hel.fi WMS/WFS, CC BY 4.0). Ympäristöön lisättiin
 kartta.hel.fi, www.hel.fi ja hri.fi. Julkaistu PR #8:lla. 2026-11-24: aaltopisteen valinta kartalta (U35). Testit 578/578, e2e 23 vaihetta.
+
+## Karttapohja, ankkurit ja sekasuuntaiset laiturit (2026-11-24, U36, D66–D67, I127–I128)
+Haara `claude/tender-gates-6kg09a`.
+- **Aloituskartta (U36):** uusi projekti avautuu OpenStreetMapiin Helsingin keskustassa (Senaatintori);
+  taustakuvan lataus korvaa kartan. Aloituskartta ei anna sijaintia hauille ennen kuin vesialue on piirretty.
+- **Ankkurit eivät maalle (D66, I127):** rantaviivan tai saaren yli menevä ketju kiinnitetään rantamuuriin
+  (oletus) tai betonipainoon muurin juurelle lyhennetyllä ketjulla.
+- **Strategia F (D67, I128):** laiturit useaan suuntaan, kukin ryhmä kohtisuoraan omaan rantaosuuteensa,
+  yhteiset väylät. L-lahti 260 paikkaa (A 223). E:n kokovyöhykkeitä ei vielä yhdistetty F:ään.
 
 Avoimet kysymykset omistajalle:
 1. Mistä saadaan 30 s mitoitustuuli (speksin TODO)?

@@ -3,6 +3,14 @@
 Notable changes to Marina Layout Planner. Decisions and assumptions behind each change are in
 [docs/DECISIONS.md](docs/DECISIONS.md); earlier changes are in the git history and in DECISIONS.
 
+## 2026-11-24 — Piers in more than one direction (D67)
+
+### Added
+- **Strategy F – Mixed directions:** where the shore turns (an L-shaped bay, a corner), the layout
+  can have groups of piers in different directions, each square to its own stretch of shore. The
+  groups share fairways and every berth must be reachable from the entrance; F is ranked with the
+  other alternatives. In the L-shaped example: 260 berths against 223 for one direction.
+
 ## 2026-11-24 — Anchors never on land (D66)
 
 ### Changed

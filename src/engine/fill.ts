@@ -108,6 +108,11 @@ export interface FillContext {
   orderRuns?: boolean;
   /** Only classes up to this boat length are placed (size zoning). */
   maxBoatLength?: number;
+  /**
+   * Strategy F: water kept for the fairways of piers placed earlier. Boats may not lie in it, but a
+   * row may use it as its own fairway (the fairway is then shared).
+   */
+  noBerths?: Region;
   /** Derived data, computed once per context. */
   plan?: FillPlan;
 }
@@ -278,6 +283,9 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
   };
   const navigableEdges = localEdges(prepared.navigableRegion);
   const structureEdges = localEdges(prepared.structureRegion);
+  const noBerths = ctx.noBerths && ctx.noBerths.length > 0 ? ctx.noBerths : null;
+  const noBerthEdges = noBerths ? localEdges(noBerths) : [];
+  const rowDepth = design.rowDepth;
 
   const runs: PlacedBay[][] = [];
   /** Set when every quota or cap is used up: nothing more can be placed in this row. */
@@ -290,6 +298,10 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
     // navigable exactly when no boundary edge enters it.
     const navigableBand = edgesInBox(navigableEdges, from, to, 0, reach);
     const structureBand = edgesInBox(structureEdges, from, to, 0, plan.longestFinger);
+    const noBerthBand = noBerths ? edgesInBox(noBerthEdges, from, to, 0, rowDepth) : [];
+    /** The berths of a block stay out of the water kept for earlier fairways. */
+    const berthsAllowed = (s: number, footprint: number): boolean =>
+      !noBerths || (boxIsFree(noBerthBand, s, s + footprint, 0, rowDepth) && !pointInRegion(at(s + footprint / 2, rowDepth / 2), noBerths));
     const inStructureRegion = (r: LocalRect): boolean =>
       boxIsFree(structureBand, r.s0, r.s1, r.d0, r.d1) &&
       pointInRegion(at((r.s0 + r.s1) / 2, (r.d0 + r.d1) / 2), prepared.structureRegion);
@@ -297,10 +309,12 @@ function fillRow(frame: RowFrame, rowStart: number, rowEnd: number, ctx: FillCon
     const clear =
       navigableBand.length === 0 &&
       structureBand.length === 0 &&
+      noBerthBand.length === 0 &&
+      (!noBerths || !pointInRegion(at((from + to) / 2, rowDepth / 2), noBerths)) &&
       pointInRegion(at((from + to) / 2, plan.longestFinger / 2), prepared.structureRegion);
 
     const blockIsNavigable = (s: number, footprint: number): boolean =>
-      boxIsFree(navigableBand, s, s + footprint, 0, reach);
+      boxIsFree(navigableBand, s, s + footprint, 0, reach) && berthsAllowed(s, footprint);
     const bayIsValid = (s: number, geometry: BayGeometry): boolean => {
       if (s + geometry.footprint > to + 1e-9) return false;
       if (clear) return true;

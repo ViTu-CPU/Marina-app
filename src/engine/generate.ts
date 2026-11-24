@@ -26,10 +26,14 @@ import {
 import {
   add,
   bearingToVector,
+  boundingBox,
+  boxesOverlap,
   clipSegmentToRegion,
   convexInsideRegion,
   distance,
+  distancePointToPolyline,
   dot,
+  ensureCounterClockwise,
   EPS,
   intersectIntervals,
   pointInRing,
@@ -38,6 +42,7 @@ import {
   scale,
   sub,
   vectorToBearing,
+  type Region,
 } from './geometry';
 import { evaluateLayout, type LayoutDraft } from './layout';
 import type {
@@ -49,10 +54,11 @@ import type {
   ObjectiveSettings,
   Params,
   PierSide,
+  Polygon,
   Site,
   Vec2,
 } from './model';
-import { localRectToPolygon, patternFor, type BerthPattern } from './patterns';
+import { localRectToPolygon, patternFor, type BerthPattern, type LocalRect } from './patterns';
 import { buildReachGrid, isSwept, reachableCells, type OccupiedBox, type ReachGrid } from './reach';
 import { combinationLength, moduleCombination } from './modules';
 import { layoutRows, pierAxis, rowFrame, toLocalRect } from './rows';
@@ -62,6 +68,7 @@ import {
   pierPolygon,
   placePiersOnLine,
   prepareSite,
+  SHORE_TOLERANCE,
   type PierSegment,
   type PlacementReport,
   type PreparedSite,
@@ -96,7 +103,7 @@ export interface GenerateResult {
   diagnostics: Diagnostic[];
 }
 
-export type StrategyId = 'A' | 'B' | 'C' | 'D' | 'E';
+export type StrategyId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
 
 /** Offset sweep step across one pier pitch, m (SPEC §5.4). */
 export const OFFSET_STEP = 1;
@@ -188,12 +195,16 @@ interface CandidatePier {
   rows: FilledRow[];
   /** How the pier was filled, so the fill can be repeated for the final layout. */
   fillOptions: FillOptions;
+  /** Strategy F: the fill context of the pier's group (the site less the earlier groups). */
+  fill?: FillContext;
 }
 
 interface Candidate {
   strategy: StrategyId;
   /** Pier axis bearing, degrees. */
   angle: number;
+  /** Strategy F: the pier directions of its groups, in the order they were placed, degrees. */
+  angles?: number[];
   piers: CandidatePier[];
   /** Berths that can be reached from the entrance (estimated on the reach grid). */
   berths: number;
@@ -210,6 +221,11 @@ interface SearchContext {
   fill: FillContext;
   /** Upper limit of berths per class when the mix is given as target counts (D20). */
   caps?: Record<string, number>;
+  /**
+   * False: the pier on which the target counts run out is not re-filled to share its berths over
+   * both sides (`fillPier`); it is only cut at its last bay. Strategy F's search, for speed.
+   */
+  balanceLastPier?: boolean;
   design: RowDesign;
   params: Params;
   objective: ObjectiveSettings;
@@ -390,7 +406,7 @@ function fillPier(
   const width = ctx.params.mainPierWidth;
   const before = ctx.caps ? cloneMix(mix) : null;
   const rows = fillPierRows({ id: '', ...segment, width }, ctx.fill, mix, options);
-  if (!before || rows.length === 0 || !capsReached(mix)) return { segment, rows };
+  if (!before || rows.length === 0 || !capsReached(mix) || ctx.balanceLastPier === false) return { segment, rows };
   const placed = mix.total - before.total;
   const full = distance(segment.start, segment.end);
   const cut = (decimetres: number): PierSegment => ({
@@ -505,23 +521,50 @@ function parallelCandidate(
   spacing: number,
   floor: number,
 ): Candidate | null {
+  const piers = parallelPiers(ctx, strategy, angle, offset, spacing, newMixState(ctx.fill.classes, ctx.caps), floor);
+  return piers ? summarize(ctx, strategy, angle, piers, floor) : null;
+}
+
+/**
+ * The piers of a parallel candidate, filled; `mix` is updated in place. Null when the piers
+ * cannot reach `floor` berths. `keep` can leave out placed piers before they are filled
+ * (strategy F keeps those that start from one stretch of shore).
+ */
+function parallelPiers(
+  ctx: SearchContext,
+  strategy: StrategyId,
+  angle: number,
+  offset: number,
+  spacing: number,
+  mix: MixState,
+  floor: number,
+  keep?: (segment: PierSegment) => boolean,
+  /** Placed piers by angle and offset, for searches that place on the same site repeatedly. */
+  placements?: Map<string, PierSegment[]>,
+): CandidatePier[] | null {
   const { prepared, design, params } = ctx;
   const dir = bearingToVector(angle);
   const lateral = { x: dir.y, y: -dir.x }; // to the right of the pier direction
   const { min, max } = extentAlong(prepared.site, lateral);
   const minLength = params.shoreOffset + design.minBayFootprint;
 
-  const segments: PierSegment[] = [];
-  for (let u = min + offset; u <= max; u += spacing) {
-    const placed = placePiersOnLine(
-      prepared,
-      scale(lateral, u),
-      dir,
-      { width: params.mainPierWidth, maxLength: params.maxMainPierLength, headClearance: design.fairwayWidth, minLength, shoreGap: params.shoreGap },
-      ctx.report,
-    );
-    for (const raw of placed) segments.push({ start: roundVec(raw.start), end: roundVec(raw.end) });
+  const key = `${angle}|${offset}|${spacing}`;
+  let all = placements?.get(key);
+  if (!all) {
+    all = [];
+    for (let u = min + offset; u <= max; u += spacing) {
+      const placed = placePiersOnLine(
+        prepared,
+        scale(lateral, u),
+        dir,
+        { width: params.mainPierWidth, maxLength: params.maxMainPierLength, headClearance: design.fairwayWidth, minLength, shoreGap: params.shoreGap },
+        ctx.report,
+      );
+      for (const raw of placed) all.push({ start: roundVec(raw.start), end: roundVec(raw.end) });
+    }
+    placements?.set(key, all);
   }
+  const segments = keep ? all.filter(keep) : all;
   if (floor > 0) {
     // Upper estimate of the berths these piers can hold: both sides full at the average
     // pier length per berth, plus a margin of two berths per row for rounding.
@@ -530,7 +573,6 @@ function parallelCandidate(
     if (estimate < floor) return null;
   }
 
-  const mix = newMixState(ctx.fill.classes, ctx.caps);
   const piers: CandidatePier[] = [];
   for (const placed of segments) {
     ctx.report.piersPlaced++;
@@ -550,7 +592,7 @@ function parallelCandidate(
       if (built) piers.push({ segment: built.segment, rows: built.rows, fillOptions: {} });
     }
   }
-  return summarize(ctx, strategy, angle, piers, floor);
+  return piers;
 }
 
 /**
@@ -639,6 +681,283 @@ function bestShoreParallel(ctx: SearchContext): Candidate | null {
     }
   }
   return best;
+}
+
+// ---------------------------------------------------------------------------
+// Strategy F: groups of piers in different directions
+// ---------------------------------------------------------------------------
+
+/** A stretch of shoreline turning less than this from its first segment is one section, degrees. */
+const SECTION_TURN = 30;
+/** Sections shorter than this get no pier group of their own, m (Assumption: about one bay pair). */
+const MIN_SECTION_LENGTH = 15;
+/** At most this many sections (the longest) start a group. */
+const MAX_SECTIONS = 4;
+/** At most this many groups of parallel piers in one layout. */
+const MAX_GROUPS = 3;
+/** Offset step of the strategy F search: of the first group, and of the groups after it, m. */
+const MIXED_OFFSET_STEP = 2;
+const MIXED_LATER_STEP = 4;
+/** Two pier directions closer than this count as one, degrees. */
+const SAME_DIRECTION = 10;
+/**
+ * How many strategy F candidates are evaluated in full. The search's reach grid is a little
+ * lenient, so the best estimate can lose berths in the exact check; the best after it is kept.
+ */
+const MIXED_POOL_SIZE = 3;
+/** The water kept for earlier groups is grown by this, so that groups do not touch, m. */
+const GROUP_GAP = 0.05;
+
+const axisDifference = (a: number, b: number): number => {
+  const d = Math.abs(normalizeAxis(a) - normalizeAxis(b));
+  return Math.min(d, 180 - d);
+};
+
+/** A stretch of the shoreline that runs in one direction. */
+export interface ShoreSection {
+  points: Vec2[];
+  /** Axis bearing of the stretch in [0, 180), degrees. */
+  bearing: number;
+  length: number;
+}
+
+/**
+ * The shoreline split where it turns by more than `SECTION_TURN` from where the current stretch
+ * began; stretches shorter than `MIN_SECTION_LENGTH` are dropped, the longest `MAX_SECTIONS` kept.
+ */
+export function shoreSections(shoreline: Vec2[]): ShoreSection[] {
+  const raw: Vec2[][] = [];
+  let current: Vec2[] | null = null;
+  let first = 0;
+  for (let i = 0; i + 1 < shoreline.length; i++) {
+    const a = shoreline[i]!;
+    const b = shoreline[i + 1]!;
+    if (distance(a, b) === 0) continue;
+    const bearing = normalizeAxis(vectorToBearing(sub(b, a)));
+    if (current && axisDifference(bearing, first) <= SECTION_TURN) current.push(b);
+    else {
+      if (current) raw.push(current);
+      current = [a, b];
+      first = bearing;
+    }
+  }
+  if (current) raw.push(current);
+  return raw
+    .map((points) => {
+      let length = 0;
+      for (let i = 0; i + 1 < points.length; i++) length += distance(points[i]!, points[i + 1]!);
+      return { points, bearing: mainShorelineBearing(points) ?? 0, length };
+    })
+    .filter((s) => s.length >= MIN_SECTION_LENGTH)
+    .sort((a, b) => b.length - a.length)
+    .slice(0, MAX_SECTIONS);
+}
+
+/**
+ * The search context for a group placed after `placed`: no structure in the earlier piers, their
+ * rows and the fairways in front of the rows and around the pier heads; no boat in the piers and
+ * rows, nor in those fairways (`noBerths`), which the new rows may still use as their own fairway.
+ */
+function contextAfter(ctx: SearchContext, placed: CandidatePier[]): SearchContext {
+  if (placed.length === 0) return ctx;
+  const width = ctx.params.mainPierWidth;
+  const grow = (r: LocalRect): LocalRect => ({ s0: r.s0 - GROUP_GAP, s1: r.s1 + GROUP_GAP, d0: r.d0 - GROUP_GAP, d1: r.d1 + GROUP_GAP });
+  const taken: Polygon[] = [];
+  const lanes: Polygon[] = [];
+  for (const p of placed) {
+    const length = distance(p.segment.start, p.segment.end);
+    const along = scale(sub(p.segment.end, p.segment.start), 1 / length);
+    const left = { x: -along.y, y: along.x };
+    const frame = { origin: add(p.segment.start, scale(left, width / 2)), along, outward: left };
+    taken.push(localRectToPolygon(grow({ s0: 0, s1: length, d0: -width, d1: 0 }), frame));
+    let headWidth = 0;
+    for (const row of p.rows) {
+      let sMin = Infinity;
+      let sMax = -Infinity;
+      for (const run of row.runs) {
+        sMin = Math.min(sMin, run[0]!.s);
+        const last = run[run.length - 1]!;
+        sMax = Math.max(sMax, last.s + last.geometry.footprint);
+      }
+      taken.push(localRectToPolygon(grow({ s0: sMin, s1: sMax, d0: 0, d1: row.depth }), row.frame));
+      lanes.push(localRectToPolygon(grow({ s0: 0, s1: length, d0: row.depth, d1: row.depth + row.fairwayWidth }), row.frame));
+      headWidth = Math.max(headWidth, row.fairwayWidth);
+    }
+    const reach = (side: PierSide): number => {
+      const row = p.rows.find((r) => r.side === side);
+      return row ? row.depth + row.fairwayWidth : 0;
+    };
+    lanes.push(localRectToPolygon(grow({ s0: length, s1: length + headWidth, d0: -width - reach('right'), d1: reach('left') }), frame));
+  }
+  // The rectangles become holes of the regions. They may overlap each other and the region's edge:
+  // the region tests (point, segment, convex polygon) treat a point in any hole as outside, so no
+  // polygon overlay is needed, which keeps the search fast.
+  const prepared: PreparedSite = {
+    ...ctx.prepared,
+    structureRegion: withHoles(ctx.prepared.structureRegion, [...taken, ...lanes]),
+    navigableRegion: withHoles(ctx.prepared.navigableRegion, taken),
+  };
+  const noBerths: Region = lanes.map((outer) => ({ outer: ensureCounterClockwise(outer), holes: [] }));
+  return { ...ctx, prepared, fill: { ...ctx.fill, prepared, noBerths } };
+}
+
+/** The region with the rectangles cut out as holes of the parts they reach (search only). */
+function withHoles(region: Region, rects: Polygon[]): Region {
+  return region.map((part) => {
+    const box = boundingBox(part.outer);
+    const extra = rects.filter((r) => boxesOverlap(boundingBox(r), box));
+    return extra.length > 0 ? { outer: part.outer, holes: [...part.holes, ...extra] } : part;
+  });
+}
+
+/**
+ * A way to place one group: piers at `angle`, optionally only those starting from `section`, and
+ * of those only the ones within `band` (fractions 0–1 of the section's width across the piers).
+ */
+interface PierFamily {
+  angle: number;
+  section: ShoreSection | null;
+  band?: [number, number];
+}
+
+/** Parts of a shore section the first group may take, so that another direction gets room. */
+const FIRST_GROUP_BANDS: [number, number][] = [
+  [0, 1],
+  [0, 1 / 2],
+  [1 / 2, 1],
+  [0, 1 / 3],
+  [2 / 3, 1],
+];
+
+interface GroupChoice {
+  family: PierFamily;
+  piers: CandidatePier[];
+  mix: MixState;
+  /** All piers so far, this group included, summarized. */
+  candidate: Candidate;
+}
+
+/** The best offset for a group of `family` after `placed`, judged on the whole layout. */
+function bestGroup(
+  ctx: SearchContext,
+  gctx: SearchContext,
+  family: PierFamily,
+  placed: CandidatePier[],
+  mixIn: MixState,
+  placements: Map<string, PierSegment[]>,
+  step: number,
+): GroupChoice | null {
+  const { params, design } = ctx;
+  // A pier belongs to a section when its shore end lies within the gangway gap (plus the pier
+  // width for an oblique shore) of it.
+  const near = params.shoreGap + params.mainPierWidth + SHORE_TOLERANCE;
+  const dir = bearingToVector(family.angle);
+  const lateral = { x: dir.y, y: -dir.x };
+  let band: [number, number] | null = null;
+  if (family.section && family.band) {
+    const us = family.section.points.map((p) => dot(p, lateral));
+    const lo = Math.min(...us);
+    const hi = Math.max(...us);
+    band = [lo + family.band[0] * (hi - lo) - EPS, lo + family.band[1] * (hi - lo) + EPS];
+  }
+  const keep = family.section
+    ? (segment: PierSegment) => {
+        if (distancePointToPolyline(segment.start, family.section!.points) > near) return false;
+        if (!band) return true;
+        const u = dot(segment.start, lateral);
+        return u >= band[0] && u <= band[1];
+      }
+    : undefined;
+  let best: GroupChoice | null = null;
+  for (let offset = 0; offset < design.pitch; offset += step) {
+    const mix = cloneMix(mixIn);
+    const piers = parallelPiers(gctx, 'F', family.angle, offset, design.pitch, mix, 0, keep, placements);
+    if (!piers || piers.length === 0) continue;
+    for (const p of piers) p.fill = gctx.fill;
+    const candidate = summarize(ctx, 'F', family.angle, [...placed, ...piers]);
+    if (better(candidate, best?.candidate ?? null, ctx.objective)) best = { family, piers, mix, candidate };
+  }
+  return best;
+}
+
+/**
+ * Strategy F: groups of parallel piers in different directions, each square to its own stretch of
+ * shore. The first group is the piers of one shore section; the next groups, in the water left
+ * free, take the direction (of any section) that adds the most reachable berths. The rows of a
+ * later group may face an earlier group's fairway, so fairways are shared rather than duplicated,
+ * and every berth must be reachable from the entrance through a fairway of its width (reach grid),
+ * which keeps the water between the groups open. Only layouts with at least two directions count.
+ */
+function bestMixed(base: SearchContext): Candidate[] {
+  if (base.params.orientation !== 'auto') return [];
+  const ctx: SearchContext = base.caps ? { ...base, balanceLastPier: false } : base;
+  const sections = shoreSections(ctx.prepared.site.shoreline);
+  const firsts: PierFamily[] = sections.flatMap((section) =>
+    FIRST_GROUP_BANDS.map((band) => ({ angle: normalizeAxis(section.bearing + 90), section, band })),
+  );
+  const angles: number[] = [];
+  for (const f of firsts) if (!angles.some((a) => axisDifference(a, f.angle) < SAME_DIRECTION)) angles.push(f.angle);
+  if (angles.length < 2) return [];
+  const later: PierFamily[] = angles.map((angle) => ({ angle, section: null }));
+
+  const found: Candidate[] = [];
+  // Different starts often lead to the same piers; their reduced site is computed once.
+  const contexts = new Map<string, SearchContext>();
+  const placementsOf = new Map<SearchContext, Map<string, PierSegment[]>>();
+  const seenFirst = new Set<string>();
+  const pierKey = (piers: CandidatePier[]) => piers.map((p) => `${p.segment.start.x},${p.segment.start.y},${p.segment.end.x},${p.segment.end.y}`).sort().join(';');
+  const contextFor = (placed: CandidatePier[]): SearchContext => {
+    const k = pierKey(placed);
+    let c = contexts.get(k);
+    if (!c) {
+      c = contextAfter(ctx, placed);
+      contexts.set(k, c);
+    }
+    return c;
+  };
+  for (const first of firsts) {
+    let placed: CandidatePier[] = [];
+    let mix = newMixState(ctx.fill.classes, ctx.caps);
+    let current: Candidate | null = null;
+    const groupAngles: number[] = [];
+    for (let round = 0; round < MAX_GROUPS; round++) {
+      // With target counts (D20) nothing more can be placed once every count is met.
+      if (round > 0 && capsReached(mix)) break;
+      const gctx = contextFor(placed);
+      let choice: GroupChoice | null = null;
+      for (const family of round === 0 ? [first] : later) {
+        let placements = placementsOf.get(gctx);
+        if (!placements) placementsOf.set(gctx, (placements = new Map()));
+        const g = bestGroup(ctx, gctx, family, placed, mix, placements, round === 0 ? MIXED_OFFSET_STEP : MIXED_LATER_STEP);
+        if (!g) continue;
+        // A group must add berths that can be reached, not just move them around.
+        if (current && !(g.candidate.berths > current.berths)) continue;
+        if (better(g.candidate, choice?.candidate ?? null, ctx.objective)) choice = g;
+      }
+      if (!choice) break;
+      placed = [...placed, ...choice.piers];
+      mix = choice.mix;
+      current = choice.candidate;
+      groupAngles.push(choice.family.angle);
+      // Starts with the same first group continue the same way: follow only the first of them.
+      if (round === 0) {
+        const k = pierKey(placed);
+        if (seenFirst.has(k)) {
+          current = null;
+          break;
+        }
+        seenFirst.add(k);
+      }
+    }
+    const distinct: number[] = [];
+    for (const a of groupAngles) if (!distinct.some((d) => axisDifference(a, d) < SAME_DIRECTION)) distinct.push(a);
+    if (!current || distinct.length < 2) continue;
+    const candidate: Candidate = { ...current, angle: groupAngles[0]!, angles: distinct };
+    // The same piers can come from several starts; keep one of each.
+    if (!found.some((c) => pierKey(c.piers) === pierKey(candidate.piers))) found.push(candidate);
+  }
+  found.sort((x, y) => (better(x, y, ctx.objective) ? -1 : better(y, x, ctx.objective) ? 1 : 0));
+  return found.slice(0, MIXED_POOL_SIZE);
 }
 
 // ---------------------------------------------------------------------------
@@ -943,7 +1262,28 @@ const STRATEGY_NAME: Record<StrategyId, (c: Candidate) => string> = {
   C: (c) => `C – Best orientation (${fmtAngle(c.angle)})`,
   D: () => 'D – Shore-parallel pier',
   E: () => 'E – Piers sized by boat class',
+  F: (c) => `F – Mixed directions (${(c.angles ?? [c.angle]).map(fmtAngle).join(' / ')})`,
 };
+
+/**
+ * Fill a pier of a candidate again with the runs ordered by boat length. A pier of strategy F is
+ * filled in its group's site; if that would change its rows (the mix can differ from the search),
+ * the rows of the search are kept, since the later groups were placed around exactly those.
+ */
+function refill(pier: MainPier, p: CandidatePier, fill: FillContext, mix: MixState): FilledRow[] {
+  if (!p.fill) return fillPierRows(pier, fill, mix, p.fillOptions);
+  const trial = cloneMix(mix);
+  const rows = fillPierRows(pier, fill, trial, p.fillOptions);
+  const extent = (rs: FilledRow[]) =>
+    rs.map((r) => `${r.side}:${r.runs.map((run) => `${run[0]!.s.toFixed(3)}-${(run[run.length - 1]!.s + run[run.length - 1]!.geometry.footprint).toFixed(3)}x${run.reduce((n, b) => n + b.boats.length, 0)}`).join(',')}`).join('|');
+  const same = extent(rows) === extent(p.rows);
+  const kept = same ? rows : p.rows;
+  for (const row of kept) for (const run of row.runs) for (const bay of run) for (const boat of bay.boats) {
+    mix.counts[boat.id] = (mix.counts[boat.id] ?? 0) + 1;
+    mix.total++;
+  }
+  return kept;
+}
 
 /**
  * Build the layout elements of a candidate. The piers are filled again, this time with
@@ -960,7 +1300,7 @@ function toDraft(candidate: Candidate, id: string, ctx: SearchContext): LayoutDr
   const rebuilt = candidate.rebuild?.();
   (rebuilt ?? candidate.piers).forEach((p, i) => {
     const pier: MainPier = { id: `P${i + 1}`, start: p.segment.start, end: p.segment.end, width, locked: false, origin: 'generated' };
-    const elements = rowsToElements(pier.id, rebuilt ? p.rows : fillPierRows(pier, fill, mix, p.fillOptions));
+    const elements = rowsToElements(pier.id, rebuilt ? p.rows : refill(pier, p, p.fill ? { ...p.fill, orderRuns: true } : fill, mix));
     piers.push(pier);
     fingers.push(...elements.fingers);
     berths.push(...elements.berths);
@@ -1126,6 +1466,8 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = pa
   // E: piers square to the shore, each row sized by its own boat classes.
   const e = process.env.MARINA_NO_E ? null : bestSizeZoned(ctx, orientations.shorePerpendicular);
   if (e) pool.push(e);
+  // F: groups of piers in different directions, each square to its own stretch of shore.
+  pool.push(...bestMixed(ctx));
 
   if (pool.length === 0) return { layouts: [], diagnostics: explainEmpty(ctx) };
 
@@ -1143,7 +1485,9 @@ export function generateLayouts(input: GenerateInput, pattern: BerthPattern = pa
   // I98: an orientation of the sweep (C) that is a near-duplicate of the perpendicular layout (A)
   // adds nothing; A is kept as the named family (SPEC §5.7) whichever ranks higher.
   const perpendicular = ranked.filter((l) => l.strategy === 'A');
-  const distinct = ranked.filter((l) => l.strategy !== 'C' || !perpendicular.some((a) => isNearDuplicate(a, l)));
+  // Of the strategy F candidates evaluated in full, the best one is kept.
+  const bestF = ranked.find((l) => l.strategy === 'F');
+  const distinct = ranked.filter((l) => (l.strategy !== 'C' || !perpendicular.some((a) => isNearDuplicate(a, l))) && (l.strategy !== 'F' || l === bestF));
   const kept: Layout[] = [];
   for (const layout of distinct) {
     if (kept.some((k) => isNearDuplicate(k, layout))) continue;

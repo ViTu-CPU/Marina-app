@@ -65,6 +65,7 @@ Default mix: 12.5 m, 18 m and 46 m.
 | C | best offset for each other orientation; the best four orientations (I13) |
 | D | one pier lying along a shoreline segment, berths on the water side (D4) |
 | E | shore-perpendicular piers, every row sized for its own boat classes (D10) |
+| F | mixed directions: up to three groups of parallel piers, each square to its own stretch of shore (D67, I128) |
 
 **Strategy E in more detail** (I23–I27). The berths to place are split over the classes
 by target share into quotas. Piers are then placed one after another across the site;
@@ -95,6 +96,14 @@ pier module, no pier reaches the shoreline, water too short for a pier, or all b
 blocked.
 
 The search is deterministic: no random numbers, fixed iteration order, fixed tie-breaks.
+
+**Strategy F in more detail** (D67, I128). The shoreline is split into sections where it turns
+by more than 30°. The first group is the piers of one section (whole, a half or an outer third)
+square to it; the next groups take, in the water left free, the direction that adds the most
+berths reachable from the entrance. Earlier piers, rows, the fairways in front of their rows and
+the water around their heads are kept free of structures, and of boats too, but a new row may face
+an earlier fairway, so the two rows share it. Only layouts with two or more directions count; the
+three best are evaluated exactly and the best is kept.
 
 ## 4. Fairways (`fairways.ts`)
 
@@ -183,4 +192,4 @@ scaled by the best alternative. Layouts with geometric errors always rank below 
 ## 7. Not implemented
 
 Local refinement of angle and offset (I22); piers from both banks on one line (I18);
-size zoning for other pier directions than square to the shore.
+size zoning for other pier directions than square to the shore, and in strategy F.
