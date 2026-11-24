@@ -195,6 +195,7 @@ export const DEFAULT_FRICTION: Record<FrictionSeabed, number> = {
  *  - seabed mediumClay (μ 0.30), as the earlier clay default of 0.3.
  *  - splayAngle 45° (D25), tipAnchorMinLength 10 m (D30), fingerPileMinLength 12 m (D31),
  *    lineSpacing 12 m (assumption), stern buoys after Båtunionen (D37).
+ *  - landAnchors 'blockAtWall': the owner's choice (D66, 2026-11-24): a concrete block at the foot of the wall.
  */
 export const DEFAULT_ANCHORING: AnchoringParams = {
   depth: 4,
@@ -229,7 +230,7 @@ export const DEFAULT_ANCHORING: AnchoringParams = {
   maxAnchorMass: 5000,
   maxAnchorsPerLine: 1,
   tipAnchorMinLength: 10,
-  landAnchors: 'wall',
+  landAnchors: 'blockAtWall',
   fingerPileMinLength: 12,
   buoySinkerMethod: 'table',
   buoyTable: 'batunionen',

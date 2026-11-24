@@ -306,7 +306,7 @@ describe('the layout of other legs', () => {
 
   it('a pier reached by a gangway: two shore chains crossed under it to the wall (D49), holding it towards the head', () => {
     const near: Site = { ...site, shoreline: [{ x: -100, y: -4 }, { x: 100, y: -4 }] };
-    const r = plan({}, { site: near });
+    const r = plan({ landAnchors: 'wall' }, { site: near });
     const shore = r.lines.filter((l) => l.role === 'shore');
     expect(shore.map((l) => l.id)).toEqual(['P1-S1', 'P1-S2']);
     // D66: the chains of the first joint splayed towards the shore would reach land: to the wall too.
@@ -484,12 +484,13 @@ describe('anchors never on land (D66)', () => {
 
   it('without land in the way nothing changes', () => {
     expect(plan().lines.some((l) => l.landed)).toBe(false);
-    expect(DEFAULT_ANCHORING.landAnchors).toBe('wall');
+    // The owner's choice (2026-11-24): a concrete block at the foot of the wall.
+    expect(DEFAULT_ANCHORING.landAnchors).toBe('blockAtWall');
   });
 
-  it('default: a chain that would reach land is fixed to the wall where it meets it', () => {
+  it('a chain that would reach land can be fixed to the wall where it meets it', () => {
     const free = plan();
-    const r = plan({}, { site: wallSite });
+    const r = plan({ landAnchors: 'wall' }, { site: wallSite });
     expect(east(free).every((l) => l.anchor.x > 10)).toBe(true);
     for (const l of east(r)) {
       expect([l.landed, l.fixing, l.anchorCount, l.anchorKind]).toEqual(['wall', 'wall', 0, null]);
@@ -503,8 +504,8 @@ describe('anchors never on land (D66)', () => {
     expect(r.lines.every((l) => l.anchor.x <= 10 + 1e-6)).toBe(true);
   });
 
-  it('or to a concrete block at the foot of the wall on a shortened chain', () => {
-    const r = plan({ landAnchors: 'blockAtWall' }, { site: wallSite });
+  it('default: to a concrete block at the foot of the wall on a shortened chain', () => {
+    const r = plan({}, { site: wallSite });
     const nominal = chainLengthFor(DEFAULT_ANCHORING.depth + DEFAULT_ANCHORING.highWater, DEFAULT_ANCHORING);
     for (const l of east(r)) {
       expect([l.landed, l.fixing]).toEqual(['blockAtWall', 'seabed']);
@@ -528,7 +529,10 @@ describe('anchors never on land (D66)', () => {
 
   it('an anchor on an island is moved too', () => {
     const islandSite: Site = { ...site, obstacles: [{ id: 'isle', kind: 'island', shape: [{ x: 6, y: -40 }, { x: 60, y: -40 }, { x: 60, y: 100 }, { x: 6, y: 100 }] }] };
-    const r = plan({}, { site: islandSite });
+    const r = plan({ landAnchors: 'wall' }, { site: islandSite });
     expect(east(r).every((l) => l.landed === 'wall' && Math.abs(l.anchor.x - 6) < 1e-6)).toBe(true);
+    // By default a block 1 m off the island's edge, in the water.
+    const block = plan({}, { site: islandSite });
+    expect(east(block).every((l) => l.landed === 'blockAtWall' && l.anchor.x < 6)).toBe(true);
   });
 });

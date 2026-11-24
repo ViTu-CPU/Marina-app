@@ -572,7 +572,7 @@ function anchoring(v: unknown): AnchoringParams {
     maxAnchorMass: pick('maxAnchorMass'),
     maxAnchorsPerLine: pick('maxAnchorsPerLine'),
     tipAnchorMinLength: pick('tipAnchorMinLength'),
-    // D66: missing in older files: to the wall.
+    // D66: missing in older files: the default (a block at the foot of the wall).
     landAnchors: o.landAnchors === undefined ? d.landAnchors : oneOf(o.landAnchors, ['wall', 'blockAtWall'] as const, 'anchoring.landAnchors'),
     fingerPileMinLength: pick('fingerPileMinLength'),
     buoySinkerMethod:
