@@ -1,10 +1,12 @@
 /**
- * Online map (OpenStreetMap tiles) drawn under the site, inside the world-space group.
+ * Online map drawn under the site, inside the world-space group: OpenStreetMap tiles or, U34, a
+ * City of Helsinki base map as WMS images in the same tile grid, with the detailed plan over it.
  */
 import { useEffect, useMemo, useReducer } from 'react';
 import { Image as KonvaImage } from 'react-konva';
 import type { MapBackground } from '../../engine/model';
-import { osmTileUrl, tileRect, tilesCovering, tileZoomFor } from '../../state/geo';
+import { tileRect, tilesCovering, tileZoomFor } from '../../state/geo';
+import { baseTileUrl, planTileUrl } from '../../state/helsinki';
 import { visibleBounds, type Size, type View } from '../../state/view';
 
 /** Tiles kept in memory. The browser's own HTTP cache follows the server's cache headers. */
@@ -48,27 +50,32 @@ export function MapTiles({ map, view, viewport }: { map: MapBackground; view: Vi
   // Only the tiles in view are requested; nothing is fetched ahead (OSM Tile Usage Policy).
   const tiles = tilesCovering(origin, visibleBounds(view, viewport), tileZoomFor(origin, view.zoom));
 
+  const layers: { key: string; url: (tile: (typeof tiles)[number]) => string }[] = [{ key: map.provider, url: (tile) => baseTileUrl(map.provider, tile) }];
+  if (map.planOverlay) layers.push({ key: 'plan', url: planTileUrl });
+
   return (
     <>
-      {tiles.map((tile) => {
-        const entry = requestTile(osmTileUrl(tile));
-        if (!entry.ready) return null;
-        const rect = tileRect(origin, tile);
-        return (
-          <KonvaImage
-            key={`${tile.z}/${tile.x}/${tile.y}`}
-            image={entry.image}
-            x={rect.x}
-            y={rect.top}
-            width={rect.width}
-            height={rect.height}
-            // The world group flips y; flip the tile back.
-            scaleY={-1}
-            opacity={map.opacity}
-            listening={false}
-          />
-        );
-      })}
+      {layers.flatMap((layer) =>
+        tiles.map((tile) => {
+          const entry = requestTile(layer.url(tile));
+          if (!entry.ready) return null;
+          const rect = tileRect(origin, tile);
+          return (
+            <KonvaImage
+              key={`${layer.key}/${tile.z}/${tile.x}/${tile.y}`}
+              image={entry.image}
+              x={rect.x}
+              y={rect.top}
+              width={rect.width}
+              height={rect.height}
+              // The world group flips y; flip the tile back.
+              scaleY={-1}
+              opacity={map.opacity}
+              listening={false}
+            />
+          );
+        }),
+      )}
     </>
   );
 }

@@ -5,7 +5,7 @@
  * exceed them and whether the berths look to need a wave attenuator or a breakwater.
  * Preliminary only.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { breakwaterProposal, breakwaterShelter, weightPerMetre, type BreakwaterProposal, type ShelterRow } from '../../engine/breakwater';
 import { pierAxis } from '../../engine/rows';
 import {
@@ -23,12 +23,14 @@ import {
 import { sectorBearing, windClimate } from '../../engine/wind';
 import type { StringKey } from '../../i18n';
 import { sectorFetches, RAY_STEP_DEG } from '../../engine/fetchRays';
-import { parseLatLon } from '../../state/geo';
+import { originPlacing, parseLatLon } from '../../state/geo';
 import { lookupWaterFetch, VT_SOURCE, type WaterFetchLookup } from '../../state/vectorTiles';
 import { DEPTH_SOURCES, lookupFetchDepths } from '../../state/depth';
 import { fetchWindHistory } from '../../state/openMeteo';
 import { completeYears, fetchStationWind, findWindStations, FMI_WIND_SOURCE, MIN_YEAR_COVERAGE, type WindStation } from '../../state/fmiWind';
 import { appStore, useAppStore } from '../../state/store';
+import { printHtml } from '../export/download';
+import { buildWaveReportHtml } from '../export/waveReport';
 import { formatCount, formatLength, formatPercent } from '../format';
 import { useSitePosition } from '../sitePosition';
 import { useT } from '../useT';
@@ -42,6 +44,79 @@ const AVERAGING = [600, 3600] as const;
 
 /** Wave heights with two decimals: the criteria are 0.15–0.61 m (U25). */
 const formatHeight = (m: number, language: 'en' | 'fi') => new Intl.NumberFormat(language === 'fi' ? 'fi-FI' : 'en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(m);
+
+/** UI_REVIEW 3: method and source texts folded away behind one line; the printed report keeps them in full. */
+function Note({ children, testId }: { children: ReactNode; testId?: string }) {
+  const t = useT();
+  return (
+    <details className="text-xs text-slate-500" {...(testId ? { 'data-testid': testId } : {})}>
+      <summary className="cursor-pointer select-none text-slate-500 hover:text-slate-700">{t('waves.method')}</summary>
+      <div className="mt-1 space-y-1">{children}</div>
+    </details>
+  );
+}
+
+/** UI_REVIEW 1: the window's sections as numbered steps in working order. */
+function Step({ n, title, children, testId }: { n: number; title: string; children: ReactNode; testId?: string }) {
+  return (
+    <section className="space-y-2 border-t border-slate-200 pt-3 first:border-t-0 first:pt-0" {...(testId ? { 'data-testid': testId } : {})}>
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-700 text-xs font-semibold text-white">{n}</span>
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+/** UI_REVIEW 1: the position of the lookups comes first, since every lookup needs it. */
+function PositionSection() {
+  const t = useT();
+  const waves = useAppStore((s) => s.project.waves);
+  const map = useAppStore((s) => s.project.map);
+  const { position, siteCentre } = useSitePosition();
+  const [text, setText] = useState('');
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-1">
+          {t('wind.position')}
+          <input
+            aria-label={t('wind.position')}
+            className="w-52 rounded border border-slate-300 px-1.5 py-0.5 text-sm"
+            placeholder={position ? `${position.lat.toFixed(4)}, ${position.lon.toFixed(4)}` : t('wind.positionHint')}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              const p = parseLatLon(e.target.value);
+              if (p) appStore.getState().setWaves({ location: p });
+              else if (e.target.value.trim() === '') appStore.getState().setWaves({ location: null });
+            }}
+          />
+        </label>
+        <span className="text-xs text-slate-500">{waves.location ? t('wind.positionEntered') : siteCentre ? t('wind.positionSite') : t('wind.positionNone')}</span>
+        {/* A wave study alone has no map yet: put one under the position so that the fetch rays can be drawn. */}
+        {!map && waves.location && (
+          <Button
+            onClick={() => {
+              const s = state();
+              const loc = s.project.waves.location;
+              if (!loc) return;
+              const empty = s.project.site.water.length === 0 && s.project.background === null;
+              if (empty) s.setView({ cx: 0, cy: 0, zoom: 2 });
+              const view = empty ? { cx: 0, cy: 0 } : s.view;
+              const origin = originPlacing(loc.lat, loc.lon, { x: view.cx, y: view.cy });
+              s.setMap({ provider: 'osm', lat: origin.lat, lon: origin.lon, opacity: 0.8 });
+            }}
+          >
+            {t('waves.showOnMap')}
+          </Button>
+        )}
+      </div>
+      <p className="text-xs text-slate-500">{t('waves.positionHint')}</p>
+    </div>
+  );
+}
 
 function OptionalRow({ label, value, min, max, placeholder, onChange }: { label: string; value: number | null; min: number; max: number; placeholder?: string; onChange: (v: number | null) => void }) {
   return (
@@ -113,7 +188,7 @@ function AutoFetchSection() {
   const open = af ? sectorFetches(af.distances, af.radius, af.stepDeg).map((x) => x.open) : [];
   return (
     <div className="space-y-1" data-testid="auto-fetch">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('autoFetch.title')}</div>
+      <div className="text-xs text-slate-600">{t('autoFetch.title')}</div>
       <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
         <label className="flex items-center gap-1">
           {t('autoFetch.radius')}
@@ -138,7 +213,7 @@ function AutoFetchSection() {
           </>
         )}
       </div>
-      {!position && <p className="text-xs text-amber-800">{t('autoFetch.noPosition')}</p>}
+      {!position && <p className="text-xs text-amber-800">{t('waves.needPosition')}</p>}
       {cancelled && <p className="text-xs text-slate-600">{t('autoFetch.cancelled')}</p>}
       {error && (
         <p role="alert" className="text-xs text-red-700">
@@ -156,8 +231,9 @@ function AutoFetchSection() {
           {t('autoFetch.found')} {formatCount(found.hits, language)} / {found.distances.length} {t('autoFetch.rays')} · {formatCount(found.tiles, language)} {t('autoFetch.tilesRead')}
         </p>
       )}
-      <p className="text-xs text-slate-500">{t('autoFetch.note')}</p>
-      <DepthLookup />
+      <Note>
+        <p>{t('autoFetch.note')}</p>
+      </Note>
     </div>
   );
 }
@@ -220,9 +296,11 @@ function DepthLookup() {
           }).join(', ')}
         </p>
       )}
-      <p className="text-xs text-slate-500">
-        {t('autoDepth.note')} {DEPTH_SOURCES.emodnet}; {DEPTH_SOURCES.syke}.
-      </p>
+      <Note>
+        <p>
+          {t('autoDepth.note')} {DEPTH_SOURCES.emodnet}; {DEPTH_SOURCES.syke}.
+        </p>
+      </Note>
     </div>
   );
 }
@@ -239,8 +317,7 @@ function WindSection() {
   const [years, setYears] = useState<[number, number]>([lastYear - 29, lastYear]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { position, siteCentre } = useSitePosition();
-  const [text, setText] = useState('');
+  const { position } = useSitePosition();
   const climate = waves.climate;
   // D47: the 22.5° sectors behind the wave directions that exceed the criteria.
   const designDepth = useAppStore((s) => s.project.anchoring.depth);
@@ -275,26 +352,8 @@ function WindSection() {
   };
 
   return (
-    <div className="space-y-2 border-t border-slate-200 pt-3">
+    <div className="space-y-2">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('wind.title')}</div>
-      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-        <label className="flex items-center gap-1">
-          {t('wind.position')}
-          <input
-            aria-label={t('wind.position')}
-            className="w-44 rounded border border-slate-300 px-1.5 py-0.5 text-sm"
-            placeholder={position ? `${position.lat.toFixed(4)}, ${position.lon.toFixed(4)}` : t('wind.positionHint')}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              const p = parseLatLon(e.target.value);
-              if (p) appStore.getState().setWaves({ location: p });
-              else if (e.target.value.trim() === '') appStore.getState().setWaves({ location: null });
-            }}
-          />
-        </label>
-        <span className="text-xs text-slate-500">{waves.location ? t('wind.positionEntered') : siteCentre ? t('wind.positionSite') : t('wind.positionNone')}</span>
-      </div>
       <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
         <span>{t('wind.years')}</span>
         <div className="w-20">
@@ -359,7 +418,9 @@ function WindSection() {
           </div>
         </div>
       )}
-      <p className="text-xs text-slate-500">{t('wind.note')}</p>
+      <Note>
+        <p>{t('wind.note')}</p>
+      </Note>
     </div>
   );
 }
@@ -418,7 +479,7 @@ function StationWindSection() {
   };
 
   return (
-    <div className="space-y-2 border-t border-slate-200 pt-3" data-testid="station-wind">
+    <div className="space-y-2 border-t border-dashed border-slate-200 pt-2" data-testid="station-wind">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('station.title')}</div>
       <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
         <span>{t('wind.years')}</span>
@@ -497,7 +558,9 @@ function StationWindSection() {
           </label>
         </div>
       )}
-      <p className="text-xs text-slate-500">{t('station.note')}</p>
+      <Note>
+        <p>{t('station.note')}</p>
+      </Note>
     </div>
   );
 }
@@ -558,7 +621,9 @@ function BreakwaterSection({ proposal }: { proposal: BreakwaterProposal }) {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-500">{t('breakwater.note')}</p>
+      <Note>
+        <p>{t('breakwater.note')}</p>
+      </Note>
     </div>
   );
 }
@@ -602,7 +667,9 @@ function ShelterSection({ rows }: { rows: ShelterRow[] }) {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-500">{t('shelter.note')}</p>
+      <Note>
+        <p>{t('shelter.note')}</p>
+      </Note>
     </div>
   );
 }
@@ -677,7 +744,27 @@ export function WaveTool() {
   const boatsPerBay = useAppStore((s) => s.project.params.boatsPerBay);
   const piers = useAppStore((s) => s.project.layouts.find((l) => l.id === s.selectedLayoutId)?.piers ?? null);
   const site = useAppStore((s) => s.project.site);
+  const { position } = useSitePosition();
+  const dialog = useRef<HTMLElement>(null);
   if (!open) return null;
+
+  /** U29: the wave screening as a printable report of its own, with or without a layout. */
+  const print = () => {
+    const s = state();
+    const layout = s.project.layouts.find((l) => l.id === s.selectedLayoutId) ?? null;
+    printHtml(
+      buildWaveReportHtml({
+        project: s.project,
+        piers: layout?.piers ?? [],
+        layoutName: layout?.name ?? null,
+        position,
+        positionEntered: s.project.waves.location !== null,
+        windRoseSvg: dialog.current?.querySelector('[data-testid="wind-rose"]')?.outerHTML ?? null,
+        language: s.language,
+        date: new Date().toISOString().slice(0, 10),
+      }),
+    );
+  };
 
   const bearings = (piers ?? []).map((p) => ({ id: p.id, bearing: bearingOf(pierAxis(p).along) }));
   const result = waveAssessment(waves, designDepth, bearings);
@@ -688,74 +775,88 @@ export function WaveTool() {
   const h = (m: number) => formatHeight(m, language);
   const th = 'px-1 font-medium';
 
+  const selectRow = (label: string, value: string | number, options: { value: string | number; label: string }[], onChange: (v: string) => void) => (
+    <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+      {label}
+      <select className="rounded border border-slate-300 px-1 py-0.5 text-sm" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4" onClick={() => state().setWaveToolOpen(false)}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('waves.title')}
-        data-testid="wave-tool"
-        className="w-full max-w-6xl rounded bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    // UI_REVIEW 4: a panel beside the map, so that the fetch rays on the map stay in view.
+    <aside role="complementary" aria-label={t('waves.title')} data-testid="wave-tool" ref={dialog} className="flex w-[52rem] min-w-0 max-w-[64%] shrink-0 flex-col border-l border-slate-200 bg-white">
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2">
           <h2 className="text-sm font-semibold text-slate-800">{t('waves.title')}</h2>
-          <Button onClick={() => state().setWaveToolOpen(false)}>{t('waves.close')}</Button>
+          <div className="flex items-center gap-1.5">
+            <Button title={t('waves.printHint')} onClick={print}>
+              {t('waves.print')}
+            </Button>
+            <Button onClick={() => state().setWaveToolOpen(false)}>{t('waves.close')}</Button>
+          </div>
         </div>
-        <div className="grid gap-4 p-4 lg:grid-cols-[17rem_1fr]">
-          <div className="space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('waves.inputs')}</div>
-            <OptionalRow
-              label={t('waves.fetchDepth')}
-              value={waves.fetchDepth}
-              min={0.1}
-              max={1000}
-              placeholder={len(designDepth)}
-              onChange={(fetchDepth) => set({ fetchDepth }, 'fetchDepth')}
-            />
-            <OptionalRow label={t('waves.wind1')} value={waves.wind1} min={0.1} max={80} onChange={(wind1) => set({ wind1 }, 'wind1')} />
-            <OptionalRow label={t('waves.wind50')} value={waves.wind50} min={0.1} max={80} onChange={(wind50) => set({ wind50 }, 'wind50')} />
-            <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
-              {t('waves.windAveraging')}
-              <select
-                className="rounded border border-slate-300 px-1 py-0.5 text-sm"
-                value={waves.windAveragingS}
-                onChange={(e) => state().setWaves({ windAveragingS: Number(e.target.value) })}
-              >
-                {AVERAGING.map((a) => (
-                  <option key={a} value={a}>
-                    {t(`waves.avg${a}` as StringKey)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
-              {t('waves.criteriaSet')}
-              <select className="rounded border border-slate-300 px-1 py-0.5 text-sm" value={waves.criteria} onChange={(e) => state().setWaves({ criteria: e.target.value as WaveCriteria })}>
-                {CRITERIA.map((c) => (
-                  <option key={c} value={c}>
-                    {t(`waveCriteria.${c}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
-              {t('waves.quality')}
-              <select className="rounded border border-slate-300 px-1 py-0.5 text-sm" value={waves.quality} onChange={(e) => state().setWaves({ quality: e.target.value as WaveQuality })}>
-                {QUALITIES.map((q) => (
-                  <option key={q} value={q}>
-                    {t(`waveQuality.${q}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {waves.criteria === 'as3962' && <p className="text-xs text-slate-500">{t('waves.as3962Note')}</p>}
-            <p className="text-xs text-slate-500">{t('waves.inputNote')}</p>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-sm">
+          {/* UI_REVIEW 2: the result first. */}
+          <div
+            data-testid="wave-advice"
+            className={`rounded border px-3 py-2 ${!result || result.advice === 'unknown' ? 'border-slate-200 bg-slate-50 text-slate-700' : result.advice === 'none' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
+          >
+            {!result ? (
+              t('waves.enter')
+            ) : (
+              <>
+                <div className="font-medium" data-testid="wave-summary">
+                  {result.bad.length === 0 ? t('waves.noneBad') : `${t('waves.bad')}: ${result.bad.map((k) => WAVE_SECTORS[k]).join(', ')}`}
+                </div>
+                <div>{t(`waveAdvice.${result.advice}`)}</div>
+              </>
+            )}
           </div>
 
-          <div className="min-w-0 space-y-3 text-sm">
+          <Step n={1} title={t('waves.step.position')} testId="wave-step-position">
+            <PositionSection />
+          </Step>
+
+          <Step n={2} title={t('waves.step.fetch')} testId="wave-step-fetch">
             <AutoFetchSection />
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('waves.sectors')}</div>
+            <p className="text-xs text-slate-500">{t('waves.fetchHint')}</p>
+          </Step>
+
+          <Step n={3} title={t('waves.step.depth')} testId="wave-step-depth">
+            <div className="max-w-md">
+              <OptionalRow label={t('waves.fetchDepth')} value={waves.fetchDepth} min={0.1} max={1000} placeholder={len(designDepth)} onChange={(fetchDepth) => set({ fetchDepth }, 'fetchDepth')} />
+            </div>
+            <DepthLookup />
+          </Step>
+
+          <Step n={4} title={t('waves.step.wind')} testId="wave-step-wind">
+            <div className="grid max-w-md gap-1">
+              <OptionalRow label={t('waves.wind1')} value={waves.wind1} min={0.1} max={80} onChange={(wind1) => set({ wind1 }, 'wind1')} />
+              <OptionalRow label={t('waves.wind50')} value={waves.wind50} min={0.1} max={80} onChange={(wind50) => set({ wind50 }, 'wind50')} />
+              {selectRow(
+                t('waves.windAveraging'),
+                waves.windAveragingS,
+                AVERAGING.map((a) => ({ value: a, label: t(`waves.avg${a}` as StringKey) })),
+                (v) => state().setWaves({ windAveragingS: Number(v) }),
+              )}
+            </div>
+            <p className="text-xs text-slate-500">{t('waves.windHint')}</p>
+            <WindSection />
+            <StationWindSection />
+          </Step>
+
+          <Step n={5} title={t('waves.step.result')} testId="wave-step-result">
+            <div className="grid max-w-md gap-1">
+              {selectRow(t('waves.criteriaSet'), waves.criteria, CRITERIA.map((c) => ({ value: c, label: t(`waveCriteria.${c}`) })), (v) => state().setWaves({ criteria: v as WaveCriteria }))}
+              {selectRow(t('waves.quality'), waves.quality, QUALITIES.map((q) => ({ value: q, label: t(`waveQuality.${q}`) })), (v) => state().setWaves({ quality: v as WaveQuality }))}
+            </div>
+            {waves.criteria === 'as3962' && <p className="text-xs text-slate-500">{t('waves.as3962Note')}</p>}
             <div className="overflow-x-auto">
               <table className="w-full text-right tabular-nums" data-testid="wave-results">
                 <thead>
@@ -779,55 +880,49 @@ export function WaveTool() {
                 </tbody>
               </table>
             </div>
-            {!result ? (
-              <p className="text-slate-500">{t('waves.enter')}</p>
-            ) : (
-              <>
-                <div data-testid="wave-checks">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {t('waves.criteria')} ({t(`waveCriteria.${result.criteria}`)}, {t(`waveQuality.${waves.quality}`).toLowerCase()})
-                  </div>
-                  {result.bad.length === 0 ? (
-                    <p className="text-emerald-700">{t('waves.noneBad')}</p>
-                  ) : (
-                    <ul className="list-disc pl-5" aria-label={t('waves.bad')}>
-                      {result.sectors
-                        .filter((x) => x.status === 'exceeds')
-                        .map((x) => (
-                          <li key={x.sector}>
-                            <span className="font-medium">{WAVE_SECTORS[x.sector]}</span>:{' '}
-                            {x.checks
-                              .filter((c) => c.ok === false)
-                              .map((c) => `${t(`waveHeading.${c.heading}`).toLowerCase()}, ${t(`waveEvent.${c.event}`).toLowerCase()} ${h(c.waves.hm0)} > ${h(c.limit!)} m`)
-                              .join('; ')}
-                          </li>
-                        ))}
-                    </ul>
-                  )}
-                  <p className="mt-1 text-xs text-slate-500">
-                    {result.piers.length === 0 ? t('waves.noPiers') : `${t('waves.piers')}: ${result.piers.map((p) => p.id).join(', ')}`}
-                  </p>
+            {result && (
+              <div data-testid="wave-checks">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {t('waves.criteria')} ({t(`waveCriteria.${result.criteria}`)}, {t(`waveQuality.${waves.quality}`).toLowerCase()})
                 </div>
-
-                <div
-                  data-testid="wave-advice"
-                  className={`rounded border px-3 py-2 ${result.advice === 'none' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : result.advice === 'unknown' ? 'border-slate-200 bg-slate-50' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
-                >
-                  {t(`waveAdvice.${result.advice}`)}
-                </div>
+                {result.bad.length === 0 ? (
+                  <p className="text-emerald-700">{t('waves.noneBad')}</p>
+                ) : (
+                  <ul className="list-disc pl-5" aria-label={t('waves.bad')}>
+                    {result.sectors
+                      .filter((x) => x.status === 'exceeds')
+                      .map((x) => (
+                        <li key={x.sector}>
+                          <span className="font-medium">{WAVE_SECTORS[x.sector]}</span>:{' '}
+                          {x.checks
+                            .filter((c) => c.ok === false)
+                            .map((c) => `${t(`waveHeading.${c.heading}`).toLowerCase()}, ${t(`waveEvent.${c.event}`).toLowerCase()} ${h(c.waves.hm0)} > ${h(c.limit!)} m`)
+                            .join('; ')}
+                        </li>
+                      ))}
+                  </ul>
+                )}
+                <p className="mt-1 text-xs text-slate-500">
+                  {result.piers.length === 0 ? t('waves.noPiers') : `${t('waves.piers')}: ${result.piers.map((p) => p.id).join(', ')}`}
+                </p>
                 {result.doubleBerthPiles && boatsPerBay === 2 && <p className="text-xs text-amber-800">{t('waves.piles')}</p>}
-                {proposal && <BreakwaterSection proposal={proposal} />}
-                {shelter.length > 0 && <ShelterSection rows={shelter} />}
-              </>
+              </div>
             )}
-            <p className="text-xs text-slate-500">{t('waves.note')}</p>
-          </div>
-        </div>
-        <div className="px-4 pb-4">
-          <WindSection />
-          <StationWindSection />
+          </Step>
+
+          {result && (proposal || shelter.length > 0) && (
+            <Step n={6} title={t('waves.step.protection')} testId="wave-step-protection">
+              {proposal && <BreakwaterSection proposal={proposal} />}
+              {shelter.length > 0 && <ShelterSection rows={shelter} />}
+            </Step>
+          )}
+
+          <Note testId="wave-method">
+            <p>{t('waves.inputNote')}</p>
+            <p>{t('waves.note')}</p>
+          </Note>
         </div>
       </div>
-    </div>
+    </aside>
   );
 }

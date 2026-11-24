@@ -342,7 +342,9 @@ function mapBackground(v: unknown): MapBackground | null {
   const lon = num(o.lon, 'map.lon');
   if (Math.abs(lat) > 85 || Math.abs(lon) > 180) fail('map.lat / map.lon are not a valid position');
   const opacity = o.opacity === undefined ? 0.8 : num(o.opacity, 'map.opacity');
-  return { provider: oneOf(o.provider, ['osm'] as const, 'map.provider'), lat, lon, opacity: Math.min(1, Math.max(0, opacity)) };
+  const provider = oneOf(o.provider, ['osm', 'helsinki-guide', 'helsinki-base', 'helsinki-ortho'] as const, 'map.provider');
+  const planOverlay = o.planOverlay === undefined ? false : o.planOverlay === true;
+  return { provider, lat, lon, opacity: Math.min(1, Math.max(0, opacity)), ...(planOverlay ? { planOverlay } : {}) };
 }
 
 /**

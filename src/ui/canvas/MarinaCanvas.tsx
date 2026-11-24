@@ -16,7 +16,9 @@ import { pierAxis } from '../../engine/rows';
 import { gangwayLinks, pierPolygon, pierShoreLink } from '../../engine/site';
 import { breakwaterProductOf, breakwatersOf } from '../../engine/breakwater';
 import { appStore, useAppStore, type LayerId, type Selection, type ToolId } from '../../state/store';
-import { latLonToLocal, OSM_ATTRIBUTION } from '../../state/geo';
+import { latLonToLocal } from '../../state/geo';
+import { mapAttributions } from '../../state/helsinki';
+import { pickPlanAt } from '../tools/planPick';
 import { gridStep, panBy, scaleBar, screenToWorld, visibleBounds, worldToScreen, zoomAt, type Size, type View } from '../../state/view';
 import { loadImage, registerStage } from '../export/download';
 import { formatLength } from '../format';
@@ -29,6 +31,7 @@ import { hatchPatterns } from './patterns';
 
 import { COLORS } from './colors';
 import { MapLegend } from './MapLegend';
+import { LayerPresets } from '../panels/LayerPresets';
 
 /** Pixels within which the cursor snaps to existing geometry. */
 const SNAP_PIXELS = 10;
@@ -208,6 +211,25 @@ function EquipmentShapes() {
           <Rect key={x.id} x={x.at.x - 0.45} y={x.at.y - 0.45} width={0.9} height={0.9} fill={COLORS.pedestal} stroke="#ffffff" strokeWidth={1} strokeScaleEnabled={false} listening={false} />
         ),
       )}
+    </>
+  );
+}
+
+/** U34: the detailed plan area picked on the map (dashed violet), and the clicked point while it is looked up. */
+function PlanOutline() {
+  const pick = useAppStore((s) => s.planPick);
+  const zoom = useAppStore((s) => s.view.zoom);
+  if (!pick) return null;
+  const px = 1 / zoom;
+  return (
+    <>
+      {pick.status === 'found' &&
+        pick.region.flatMap((part, k) =>
+          [part.outer, ...part.holes].map((ring, r) => (
+            <Line key={`${k}-${r}`} points={flat(ring)} closed stroke="#7c3aed" strokeWidth={2.5 * px} dash={[8 * px, 5 * px]} {...(r === 0 ? { fill: 'rgba(124,58,237,0.06)' } : {})} listening={false} />
+          )),
+        )}
+      <Circle x={pick.at.x} y={pick.at.y} radius={4 * px} fill="#7c3aed" listening={false} />
     </>
   );
 }
@@ -643,6 +665,8 @@ export function MarinaCanvas() {
     if (s.tool === 'select') {
       const name = e.target.name();
       if (name !== 'pier' && name !== 'berth') s.select(null);
+    } else if (s.tool === 'plan' && e.evt.button === 0) {
+      void pickPlanAt(toWorld(screen));
     } else if (DRAWING_TOOLS.includes(s.tool) && e.evt.button === 0) {
       const double = isDoubleClick(screen);
       // The first click of a double-click has already added the point; the second finishes the shape.
@@ -679,7 +703,7 @@ export function MarinaCanvas() {
       ref={containerRef}
       data-testid="canvas"
       className="relative h-full w-full overflow-hidden bg-white"
-      style={{ cursor: drawing ? 'crosshair' : tool === 'edit' ? 'default' : 'grab' }}
+      style={{ cursor: drawing || tool === 'plan' ? 'crosshair' : tool === 'edit' ? 'default' : 'grab' }}
     >
       <Stage
         ref={stageRef}
@@ -731,6 +755,7 @@ export function MarinaCanvas() {
             {layout && layers.anchoring && <AnchorShapes />}
             {layout && layers.equipment && <EquipmentShapes />}
             {layers.fetch && <FetchRays />}
+            <PlanOutline />
           </Group>
         </Layer>
 
@@ -823,9 +848,17 @@ export function MarinaCanvas() {
           </Group>
           {layers.background && project.map && (
             // The map licence requires visible attribution, also in exported images.
-            <Group x={viewport.width - 196} y={viewport.height - 34} listening={false}>
-              <Rect x={0} y={0} width={190} height={16} fill="rgba(255,255,255,0.85)" cornerRadius={3} />
-              <Text x={6} y={3} text={OSM_ATTRIBUTION} fontSize={11} fill="#0f172a" />
+            <Group listening={false}>
+              {mapAttributions(project.map).map((line, i, all) => {
+                // About 6 px per character at 11 px (Inter / system UI).
+                const width = Math.min(viewport.width - 12, line.length * 6.1 + 12);
+                return (
+                  <Group key={line} x={viewport.width - width - 6} y={viewport.height - 34 - (all.length - 1 - i) * 18}>
+                    <Rect x={0} y={0} width={width} height={16} fill="rgba(255,255,255,0.85)" cornerRadius={3} />
+                    <Text x={6} y={3} width={width - 8} text={line} fontSize={11} fill="#0f172a" wrap="none" ellipsis />
+                  </Group>
+                );
+              })}
             </Group>
           )}
           <Group x={0} y={viewport.height - 16} listening={false}>
@@ -835,6 +868,10 @@ export function MarinaCanvas() {
         </Layer>
       </Stage>
       <MapLegend />
+      {/* UI_REVIEW 10: layer presets at hand on the map. */}
+      <div className="absolute left-1/2 top-2 -translate-x-1/2 rounded border border-slate-300 bg-white/90 px-1 py-0.5 shadow-sm">
+        <LayerPresets compact />
+      </div>
     </div>
   );
 }

@@ -102,8 +102,15 @@ async function waitForServer() {
       await page.getByRole('button', { name: /^(Generate|Regenerate)$/ }).click();
       await page.waitForFunction(() => !window.__marina.getState().generating && window.__marina.getState().project.layouts.length > 0, null, { timeout: 20000 });
     };
+    /** UI_REVIEW 6: the exports sit in the Export menu. */
+    const EXPORTS = ['Export PNG', 'Export CSV', 'Export DXF', 'Report (PDF)'];
+    const exportItem = async (name) => {
+      await page.getByRole('button', { name: 'Export ▾', exact: true }).click();
+      return page.getByRole('menuitem', { name, exact: true });
+    };
     const download = async (buttonName) => {
-      const [d] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: buttonName, exact: true }).click()]);
+      const target = EXPORTS.includes(buttonName) ? await exportItem(buttonName) : page.getByRole('button', { name: buttonName, exact: true });
+      const [d] = await Promise.all([page.waitForEvent('download'), target.click()]);
       const file = path.join(outDir, d.suggestedFilename());
       await d.saveAs(file);
       return file;
@@ -155,7 +162,10 @@ async function waitForServer() {
       await page.getByTestId('alternative').first().waitFor();
       const count = await page.getByTestId('alternative').count();
       assert.ok(count >= 2, `expected several alternatives, got ${count}`);
+      // UI_REVIEW 8: the comparison has a tab of its own.
+      await page.getByRole('tab', { name: 'Compare', exact: true }).click();
       await page.getByTestId('comparison').waitFor();
+      await page.getByRole('tab', { name: 'Alternatives', exact: true }).click();
       const s = await state();
       assert.ok(s.project.layouts[0].stats.totalBerths > 0);
       assert.equal(s.project.layouts[0].stats.issueCounts.error, 0);
@@ -365,6 +375,7 @@ async function waitForServer() {
       assert.equal(await weight.getAttribute('placeholder'), '≈1.3');
       await weight.fill('1.5');
       await page.waitForFunction(() => window.__marina.getState().project.boatClasses.find((c) => c.name === '5 m').weight === 1.5);
+      await page.getByRole('tab', { name: 'Anchoring & cost', exact: true }).click();
       const buoys = page.getByText('Stern buoys', { exact: true });
       await buoys.scrollIntoViewIfNeeded();
       assert.ok(await buoys.isVisible());
@@ -386,6 +397,7 @@ async function waitForServer() {
       await page.getByLabel('Exposed harbour (one size up)').uncheck();
       await page.getByText('Anchoring parameters', { exact: true }).click();
       await page.getByRole('combobox', { name: 'Berth type', exact: true }).first().selectOption('finger');
+      await page.getByRole('tab', { name: 'Alternatives', exact: true }).click();
     });
 
     await step('access pontoon in front of a quay wall: piers start from its edge, shore chains at its gangways hold it (D21, D28, D32)', async () => {
@@ -413,6 +425,7 @@ async function waitForServer() {
       for (const p of between) assert.ok(Math.abs(p.start.y - edge) < 0.6, `pier ${p.id} starts at y = ${p.start.y}`);
       // Held off the wall by two shore chains at its gangway (D28).
       await page.waitForFunction(() => window.__marina.getState().builtInPriceList !== null, null, { timeout: 10000 });
+      await page.getByRole('tab', { name: 'Anchoring & cost', exact: true }).click();
       const fixings = page.getByText('Wall fixings of shore chains', { exact: true });
       await fixings.scrollIntoViewIfNeeded();
       // Piers beside the pontoon reach the shore by their own gangway, with 2 shore chains each (D49).
@@ -427,6 +440,7 @@ async function waitForServer() {
       // I122: the piers starting from it hold it with their chains; it has no chains of its own into the berths.
       assert.match(await page.getByTestId('anchoring-issues').textContent(), new RegExp(`Access pontoon ${pontoon.id} \\(D28\\): off the wall it is held by two shore chains at each gangway and by the piers attached to it`));
       await page.screenshot({ path: path.join(outDir, 'access-pontoon.png') });
+      await page.getByRole('tab', { name: 'Alternatives', exact: true }).click();
     });
 
     await step('delete a pier, draw a new one with "Add pier" and fill its sides (D22)', async () => {
@@ -471,6 +485,8 @@ async function waitForServer() {
       await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
       assert.match(await page.getByTestId('as3962').textContent(), /Table 3\.3/);
       await page.getByText(/^AS 3962-2001 checks \(advisory\)/).click();
+      // UI_REVIEW 8, 10: the anchoring plan and costs have a tab of their own, which shows the anchoring layers.
+      await page.getByRole('tab', { name: 'Anchoring & cost', exact: true }).click();
       const total = page.getByText(/^Total VAT 0 %( \(excludes \d+ unpriced items?, see list\))?$/);
       await total.scrollIntoViewIfNeeded();
       assert.ok(await total.isVisible());
@@ -551,7 +567,7 @@ async function waitForServer() {
     });
 
     await step('report of the selected alternative: printable, and a real PDF from it (U24)', async () => {
-      await page.getByRole('button', { name: 'Report (PDF)', exact: true }).click();
+      await (await exportItem('Report (PDF)')).click();
       const frame = page.frameLocator('iframe[data-testid="report-frame"]');
       await frame.getByRole('heading', { name: 'Sources and assumptions' }).waitFor({ state: 'attached' });
       const html = await page.evaluate(() => document.querySelector('iframe[data-testid="report-frame"]').contentDocument.documentElement.outerHTML);
@@ -570,7 +586,7 @@ async function waitForServer() {
       assert.ok(pages >= 2, `expected several pages, got ${pages}`);
     });
 
-    await step('wave screening: fetches by direction sector and winds give waves, criteria, the bad directions, FMI station winds, depths along the fetches and the shelter behind a breakwater (D40, D47, D58, I108, I110)', async () => {
+    await step('wave screening: fetches by direction sector and winds give waves, criteria, the bad directions, FMI station winds, depths along the fetches, the shelter behind a breakwater and the printed wave report (D40, D47, D58, I108, I110, U29)', async () => {
       await page.getByRole('button', { name: 'Waves', exact: true }).click();
       const tool = page.getByTestId('wave-tool');
       await tool.waitFor();
@@ -727,6 +743,21 @@ async function waitForServer() {
       assert.deepEqual(wd.sectors.map((x) => x.depth), new Array(8).fill(4.2));
       assert.equal(wd.autoDepth.sectors[0].source, 'emodnet');
       await page.unroute('https://rest.emodnet-bathymetry.eu/**');
+      // U29: the wave window prints a report of its own (wind rose, fetch figure, depths) and a PDF from it.
+      await tool.getByRole('button', { name: 'Print', exact: true }).click();
+      await page.frameLocator('iframe[data-testid="report-frame"]').getByRole('heading', { name: 'Fetch and depth lookups' }).waitFor({ state: 'attached' });
+      const waveHtml = await page.evaluate(() => document.querySelector('iframe[data-testid="report-frame"]').contentDocument.documentElement.outerHTML);
+      for (const text of ['Wave screening report (preliminary)', 'Preliminary geometric study', 'data-testid="wind-rose"', 'aria-label="Fetch per direction"', '<polygon', 'EMODnet', 'Helsinki Harmaja', 'Alternative: ']) {
+        assert.ok(waveHtml.includes(text), `wave report: ${text}`);
+      }
+      const wavePdfPage = await page.context().newPage();
+      await wavePdfPage.setContent(waveHtml, { waitUntil: 'load' });
+      const waveFile = path.join(outDir, 'waves-report.pdf');
+      await wavePdfPage.pdf({ path: waveFile, format: 'A4', printBackground: true });
+      await wavePdfPage.close();
+      const wavePdf = fs.readFileSync(waveFile);
+      assert.equal(wavePdf.subarray(0, 5).toString(), '%PDF-');
+      console.log(`        waves-report.pdf: ${(wavePdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length} pages, ${Math.round(wavePdf.length / 1024)} kB`);
       await page.screenshot({ path: path.join(outDir, 'waves.png'), fullPage: true });
       await tool.getByRole('button', { name: 'Close', exact: true }).click();
       assert.equal(await page.getByTestId('wave-tool').count(), 0);
@@ -766,6 +797,70 @@ async function waitForServer() {
       await page.unroute('https://opendata.fmi.fi/**');
       await page.unroute('https://rajapinnat.ymparisto.fi/**');
       await page.getByText('Anchoring parameters', { exact: true }).click();
+    });
+
+    await step('Helsinki base map and detailed plan; a detailed-plan area as the site (U34)', async () => {
+      // kartta.hel.fi mocked: WMS images, and a plan area 60.155–60.165 N, 24.94–24.96 E; the water is
+      // the lake of lakeTile (60.14–60.16 N, 24.92–24.99 E), so the plan's water is 60.155–60.16 N.
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+      const wms = [];
+      await page.route('https://kartta.hel.fi/ws/geoserver/avoindata/wms?**', (route) => {
+        const q = new URL(route.request().url()).searchParams;
+        wms.push(`${q.get('layers')} ${q.get('crs')}`);
+        route.fulfill({ status: 200, contentType: 'image/png', body: png, headers: { 'access-control-allow-origin': '*' } });
+      });
+      const wfs = [];
+      const plan = {
+        type: 'FeatureCollection',
+        features: [{ type: 'Feature', properties: { id: 1, kaavatunnus: 'TEST-1', pintaala: null, voimaantulopvm: '2020-01-01' }, geometry: { type: 'Polygon', coordinates: [[[24.94, 60.155], [24.96, 60.155], [24.96, 60.165], [24.94, 60.165], [24.94, 60.155]]] } }],
+      };
+      await page.route('https://kartta.hel.fi/ws/geoserver/avoindata/wfs?**', (route) => {
+        wfs.push(new URL(route.request().url()).searchParams.get('CQL_FILTER'));
+        route.fulfill({ json: plan, headers: { 'access-control-allow-origin': '*' } });
+      });
+      await page.route('https://tiles.versatiles.org/tiles/osm/**', async (route) => {
+        const [z, x, y] = route.request().url().split('/').slice(-3).map(Number);
+        route.fulfill({ status: 200, contentType: 'application/vnd.mapbox-vector-tile', body: await lakeTile(z, x, y) });
+      });
+      await page.getByRole('button', { name: 'New', exact: true }).click();
+      await page.getByTestId('start-choice').getByRole('button', { name: 'Dismiss', exact: true }).click();
+      const background = page.locator('summary', { hasText: /^Background$/ });
+      if ((await background.locator('xpath=..').getAttribute('open')) === null) await background.click();
+      await page.getByLabel('Place: "lat, lon" or a map link', { exact: true }).fill('60.158, 24.95');
+      await page.getByRole('button', { name: 'Show map', exact: true }).click();
+      await page.getByLabel('Base map', { exact: true }).selectOption('helsinki-base');
+      await page.getByLabel('Detailed plan in force (Helsinki)', { exact: true }).check();
+      await page.waitForFunction(() => window.__marina.getState().project.map?.planOverlay === true);
+      for (let i = 0; i < 40 && !(wms.some((w) => w.startsWith('avoindata:Kantakartta ')) && wms.some((w) => w.startsWith('avoindata:Ajantasa_asemakaava '))); i++) await page.waitForTimeout(100);
+      assert.ok(wms.some((w) => w === 'avoindata:Kantakartta EPSG:3857'), wms.slice(0, 3).join(' | '));
+      assert.ok(wms.some((w) => w === 'avoindata:Ajantasa_asemakaava EPSG:3857'));
+      await page.getByRole('button', { name: 'Pick a detailed plan area (Helsinki)', exact: true }).click();
+      await click(0.5, 0.5);
+      await page.getByTestId('plan-found').waitFor();
+      assert.match(await page.getByTestId('plan-found').textContent(), /^Detailed plan TEST-1 · in force since 2020-01-01$/);
+      assert.match(wfs[0], /^INTERSECTS\(geom,SRID=4326;POINT\(24\.9\d+ 60\.1\d+\)\)$/);
+      await page.getByRole('button', { name: 'Use the water within it', exact: true }).click();
+      await page.getByTestId('plan-done').waitFor({ timeout: 20000 });
+      const s = await state();
+      const ring = s.project.site.water;
+      const area = Math.abs(ring.reduce((a, p, i) => a + p.x * ring[(i + 1) % ring.length].y - ring[(i + 1) % ring.length].x * p.y, 0) / 2);
+      // Hand calculation (U15 reference lengths at 60° N: 1° of latitude 111 412 m, 1° of longitude
+      // 55 800 m × cos 60.1575° / cos 60° = 55 535 m): 0.005° × 111 412 = 557.1 m; 0.02° × 55 535 = 1 110.7 m;
+      // 557.1 × 1 110.7 ≈ 618 800 m².
+      assert.ok(Math.abs(area / 618800 - 1) < 0.01, `water area ${Math.round(area)} m²`);
+      // The shore is the lake's north edge (60.16 N): one straight run about 1 110 m long.
+      const shore = s.project.site.shoreline;
+      assert.ok(shore.length >= 2);
+      const ys = shore.map((p) => p.y);
+      assert.ok(Math.max(...ys) - Math.min(...ys) < 1, 'shoreline along one latitude');
+      const shoreLength = shore.slice(1).reduce((a, p, i) => a + Math.hypot(p.x - shore[i].x, p.y - shore[i].y), 0);
+      assert.ok(Math.abs(shoreLength - 1110.7) < 15, `shoreline ${shoreLength.toFixed(1)} m`);
+      assert.equal(await page.getByTestId('site-checklist').locator('[aria-current="step"]').getAttribute('data-step'), 'entrance');
+      assert.equal((await state()).project.map.provider, 'helsinki-base');
+      await page.screenshot({ path: path.join(outDir, 'helsinki-plan.png') });
+      await page.unroute('https://kartta.hel.fi/ws/geoserver/avoindata/wms?**');
+      await page.unroute('https://kartta.hel.fi/ws/geoserver/avoindata/wfs?**');
+      await page.unroute('https://tiles.versatiles.org/tiles/osm/**');
     });
 
     await step('language toggle', async () => {
